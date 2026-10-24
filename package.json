@@ -1,0 +1,13 @@
+{
+  "name": "helium-moon",
+  "version": "1.0.0",
+  "description": "Co-op survival horror on the East Trail of Stinchcomb Wildlife Refuge. Browser client + zero-dependency Node server.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node tests/sim.test.mjs && node tests/server.test.mjs"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}

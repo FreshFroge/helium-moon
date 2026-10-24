@@ -1,0 +1,414 @@
+// DOM user interface: main menu, settings (graphics, audio, microphone + mimicry
+// consent, controls/keybinds), multiplayer lobby, HUD, notes, pause and end screens.
+import { QUALITY_PRESETS } from '../../shared/config.js';
+import { BINDING_LABELS, DEFAULT_BINDINGS } from '../core/settings.js';
+import { WSTransport, defaultServerUrl } from '../net/transport.js';
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const MIMIC_TEXT = `When this is on, short phrases you say while transmitting (about 1–4 seconds) are held briefly in this browser's memory. Now and then Helium Voice plays one back — pitched up and distorted — from somewhere in the trees behind you or a teammate, and that phrase is then deleted. Phrases are never saved to disk, uploaded to any speech service, or used for training, and expire after two minutes. Turning this off, turning the microphone off, or leaving the session deletes everything immediately. Only your microphone is captured, and only while you are transmitting.`;
+
+export class UI {
+  constructor(settings) {
+    this.s = settings;
+    this.game = null;
+    this.debugOn = /[?&]debug=1/.test(location.search);
+    this.chatOpen = false;
+    this.voice = { mic: 'off' };
+    this.el = {
+      loading: $('#loading'), loadFill: $('#load-fill'), loadText: $('#load-text'),
+      menu: $('#menu'), panel: $('#panel'), hud: $('#hud'), pause: $('#pause'), pausePanel: $('#pause-panel'),
+      end: $('#end'), endTitle: $('#end-title'), endText: $('#end-text'), endLobby: $('#end-lobby'),
+      objectives: $('#objectives'), prompt: $('#prompt'), stamina: $('#stamina-fill'), battery: $('#battery-fill'), meters: $('#meters'),
+      team: $('#team'), toast: $('#toast'), chatLog: $('#chat-log'), chatInput: $('#chat-input'), progressRing: $('#progress-ring'), progressArc: $('#progress-arc'),
+      inventory: $('#inventory'), debug: $('#debug'), fade: $('#fade'), click: $('#click-to-play'),
+    };
+    this._extraDom();
+    $('#menu-main').addEventListener('click', (e) => { const a = e.target.closest('button')?.dataset.act; if (a) this._menuAct(a); });
+    $('#pause').addEventListener('click', (e) => { const a = e.target.closest('nav button')?.dataset.act; if (a) this._pauseAct(a); });
+    $('#end').addEventListener('click', (e) => { const a = e.target.closest('button')?.dataset.act; if (a) this._endAct(a); });
+    this.el.click.addEventListener('click', () => { this.game && this.game.input.requestLock(); this.clickToPlay(false); });
+    window.addEventListener('keydown', (e) => this._key(e), true);
+    if (this.debugOn) this.el.debug.classList.remove('hidden');
+  }
+
+  _extraDom() {
+    const hud = this.el.hud;
+    const mk = (id, cls = '') => { const d = document.createElement('div'); d.id = id; if (cls) d.className = cls; hud.appendChild(d); return d; };
+    this.el.mic = mk('mic-ind', 'hidden');
+    this.el.intro = mk('intro');
+    this.el.note = document.createElement('div'); this.el.note.id = 'note'; this.el.note.className = 'hidden'; document.body.appendChild(this.el.note);
+  }
+
+  bind(game) { this.game = game; }
+
+  // ---------------------------------------------------------------- loading / screens
+  setLoading(f, text) { this.el.loadFill.style.width = `${Math.round(f * 100)}%`; if (text) this.el.loadText.textContent = text; }
+  loaded() { this.el.loading.classList.add('fade-out'); setTimeout(() => this.el.loading.classList.add('hidden'), 900); this.showMenu(true); }
+  loadError(msg) { this.el.loadText.innerHTML = `<span class="warn">${esc(msg)}</span>`; }
+
+  showMenu(on) { this.el.menu.classList.toggle('hidden', !on); if (on) this.closePanel(); }
+  showHUD(on) { this.el.hud.classList.toggle('hidden', !on); if (!on) { this.prompt(null); this.progress(null); this.showInventory(false); } }
+  showPause(on) { this.el.pause.classList.toggle('hidden', !on); this.el.pausePanel.classList.add('hidden'); }
+  clickToPlay(on) { this.el.click.classList.toggle('hidden', !on); }
+
+  // ---------------------------------------------------------------- main menu
+  _menuAct(a) {
+    for (const b of document.querySelectorAll('#menu-main button')) b.classList.toggle('active', b.dataset.act === a);
+    if (a === 'single') { this.closePanel(); this.game.startSingle(this.s.playerName || 'You'); }
+    else if (a === 'multi') this.openMulti();
+    else if (a === 'settings') this.openSettings(this.el.panel);
+    else if (a === 'controls') this.openControls(this.el.panel);
+    else if (a === 'credits') this.openCredits(this.el.panel);
+  }
+
+  closePanel() { this.el.panel.classList.add('hidden'); this.el.panel.innerHTML = ''; for (const b of document.querySelectorAll('#menu-main button')) b.classList.remove('active'); }
+  _panel(el, html) { el.innerHTML = html; el.classList.remove('hidden'); el.scrollTop = 0; return el; }
+
+  openCredits(el) {
+    this._panel(el, `<h2>Credits</h2>
+      <p>A co-op survival horror game set on the East Trail of Stinchcomb Wildlife Refuge, Oklahoma City.</p>
+      <p class="dim">Design, code, world, creatures, sound and shaders built for this project. The trail layout was traced from aerial imagery of the refuge.</p>
+      <ul class="credits">
+        <li><b>three.js</b> — MIT License</li>
+        <li><b>MakeHuman</b> base mesh, targets &amp; skeleton — CC0</li>
+        <li>Surface photo references: <b>ambientCG</b> — CC0</li>
+        <li>Tree generator approach inspired by <b>EZ-Tree</b> — MIT</li>
+        <li>Fonts: Cormorant Garamond, Inter, IBM Plex Mono — SIL Open Font License</li>
+        <li>Helium Voice signature line: recorded by the game's creator</li>
+      </ul>
+      <p class="dim">Every other sound in the game is synthesised in your browser when it loads.</p>`);
+  }
+
+  openControls(el) {
+    const b = this.s.bindings, k = (a) => `<kbd>${esc(this.s.keyName(b[a]))}</kbd>`;
+    this._panel(el, `<h2>Controls</h2>
+      <table class="controls">
+        <tr><td>${k('forward')}${k('left')}${k('back')}${k('right')}</td><td>Move</td></tr>
+        <tr><td>${k('sprint')}</td><td>Sprint (stamina)</td></tr>
+        <tr><td>${k('crouch')} / ${k('crouchAlt')}</td><td>Crouch — quieter; crouch still in thick brush to hide</td></tr>
+        <tr><td>${k('jump')}</td><td>Jump</td></tr>
+        <tr><td>${k('interact')}</td><td>Interact · hold to repair / revive</td></tr>
+        <tr><td>${k('flashlight')}</td><td>Flashlight</td></tr>
+        <tr><td>${k('inventory')}</td><td>Objectives, notes &amp; temperature (hold)</td></tr>
+        <tr><td>${k('talk')}</td><td>Push to talk (multiplayer voice)</td></tr>
+        <tr><td>${k('chat')}</td><td>Text chat (multiplayer)</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Pause</td></tr>
+        <tr><td><kbd>F3</kbd></td><td>Performance overlay</td></tr>
+      </table>
+      <h3>Surviving</h3>
+      <ul class="tips">
+        <li>When the air turns cold and your breath fogs, he is within about 120 m. It gets worse the closer he comes.</li>
+        <li>He does not like being watched or lit. Keep your light on him — but don't count on it.</li>
+        <li>Sprinting, working on loud machinery and talking carry far. Silence makes him curious instead of certain.</li>
+        <li>Stay away from low brush near water. If the air smells like a struck match, back off.</li>
+        <li>If you hear your own voice in the trees behind you, it is not you.</li>
+      </ul>
+      <p class="dim">Rebind keys in Settings → Controls.</p>`);
+  }
+
+  // ---------------------------------------------------------------- settings
+  openSettings(el, tab = this._tab || 'graphics') {
+    this._tab = tab;
+    const s = this.s;
+    const tabs = [['graphics', 'Graphics'], ['audio', 'Audio'], ['voice', 'Voice & Mic'], ['controls', 'Controls']];
+    const slider = (key, label, min, max, step, fmt = (v) => v) => `<label class="row"><span>${label}</span><input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${s[key]}"><output>${fmt(s[key])}</output></label>`;
+    const check = (key, label) => `<label class="row check"><span>${label}</span><input type="checkbox" data-k="${key}" ${s[key] ? 'checked' : ''}></label>`;
+    let body = '';
+    if (tab === 'graphics') {
+      body = `<label class="row"><span>Quality</span><select data-k="quality">${Object.entries(QUALITY_PRESETS).map(([k, p]) => `<option value="${k}" ${k === s.quality ? 'selected' : ''}>${p.label}</option>`).join('')}</select></label>
+        <p class="hint">Shadows, volumetrics and render scale change immediately; forest density changes after a reload.</p>
+        ${slider('renderScale', 'Render scale', 0.5, 1, 0.05, (v) => Math.round(v * 100) + '%')}
+        ${check('adaptiveRes', 'Adaptive resolution')}
+        ${slider('fov', 'Field of view', 60, 100, 1, (v) => v + '°')}
+        ${slider('headBob', 'Head bob', 0, 1, 0.05, (v) => Math.round(v * 100) + '%')}
+        ${slider('cameraShake', 'Motion effects (shake, warp)', 0, 1, 0.05, (v) => Math.round(v * 100) + '%')}
+        ${slider('filmGrain', 'Film grain', 0, 1, 0.05, (v) => Math.round(v * 100) + '%')}
+        ${check('showFps', 'Show FPS')}`;
+    } else if (tab === 'audio') {
+      body = `${slider('masterVolume', 'Master', 0, 1, 0.01, (v) => Math.round(v * 100))}
+        ${slider('sfxVolume', 'Effects & creatures', 0, 1, 0.01, (v) => Math.round(v * 100))}
+        ${slider('ambienceVolume', 'Ambience', 0, 1, 0.01, (v) => Math.round(v * 100))}
+        ${slider('voiceVolume', 'Voice chat', 0, 1.5, 0.01, (v) => Math.round(v * 100))}
+        <p class="hint">Headphones strongly recommended — the game is mixed for positional (HRTF) audio.</p>`;
+    } else if (tab === 'voice') {
+      const v = this.voice, live = v.mic === 'live';
+      const st = { off: 'Off', requesting: 'Waiting for permission…', live: 'On', denied: 'Permission denied', error: 'Unavailable' }[v.mic] || 'Off';
+      body = `<div class="row"><span>Microphone</span><span class="mic-state ${live ? 'on' : ''}">${st}</span>
+          <button class="small" data-mic="${live ? 'off' : 'on'}">${live ? 'Turn off' : 'Enable microphone'}</button></div>
+        ${window.HM_EMBEDDED ? '<p class="hint warn">This hosted page cannot open a microphone. Voice chat and voice mimicry work in the downloadable build.</p>' : ''}
+        ${v.error ? `<p class="hint warn">${esc(v.error)}</p>` : '<p class="hint">The microphone is only opened when you press the button above, and only used for proximity voice chat (and mimicry, if you opt in below). Nothing is transmitted unless you are talking.</p>'}
+        <label class="row"><span>Input device</span><select data-k="micDevice" id="mic-devices"><option value="">Default</option></select></label>
+        <label class="row"><span>Mode</span><select data-k="voiceMode"><option value="ptt" ${s.voiceMode === 'ptt' ? 'selected' : ''}>Push to talk (${esc(s.keyName(s.bindings.talk))})</option><option value="open" ${s.voiceMode === 'open' ? 'selected' : ''}>Open mic (voice activated)</option></select></label>
+        ${slider('micSensitivity', 'Open-mic sensitivity', 0, 1, 0.01, (v2) => Math.round(v2 * 100) + '%')}
+        <div class="row"><span>Input level</span><div class="level"><div id="mic-level"></div></div></div>
+        <h3>Voice mimicry <span class="tag">separate opt-in</span></h3>
+        ${check('mimicOptIn', 'Let Helium Voice learn my voice')}
+        <p class="hint">${MIMIC_TEXT}</p>
+        <p class="hint">Mimicry needs the microphone on. Use headphones and keep echo cancellation on so the game never hears itself.</p>`;
+    } else {
+      const rows = Object.keys(DEFAULT_BINDINGS).map((a) => `<div class="row"><span>${esc(BINDING_LABELS[a])}</span><button class="bind" data-bind="${a}">${esc(s.keyName(s.bindings[a]))}</button></div>`).join('');
+      body = `${slider('sensitivity', 'Mouse sensitivity', 0.2, 3, 0.05, (v) => (+v).toFixed(2))}
+        ${check('invertY', 'Invert Y')}
+        <h3>Key bindings</h3>${rows}
+        <button class="small" data-reset-binds>Reset to defaults</button>`;
+    }
+    this._panel(el, `<h2>Settings</h2><div class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div><div class="tab-body">${body}</div>`);
+    el.onclick = (e) => {
+      const t = e.target.closest('[data-tab]'); if (t) { this.openSettings(el, t.dataset.tab); return; }
+      const m = e.target.closest('[data-mic]');
+      if (m) { const g = this.game; if (m.dataset.mic === 'on') g.voice.enableMic().then(() => this.openSettings(el, 'voice')); else { g.voice.disableMic(); this.openSettings(el, 'voice'); } return; }
+      const b = e.target.closest('[data-bind]'); if (b) { this._rebind(b, el); return; }
+      if (e.target.closest('[data-reset-binds]')) { s.bindings = { ...DEFAULT_BINDINGS }; s.save(); this.openSettings(el, 'controls'); }
+    };
+    el.oninput = (e) => {
+      const k = e.target.dataset.k; if (!k) return;
+      let v = e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'range' ? +e.target.value : e.target.value;
+      s[k] = v; s.save();
+      const out = e.target.parentElement.querySelector('output'); if (out) out.textContent = e.target.closest('label').querySelector('output') ? this._fmt(k, v) : '';
+      if (k === 'mimicOptIn' && !v) this.toast('Voice mimicry off — stored phrases deleted.', 3000);
+      if (k === 'mimicOptIn' && v && this.voice.mic !== 'live') this.toast('Turn the microphone on to use mimicry.', 3000);
+    };
+    if (tab === 'voice') this._fillDevices();
+  }
+
+  _fmt(k, v) {
+    if (['renderScale', 'headBob', 'cameraShake', 'filmGrain', 'micSensitivity'].includes(k)) return Math.round(v * 100) + '%';
+    if (k === 'fov') return v + '°';
+    if (k.endsWith('Volume')) return Math.round(v * 100);
+    if (k === 'sensitivity') return (+v).toFixed(2);
+    return v;
+  }
+
+  async _fillDevices() {
+    const sel = $('#mic-devices'); if (!sel || !this.game) return;
+    const devs = await this.game.voice.devices();
+    sel.innerHTML = '<option value="">Default</option>' + devs.filter((d) => d.deviceId && d.deviceId !== 'default').map((d, i) => `<option value="${esc(d.deviceId)}" ${d.deviceId === this.s.micDevice ? 'selected' : ''}>${esc(d.label || 'Microphone ' + (i + 1))}</option>`).join('');
+  }
+
+  _rebind(btn, el) {
+    btn.textContent = 'press a key…'; btn.classList.add('waiting');
+    const h = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      window.removeEventListener('keydown', h, true);
+      if (e.code !== 'Escape') { this.s.bindings[btn.dataset.bind] = e.code; this.s.save(); }
+      this.openSettings(el, 'controls');
+    };
+    window.addEventListener('keydown', h, true);
+  }
+
+  voiceStatus(st) {
+    this.voice = st;
+    const m = this.el.mic;
+    m.classList.toggle('hidden', st.mic !== 'live');
+    m.classList.toggle('tx', !!st.transmitting);
+    m.innerHTML = `<span class="dot"></span>MIC · ${st.mode === 'ptt' ? 'PUSH TO TALK' : 'OPEN'}${st.mimic ? ' · MIMICRY ON' : ''}`;
+    const lvl = $('#mic-level'); if (lvl) lvl.style.width = `${Math.round(st.level * 100)}%`;
+  }
+
+  tickVoiceMeter() {
+    const lvl = $('#mic-level');
+    if (lvl && this.game) { lvl.style.width = `${Math.round(this.game.voice.level * 100)}%`; lvl.classList.toggle('tx', this.game.voice.transmitting || this.game.voice.gateOpen); }
+  }
+
+  // ---------------------------------------------------------------- multiplayer
+  openMulti() {
+    const s = this.s, el = this.el.panel;
+    if (window.HM_EMBEDDED) {
+      this._panel(el, `<h2>Multiplayer</h2>
+        <p>Co-op for 2–6 players with lobby codes and proximity voice chat runs on a small game server, which this hosted page can't reach.</p>
+        <p class="dim">To play together, download the full build, then on one computer run <code>node server/server.js</code> (Node 18 or newer) and have everyone open that computer's address, for example <code>http://192.168.1.20:8080</code>. One player creates a lobby and shares the 5-letter code.</p>
+        <p class="dim">Single Player here is the complete game.</p>`);
+      return;
+    }
+    if (this.game.net && this.game.net.networked && this.game.lobby) { this.openLobby(); return; }
+    const auto = defaultServerUrl();
+    this._panel(el, `<h2>Multiplayer</h2>
+      <p class="dim">Co-op for 2–6 players. One person runs the server (<code>node server/server.js</code>) and everyone opens its address in a browser.</p>
+      <label class="row"><span>Your name</span><input type="text" id="mp-name" maxlength="20" value="${esc(s.playerName)}" placeholder="Visitor"></label>
+      <label class="row"><span>Server</span><input type="text" id="mp-url" value="${esc(s.serverUrl || auto)}" placeholder="ws://host:8080/ws"></label>
+      <div class="row buttons"><button id="mp-create">Create lobby</button></div>
+      <div class="row buttons"><input type="text" id="mp-code" maxlength="5" placeholder="CODE" class="code"><button id="mp-join">Join</button></div>
+      <p id="mp-status" class="hint"></p>`);
+    const status = (t, warn) => { const p = $('#mp-status'); p.textContent = t; p.classList.toggle('warn', !!warn); };
+    const go = async (join) => {
+      const name = $('#mp-name').value.trim() || 'Visitor', url = $('#mp-url').value.trim();
+      s.playerName = name; s.serverUrl = url === auto ? '' : url; s.save();
+      if (!url) { status('Enter the server address (for example ws://192.168.1.20:8080/ws).', true); return; }
+      const code = $('#mp-code').value.trim().toUpperCase();
+      if (join && code.length !== 5) { status('Lobby codes are 5 characters.', true); return; }
+      status('Connecting…');
+      const t = new WSTransport(url);
+      try { await t.connect(name); } catch (e) { status(e.message + ' Is the server running?', true); return; }
+      this.game.attach(t);
+      t.on('error', (m) => status(m.msg, true));
+      t.on('lobby_left', () => { this.game.quitToMenu(true); this.openMulti(); });
+      t.send(join ? { t: 'join', code } : { t: 'create' });
+    };
+    $('#mp-create').onclick = () => go(false);
+    $('#mp-join').onclick = () => go(true);
+    $('#mp-code').onkeydown = (e) => { if (e.key === 'Enter') go(true); };
+  }
+
+  lobby(m, myId) { this._lobby = m; this._me = myId; if (!this.el.menu.classList.contains('hidden')) this.openLobby(); }
+
+  openLobby() {
+    const m = this._lobby; if (!m) return;
+    const el = this.el.panel, me = this._me, host = m.host === me;
+    for (const b of document.querySelectorAll('#menu-main button')) b.classList.toggle('active', b.dataset.act === 'multi');
+    this._panel(el, `<h2>Lobby</h2>
+      <div class="lobby-code"><span>${esc(m.code)}</span><button class="small" id="lb-copy">Copy</button></div>
+      <p class="dim">Share this code. ${m.players.length}/6 players.</p>
+      <ul class="lobby-list">${m.players.map((p) => `<li>${p.host ? '<span class="tag">host</span>' : ''}${esc(p.name)}${p.id === me ? ' <span class="dim">(you)</span>' : ''}</li>`).join('')}</ul>
+      <div class="row"><span>Voice</span><span class="mic-state ${this.voice.mic === 'live' ? 'on' : ''}">${this.voice.mic === 'live' ? 'Microphone on' : 'Microphone off'}</span><button class="small" id="lb-mic">Voice settings</button></div>
+      <div class="row buttons">${host ? '<button id="lb-start">Start game</button>' : '<span class="dim">Waiting for the host to start…</span>'}<button id="lb-leave" class="ghost">Leave</button></div>`);
+    $('#lb-copy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(m.code).catch(() => {}); this.toast('Code copied.', 1500); };
+    $('#lb-mic').onclick = () => this.openSettings(el, 'voice');
+    if (host) $('#lb-start').onclick = () => this.game.net.send({ t: 'start' });
+    $('#lb-leave').onclick = () => { this.game.quitToMenu(true); this.openMulti(); };
+  }
+
+  // ---------------------------------------------------------------- pause / end
+  _pauseAct(a) {
+    const g = this.game;
+    if (a === 'resume') g.pause(false);
+    else if (a === 'settings') this.openSettings(this.el.pausePanel);
+    else if (a === 'controls') this.openControls(this.el.pausePanel);
+    else if (a === 'restart') { if (g.net && g.net.networked && !g._isHost()) { this.toast('Only the host can restart.', 2000); return; } g.pause(false); g.restart(); }
+    else if (a === 'quit') g.quitToMenu();
+  }
+
+  showEnd(r, o = {}) {
+    const el = this.el.end;
+    if (!r) { el.classList.add('hidden'); return; }
+    const won = r.result === 'won', mine = o.me;
+    const mins = Math.floor(r.time / 60), secs = String(r.time % 60).padStart(2, '0');
+    this.el.endTitle.textContent = won ? (mine === 'escaped' ? 'YOU MADE IT OUT' : 'THEY MADE IT OUT') : 'THE REFUGE KEPT YOU';
+    this.el.endTitle.className = 'title ' + (won ? 'won' : 'lost');
+    const roster = r.players.length > 1 ? `<ul class="roster">${r.players.map((p) => `<li>${esc(p.name)} — ${{ escaped: 'escaped', dead: 'did not make it', downed: 'left behind', alive: 'left behind' }[p.state] || p.state}</li>`).join('')}</ul>` : '';
+    this.el.endText.innerHTML = `${won ? 'The cruiser’s lights wash over the bridge pilings. Behind you, something in the trees is laughing in a voice like a kid sucking on a balloon.' : 'The insects never started up again. Somewhere past the slough, a high voice is repeating what you said.'}
+      <div class="stats"><span>${mins}:${secs}</span><span>${r.objectives}/3 objectives</span><span>${o.notes ?? r.notes} notes found</span></div>${roster}`;
+    this.el.endLobby.classList.toggle('hidden', !o.networked);
+    el.querySelector('[data-act="restart"]').classList.toggle('hidden', !!o.networked && !o.host);
+    el.classList.remove('hidden');
+  }
+
+  _endAct(a) {
+    const g = this.game;
+    if (a === 'restart') g.restart();
+    else if (a === 'lobby') g.returnToLobby();
+    else if (a === 'quit') g.quitToMenu();
+  }
+
+  // ---------------------------------------------------------------- HUD
+  intro() {
+    const el = this.el.intro;
+    el.innerHTML = `<div class="l1">Stinchcomb Wildlife Refuge</div><div class="l2">East Trail · 10:00 PM</div><div class="l3">The Helium Moon is up.</div>`;
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+    clearTimeout(this._introT);
+    this._introT = setTimeout(() => el.classList.remove('show'), 7500);
+  }
+
+  objectives(lines) {
+    const el = this.el.objectives;
+    el.innerHTML = lines.map((l) => `<div class="obj ${l.done ? 'done' : ''} ${l.urgent ? 'urgent' : ''}"><span class="box">${l.done ? '✓' : ''}</span><div><div>${esc(l.text)}</div>${l.sub ? `<div class="sub">${esc(l.sub)}</div>` : ''}</div></div>`).join('');
+    el.classList.add('fresh'); clearTimeout(this._objT);
+    this._objT = setTimeout(() => el.classList.remove('fresh'), 9000);
+  }
+
+  prompt(html) {
+    if (html === this._prompt) return;
+    this._prompt = html;
+    this.el.prompt.innerHTML = html || '';
+    this.el.prompt.classList.toggle('hidden', !html);
+  }
+
+  progress(f) {
+    const r = this.el.progressRing;
+    if (f === null || f === undefined) { r.classList.add('hidden'); return; }
+    r.classList.remove('hidden');
+    const C = 2 * Math.PI * 16;
+    this.el.progressArc.style.strokeDasharray = `${C}`;
+    this.el.progressArc.style.strokeDashoffset = `${C * (1 - Math.max(0, Math.min(1, f)))}`;
+  }
+
+  meters(stamina, battery, on) {
+    this.el.stamina.style.width = `${Math.round(stamina * 100)}%`;
+    this.el.battery.style.width = `${Math.round(battery * 100)}%`;
+    this.el.battery.classList.toggle('low', battery < 0.18);
+    this.el.meters.classList.toggle('quiet', stamina > 0.99 && battery > 0.5);
+    this.tickVoiceMeter();
+  }
+
+  team(list) {
+    const key = JSON.stringify(list);
+    if (key === this._teamKey) return;
+    this._teamKey = key;
+    this.el.team.innerHTML = list.map((p) => `<div class="mate ${p.state} ${p.talking ? 'talking' : ''}"><span class="sw" style="background:${p.color}"></span>${esc(p.name)}${p.me ? ' <span class="dim">(you)</span>' : ''}<span class="st">${{ alive: '', downed: 'DOWN', dead: 'DEAD', escaped: 'OUT' }[p.state] || ''}</span></div>`).join('');
+  }
+
+  toast(text, ms = 3000) {
+    const el = this.el.toast;
+    clearTimeout(this._toastT);
+    if (!text) { el.classList.remove('show'); return; }
+    el.textContent = text; el.classList.add('show');
+    this._toastT = setTimeout(() => el.classList.remove('show'), ms);
+  }
+
+  showInventory(on, dataFn) {
+    const el = this.el.inventory;
+    if (!on) { if (!el.classList.contains('hidden')) el.classList.add('hidden'); return; }
+    const was = !el.classList.contains('hidden');
+    this._invT = (this._invT || 0) + 1;
+    if (was && this._invT % 10) return;
+    const d = dataFn();
+    const m = Math.floor(d.time / 60), sec = String(Math.floor(d.time % 60)).padStart(2, '0');
+    el.innerHTML = `<h3>Objectives</h3>${d.objectives.map((l) => `<div class="obj ${l.done ? 'done' : ''}"><span class="box">${l.done ? '✓' : ''}</span><div><div>${esc(l.text)}</div>${l.sub ? `<div class="sub">${esc(l.sub)}</div>` : ''}</div></div>`).join('')}
+      <div class="inv-grid"><div><span class="dim">Team carries</span><br>${d.team.fuel ? 'Gas can' : '<span class="dim">—</span>'}${d.team.fuse ? '<br>Fuse kit' : ''}</div>
+      <div><span class="dim">Flashlight</span><br>${Math.round(d.battery * 100)}%</div><div><span class="dim">Air temperature</span><br>${d.temp.toFixed(1)}°C</div><div><span class="dim">Time</span><br>${m}:${sec}</div></div>
+      <h3>Notes</h3>${d.notes.length ? d.notes.map((n) => `<details><summary>${esc(n.title)}</summary><p>${esc(n.text).replace(/\n/g, '<br>')}</p></details>`).join('') : '<p class="dim">None yet.</p>'}`;
+    el.classList.remove('hidden');
+  }
+
+  showNote(n) {
+    const el = this.el.note;
+    if (!n) { el.classList.add('hidden'); return; }
+    el.innerHTML = `<div class="paper"><div class="ntitle">${esc(n.title)}</div><div class="nbody">${esc(n.text).replace(/\n/g, '<br>')}</div><div class="nhint">${esc(this.s.keyName(this.s.bindings.interact))} or move to put it away</div></div>`;
+    el.classList.remove('hidden');
+  }
+
+  chatLine(name, text, color = '#bbb') {
+    const log = this.el.chatLog;
+    const d = document.createElement('div'); d.className = 'line';
+    d.innerHTML = `<b style="color:${color}">${esc(name)}</b> ${esc(text)}`;
+    log.appendChild(d);
+    while (log.children.length > 8) log.removeChild(log.firstChild);
+    setTimeout(() => d.classList.add('old'), 12000);
+  }
+
+  openChat(send) {
+    const inp = this.el.chatInput, g = this.game;
+    this.chatOpen = true; g.input.textFocus = true; g.input.keys.clear();
+    inp.classList.remove('hidden'); inp.value = ''; inp.focus();
+    const done = (text) => {
+      inp.onkeydown = null; inp.blur(); inp.classList.add('hidden');
+      g.input.textFocus = false; this.chatOpen = false;
+      if (text) send(text.slice(0, 140));
+    };
+    inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') done(inp.value.trim()); else if (e.key === 'Escape') done(''); };
+  }
+
+  toggleDebug() { this.debugOn = !this.debugOn; this.el.debug.classList.toggle('hidden', !this.debugOn && !this.s.showFps); }
+  debug(html) { if (this.debugOn || this.s.showFps) { this.el.debug.classList.remove('hidden'); this.el.debug.innerHTML = html; } }
+
+  _key(e) {
+    if (!this.game) return;
+    // Esc while the pointer is not locked (drag-look mode) toggles pause; with pointer lock the browser releases the lock first
+    if (e.code === 'Escape' && this.game.mode === 'playing' && !this.chatOpen) {
+      if (this.game.paused && !this.el.pausePanel.classList.contains('hidden')) { this.el.pausePanel.classList.add('hidden'); e.preventDefault(); e.stopPropagation(); return; }
+      if (this.game.paused) { this.game.pause(false); e.preventDefault(); e.stopPropagation(); }
+    }
+    if (e.code === 'Escape' && this.game.mode !== 'playing' && !this.el.panel.classList.contains('hidden')) this.closePanel();
+  }
+}

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Helium Moon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="client/ui/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="loading" class="screen">
+  <div class="load-inner">
+    <div class="title small">HELIUM MOON</div>
+    <div class="load-bar"><div id="load-fill"></div></div>
+    <div id="load-text">Preparing the refuge…</div>
+  </div>
+</div>
+
+<div id="menu" class="screen hidden">
+  <div class="menu-left">
+    <div class="title">HELIUM MOON</div>
+    <div class="subtitle">Stinchcomb Wildlife Refuge · 10:00 PM</div>
+    <nav class="menu-list" id="menu-main">
+      <button data-act="single">Single Player</button>
+      <button data-act="multi">Multiplayer</button>
+      <button data-act="settings">Settings</button>
+      <button data-act="controls">Controls</button>
+      <button data-act="credits">Credits</button>
+    </nav>
+  </div>
+  <div class="menu-panel hidden" id="panel"></div>
+  <div class="menu-foot" id="menu-foot">Headphones strongly recommended.</div>
+</div>
+
+<div id="hud" class="hidden">
+  <div id="objectives"></div>
+  <div id="prompt" class="hidden"></div>
+  <div id="meters">
+    <div class="meter"><span>STAMINA</span><div class="bar"><div id="stamina-fill"></div></div></div>
+    <div class="meter"><span>LIGHT</span><div class="bar"><div id="battery-fill"></div></div></div>
+  </div>
+  <div id="team"></div>
+  <div id="toast"></div>
+  <div id="chat"><div id="chat-log"></div><input id="chat-input" class="hidden" maxlength="140" placeholder="say something… (Enter)"></div>
+  <div id="crosshair"></div>
+  <div id="progress-ring" class="hidden"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" class="bg"/><circle cx="20" cy="20" r="16" id="progress-arc" class="fg"/></svg></div>
+  <div id="inventory" class="hidden"></div>
+  <div id="debug" class="hidden"></div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="pause-inner">
+    <div class="title small">PAUSED</div>
+    <nav class="menu-list">
+      <button data-act="resume">Resume</button>
+      <button data-act="settings">Settings</button>
+      <button data-act="controls">Controls</button>
+      <button data-act="restart">Restart</button>
+      <button data-act="quit">Quit to Menu</button>
+    </nav>
+    <div class="menu-panel hidden" id="pause-panel"></div>
+  </div>
+</div>
+
+<div id="end" class="screen hidden">
+  <div class="end-inner">
+    <div class="title" id="end-title"></div>
+    <div class="end-text" id="end-text"></div>
+    <nav class="menu-list row">
+      <button data-act="restart">Play Again</button>
+      <button data-act="lobby" id="end-lobby">Return to Lobby</button>
+      <button data-act="quit">Main Menu</button>
+    </nav>
+  </div>
+</div>
+
+<div id="fade"></div>
+<div id="click-to-play" class="hidden">Click to look around</div>
+
+<script type="module" src="client/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+// HELIUM MOON - central tunables. Shared by the browser client and the Node server.
+// Distances are metres, times are seconds, speeds are m/s.
+
+export const CONFIG = {
+  // ---------------------------------------------------------------- world
+  // Metres per pixel of the user's top-down reference image. The real image is
+  // ~8.2 m/px; 3.7 keeps the real shape of the trail but compresses it so a full
+  // run fits a 15-25 minute session. Raise toward 8.2 for a 1:1 scale map.
+  MAP_SCALE: 3.7,
+  WORLD_SEED: 19740522,          // fixed: the map itself is the same every game
+  HEIGHT_RES: 1.0,               // metres per heightfield sample
+  GRID_RES: 2.0,                 // metres per cell for masks / density / nav
+  TRAIL_HALF_WIDTH: 1.75,        // old 'River Road' two-track, half width at the south trailhead
+  TRAIL_HALF_WIDTH_NORTH: 1.1,   // ...narrowing and overgrown toward the north end
+  CORRIDOR_WIDTH: 165,           // playable forest depth on the refuge side of the trail
+  FENCE_OFFSET: 13,              // farm fence distance on the field side of the trail
+  RIVER_HALF_WIDTH: 9.5,
+  RIVER_BANK: 7,
+  WATER_LEVEL: -2.1,             // river surface relative to the floodplain
+  SWAMP_WATER_LEVEL: -0.55,
+  DEEP_WATER: 0.75,              // water deeper than this blocks players
+
+  // ---------------------------------------------------------------- time / sky
+  START_CLOCK: 22 * 60,          // 10:00 PM in minutes
+  CLOCK_RATE: 1.0,               // in-game minutes per real minute
+  MOON_PHASE: 0.78,              // waxing gibbous illuminated fraction
+  MOON_AZIMUTH_DEG: 162,         // SSE, near transit at 10 PM for a ~10-day waxing gibbous
+  MOON_ELEVATION_DEG: 36,
+  MOON_ANGULAR_SIZE: 2.3,        // degrees (exaggerated ~4x for presence, still believable)
+
+  // ---------------------------------------------------------------- player
+  PLAYER: {
+    WALK: 1.75, SPRINT: 5.4, CROUCH: 0.95, ACCEL: 11, AIR_ACCEL: 2,
+    JUMP: 4.1, GRAVITY: 18, HEIGHT: 1.72, CROUCH_HEIGHT: 1.05, RADIUS: 0.3,
+    STAMINA_MAX: 9, STAMINA_REGEN: 1.15, STAMINA_REGEN_DELAY: 1.2,
+    STEP_HEIGHT: 0.42, MUD_SLOW: 0.72, WATER_SLOW: 0.55, BRUSH_SLOW: 0.78,
+    MAX_HEALTH: 2,
+  },
+  FLASHLIGHT: {
+    BATTERY_SECONDS: 540, BATTERY_PICKUP: 0.55, LOW: 0.18,
+    ANGLE_DEG: 30, RANGE: 52, INTENSITY: 260,
+  },
+
+  // ---------------------------------------------------------------- Helium Voice terror radius
+  TERROR: {
+    OUTER: 120, MIDDLE: 80, INNER: 40, CRITICAL: 15,
+    SMOOTH_IN: 0.35,               // how fast the felt terror rises (per second, exponential)
+    SMOOTH_OUT: 0.12,              // how slowly it fades back
+    BASE_TEMP_C: 14,               // late October night
+    MIN_TEMP_C: -4,                // temperature felt at the critical ring
+  },
+
+  // ---------------------------------------------------------------- monsters
+  HV: {
+    WALK: 1.35, STALK: 2.3, CHASE: 5.15, BURST: 6.6, RELOCATE: 4.2,
+    SIGHT_FLASHLIGHT: 95, SIGHT_DARK: 24, SIGHT_FOV_DEG: 150,
+    HEAR_SPRINT: 42, HEAR_WALK: 16, HEAR_CROUCH: 5, HEAR_INTERACT: 55, HEAR_VOICE: 38,
+    ATTACK_RANGE: 1.7, ATTACK_COOLDOWN: 2.4, LOSE_TIME: 6.5, SEARCH_TIME: 24,
+    OBSERVE_MIN: 35, OBSERVE_MAX: 70, // preferred observation distance band
+    SIGNATURE_PROB: 0.4, SIGNATURE_FIRST_PROB: 0.75, SIGNATURE_COOLDOWN: 95, // uploaded .ogg on first sighting
+  },
+  SF: {
+    SNEAK: 1.1, SCURRY: 4.6, DART: 7.0,
+    SENSE_RADIUS: 26, AMBUSH_RADIUS: 7.5, GAS_RADIUS: 9, GAS_LIFE: 24, GAS_COOLDOWN: 28,
+    BITE_RANGE: 1.4,
+  },
+
+  // ---------------------------------------------------------------- voice chat + mimicry
+  VOICE: {
+    CLEAR: 5, FADE_END: 20, MUFFLE: 32, MAX: 46,   // proximity falloff (metres)
+    NOISE_THRESHOLD: 0.02,                         // mic RMS that counts as audible speech to monsters
+  },
+  MIMIC: {
+    MIN_COOLDOWN: 80, PER_PLAYER_COOLDOWN: 140,    // seconds between mimicry events
+    CHECK_INTERVAL: 6, BASE_CHANCE: 0.08,          // per check, scaled by conditions
+    MIN_DELAY: 2, MAX_DELAY: 55,                   // phrase age when replayed
+    BEHIND_MIN: 15, BEHIND_MAX: 35,
+    PHRASE_MIN: 0.9, PHRASE_MAX: 4.0, MAX_PHRASES: 6, PHRASE_TTL: 120,
+    PITCH: 1.5,
+  },
+
+  // ---------------------------------------------------------------- session
+  SESSION: {
+    INTRO_TIME: 9,
+    REVIVE_TIME: 4.5, DOWNED_BLEEDOUT: 50,
+    STATION_WORK_TIME: 9,
+    EXTRACT_RADIUS: 9,
+  },
+  NET: { SNAPSHOT_HZ: 15, INPUT_HZ: 20, INTERP_DELAY: 0.15, MAX_PLAYERS: 6 },
+};
+
+export const QUALITY_PRESETS = {
+  low:    { label: 'Low',    renderScale: 0.7,  shadowMap: 1024, shadowDist: 40, treeLod0: 18, treeLod1: 60, treeFar: 220, grassDist: 22, bushDist: 40, msaa: 0, spotShadow: false, fogSteps: 6,  volumetric: false, maxTrees: 1600 },
+  medium: { label: 'Medium', renderScale: 0.85, shadowMap: 2048, shadowDist: 55, treeLod0: 26, treeLod1: 80, treeFar: 300, grassDist: 32, bushDist: 55, msaa: 2, spotShadow: true,  fogSteps: 8,  volumetric: true,  maxTrees: 2600 },
+  high:   { label: 'High',   renderScale: 1.0,  shadowMap: 2048, shadowDist: 70, treeLod0: 34, treeLod1: 100, treeFar: 380, grassDist: 42, bushDist: 70, msaa: 4, spotShadow: true,  fogSteps: 10, volumetric: true,  maxTrees: 3800 },
+  ultra:  { label: 'Ultra',  renderScale: 1.0,  shadowMap: 4096, shadowDist: 90, treeLod0: 45, treeLod1: 130, treeFar: 480, grassDist: 55, bushDist: 90, msaa: 4, spotShadow: true,  fogSteps: 14, volumetric: true,  maxTrees: 5200 },
+};

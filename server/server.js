@@ -1,0 +1,162 @@
+// HELIUM MOON - multiplayer server. Serves the game files and runs one authoritative
+// GameSim per lobby (monster AI, objectives, health, mimicry selection). Also relays
+// WebRTC voice signalling, chat, and mimicry audio snippets between lobby members.
+//   node server/server.js            (PORT=8080 by default)
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { attachWebSocket } from './ws.js';
+import { World } from '../shared/world.js';
+import { GameSim } from '../shared/sim/sim.js';
+import { CONFIG } from '../shared/config.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = +(process.env.PORT || 8080);
+const TICK = 1 / 20;
+const SNAP_EVERY = 1;   // snapshot every tick (20 Hz) - small payloads
+const VERSION = 1;
+const TEST_MODE = process.env.HM_TEST === '1';   // enables the 'debug' message for automated tests only
+
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.bin': 'application/octet-stream',
+  '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.mp4': 'audio/mp4', '.wav': 'audio/wav', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.md': 'text/plain; charset=utf-8' };
+const ALLOWED_TOP = new Set(['index.html', 'client', 'shared', 'vendor', 'assets', 'favicon.ico']);
+
+function log(...a) { console.log(new Date().toISOString().slice(11, 19), ...a); }
+
+// ------------------------------------------------------------------ static files
+const server = http.createServer((req, res) => {
+  try {
+    const url = new URL(req.url, 'http://x');
+    let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
+    if (rel === '' ) rel = 'index.html';
+    if (rel === 'healthz') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok'); return; }
+    const top = rel.split('/')[0];
+    const file = path.resolve(ROOT, rel);
+    if (!ALLOWED_TOP.has(top) || !file.startsWith(ROOT + path.sep)) { res.writeHead(404); res.end('not found'); return; }
+    fs.stat(file, (err, st) => {
+      if (err || !st.isFile()) { res.writeHead(404); res.end('not found'); return; }
+      res.writeHead(200, { 'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', 'content-length': st.size,
+        'cache-control': /\.(jpg|png|bin|ogg|m4a|mp4)$/.test(file) ? 'public, max-age=3600' : 'no-cache' });
+      fs.createReadStream(file).pipe(res);
+    });
+  } catch (e) { res.writeHead(400); res.end('bad request'); }
+});
+
+// ------------------------------------------------------------------ world (built once, shared by all lobbies)
+log('building world...');
+const world = new World({ log: (m) => log('[world]', m) });
+log(`world ready in ${world.buildMs} ms`);
+
+// ------------------------------------------------------------------ lobbies
+const rooms = new Map();     // code -> room
+let nextId = 1;
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function makeCode() { let c; do { c = ''; for (let i = 0; i < 5; i++) c += CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]; } while (rooms.has(c)); return c; }
+
+function send(c, obj) { c.send(JSON.stringify(obj)); }
+function broadcast(room, obj, except) { const s = JSON.stringify(obj); for (const m of room.members.values()) if (m !== except) m.conn.send(s); }
+
+function lobbyInfo(room) {
+  return { t: 'lobby', code: room.code, state: room.state, host: room.host,
+    players: [...room.members.values()].map((m) => ({ id: m.id, name: m.name, host: m.id === room.host, ready: m.ready })) };
+}
+
+function startGame(room) {
+  if (room.timer) clearInterval(room.timer);
+  const sim = new GameSim(world, { seed: (Math.random() * 2 ** 31) | 0, log });
+  for (const m of room.members.values()) sim.addPlayer(m.id, m.name);
+  room.sim = sim; room.state = 'game'; room.tick = 0;
+  broadcast(room, { t: 'start', info: sim.info() });
+  log(`room ${room.code}: game started with ${room.members.size} players (seed ${sim.seed})`);
+  let last = Date.now(), acc = 0;
+  room.timer = setInterval(() => {
+    const now = Date.now(); acc += Math.min(0.25, (now - last) / 1000); last = now;
+    while (acc >= TICK) { sim.step(TICK); acc -= TICK; room.tick++; }
+    const ev = sim.drainEvents();
+    if (ev.length) broadcast(room, { t: 'ev', ev });
+    if (room.tick % SNAP_EVERY === 0) broadcast(room, { t: 'snap', s: sim.snapshot() });
+    if (sim.state === 'won' || sim.state === 'lost') {
+      clearInterval(room.timer); room.timer = null;
+      broadcast(room, { t: 'snap', s: sim.snapshot() });
+      setTimeout(() => { if (room.state === 'game' && room.sim === sim) { room.state = 'ended'; broadcast(room, lobbyInfo(room)); } }, 1500);
+    }
+  }, 1000 * TICK);
+}
+
+function debugCmd(room, member, m) {
+  const sim = room.sim, p = sim.players.get(m.pid || member.id);
+  if (m.cmd === 'freeze') { sim.hv.update = () => {}; sim.sf.update = () => {}; sim.mimic.update = () => {}; sim.director.update = () => {}; }
+  else if (m.cmd === 'down' && p) { sim.damagePlayer(p, 'hv', p); sim.damagePlayer(p, 'hv', p); }
+  else if (m.cmd === 'mimic') sim.mimic.force(m.listener || member.id, m.owner || member.id);
+  else if (m.cmd === 'tp' && p) { p.x = +m.x; p.z = +m.z; p.lastX = p.x; p.lastZ = p.z; }
+  log(`[debug] ${room.code} ${m.cmd}`);
+}
+
+function leave(member) {
+  const room = member.room;
+  if (!room) return;
+  room.members.delete(member.id);
+  member.room = null;
+  if (room.sim) room.sim.removePlayer(member.id);
+  broadcast(room, { t: 'left', id: member.id });
+  if (!room.members.size) { if (room.timer) clearInterval(room.timer); rooms.delete(room.code); log(`room ${room.code} closed`); return; }
+  if (room.host === member.id) room.host = room.members.keys().next().value;
+  broadcast(room, lobbyInfo(room));
+}
+
+attachWebSocket(server, '/ws', (conn, req) => {
+  const member = { id: 'p' + (nextId++), name: 'Visitor', conn, room: null, ready: false, alive: true };
+  send(conn, { t: 'welcome', id: member.id, version: VERSION, maxPlayers: CONFIG.NET.MAX_PLAYERS });
+  conn.on('message', (data, binary) => {
+    if (binary) {
+      // mimicry audio relay: [u32 header length][json header][pcm payload]
+      const room = member.room; if (!room || data.length > 600000 || data.length < 8) return;
+      for (const m of room.members.values()) if (m !== member) m.conn.send(data);
+      return;
+    }
+    let m; try { m = JSON.parse(data); } catch (e) { return; }
+    const room = member.room;
+    switch (m.t) {
+      case 'hello': member.name = String(m.name || 'Visitor').replace(/[^\p{L}\p{N} _.'-]/gu, '').slice(0, 20) || 'Visitor'; break;
+      case 'create': {
+        if (room) leave(member);
+        const code = makeCode();
+        const r = { code, host: member.id, members: new Map(), state: 'lobby', sim: null, timer: null };
+        rooms.set(code, r); r.members.set(member.id, member); member.room = r;
+        send(conn, lobbyInfo(r)); log(`room ${code} created by ${member.name}`);
+        break;
+      }
+      case 'join': {
+        const r = rooms.get(String(m.code || '').toUpperCase().trim());
+        if (!r) { send(conn, { t: 'error', msg: 'No lobby with that code.' }); break; }
+        if (r.members.size >= CONFIG.NET.MAX_PLAYERS) { send(conn, { t: 'error', msg: 'That lobby is full.' }); break; }
+        if (r.state === 'game') { send(conn, { t: 'error', msg: 'That game is already in progress.' }); break; }
+        if (room) leave(member);
+        r.members.set(member.id, member); member.room = r;
+        broadcast(r, lobbyInfo(r)); log(`${member.name} joined ${r.code}`);
+        break;
+      }
+      case 'leave': leave(member); send(conn, { t: 'lobby_left' }); break;
+      case 'start': if (room && room.host === member.id && room.state !== 'game') startGame(room); break;
+      case 'restart': if (room && room.host === member.id) startGame(room); break;
+      case 'to_lobby': if (room && room.host === member.id) { if (room.timer) clearInterval(room.timer); room.timer = null; room.sim = null; room.state = 'lobby'; broadcast(room, lobbyInfo(room)); } break;
+      case 'in': if (room && room.sim) room.sim.input(member.id, m); break;
+      case 'act': if (room && room.sim) room.sim.action(member.id, m); break;
+      case 'chat': if (room) broadcast(room, { t: 'chat', from: member.id, name: member.name, text: String(m.text || '').slice(0, 140) }); break;
+      case 'sig': if (room) { const to = room.members.get(m.to); if (to) send(to.conn, { t: 'sig', from: member.id, data: m.data }); } break;
+      case 'debug': if (TEST_MODE && room && room.sim) debugCmd(room, member, m); break;
+      case 'voice_state': if (room) broadcast(room, { t: 'voice_state', id: member.id, mic: !!m.mic }, member); break;
+      default: break;
+    }
+  });
+  conn.on('close', () => { member.alive = false; leave(member); });
+});
+
+setInterval(() => { for (const r of rooms.values()) for (const m of r.members.values()) m.conn.ping(); }, 15000);
+
+server.listen(PORT, () => {
+  log(`HELIUM MOON server running at http://localhost:${PORT}/`);
+  log('Share your LAN address (or a tunnel / port-forward) with friends so they can join your lobby code.');
+});
