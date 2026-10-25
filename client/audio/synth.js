@@ -137,6 +137,37 @@ export function owl(seed) {
   return fade(normalize(filter(out, 'lp', 1400, 0.7, SR), 0.8), SR);
 }
 
+// White-tailed deer alarm "blow": a forceful nasal exhale, loud and breathy, with a
+// whistling edge (wildlife false alarm, docs/SCARE_RESEARCH.md X4).
+export function deerBlow(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(0.9));
+  const blows = r() < 0.5 ? 1 : 2;
+  for (let b = 0; b < blows; b++) {
+    const s0 = N(b * r.range(0.35, 0.5)), d = r.range(0.28, 0.42), len = N(d);
+    const nz = noise(len, r);
+    const body = filter(filter(nz, 'bp', r.range(650, 900), 0.9, SR), 'lp', 2600, 0.7, SR);
+    const edge = filter(nz, 'bp', r.range(1700, 2300), 6, SR);
+    for (let i = 0; i < len; i++) {
+      const t = i / SR, e = env(t, 0.012, d * 0.32);
+      out[s0 + i] += (body[i] * 1.0 + edge[i] * 0.35) * e * (b ? 0.75 : 1);
+    }
+  }
+  return fade(normalize(out, 0.9), SR, 0.003, 0.08);
+}
+
+// Owl taking off: a few soft, low wing claps (owls are near-silent fliers; this is the
+// startle of big wings right above you, not a flutter).
+export function wingFlap(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(1.2));
+  const n = r.int(3, 4);
+  for (let k = 0; k < n; k++) {
+    const s0 = N(k * r.range(0.2, 0.26)), len = N(0.12);
+    const w = filter(filter(noise(len, r), 'lp', r.range(380, 520), 0.8, SR), 'hp', 70, 0.7, SR);
+    for (let i = 0; i < len; i++) out[s0 + i] += w[i] * env(i / SR, 0.018, 0.04) * (1 - k * 0.18);
+  }
+  return fade(normalize(out, 0.85), SR);
+}
+
 export function coyotes(seed) {
   const r = rngFor(seed), dur = 5.5, out = new Float32Array(N(dur));
   for (let v = 0; v < 4; v++) {
