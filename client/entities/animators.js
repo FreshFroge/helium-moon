@@ -67,6 +67,7 @@ export class HeliumAnimator {
         thigh: hip.distanceTo(knee), shin: knee.distanceTo(ank),
         thighDir: knee.clone().sub(hip).normalize(), shinDir: ank.clone().sub(knee).normalize(),
         upperDir: el.clone().sub(sh).normalize(), foreDir: wr.clone().sub(el).normalize(),
+        upper: sh.distanceTo(el), fore: el.distanceTo(wr),
         hipX: hip.x, ankX: ank.x, ankY: ank.y, ankZ: ank.z,
         footFwd: b['foot.' + s].userData.bindDir.clone(),
       };
@@ -75,7 +76,8 @@ export class HeliumAnimator {
     this.phase = 0; this.t = 0;
     this.headYaw = 0; this.headPitch = 0; this.tilt = 0; this.jaw = 0;
     this.speed = 0; this.accel = 0; this.turn = 0; this.lastYaw = null; this.torsoYaw = 0;
-    this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0, stalk: 0 };
+    this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0, stalk: 0, crawl: 0 };
+    this.hands = {};
   }
 
   // MakeHuman's thigh, shin and arms each contain intermediate bones. Aim the
@@ -113,6 +115,7 @@ export class HeliumAnimator {
     B.still = lerp(B.still, p.still ? 1 : 0, 1 - Math.exp(-dt * 8));
     const stalking = creature && !p.run && (p.state === 3 || p.state === 4 || p.state === 7 || p.state === 9);
     B.stalk = lerp(B.stalk, stalking ? 1 : 0, k);
+    B.crawl = lerp(B.crawl, creature && p.crawl ? 1 : 0, 1 - Math.exp(-dt * 22));
     const stride = lerp(0.66, 1.1, B.run) * (1 - 0.08 * B.stalk);
     if (sp > 0.02) this.phase = (this.phase + dt * sp / (stride * 2)) % 1;
     rig.reset();
@@ -207,6 +210,61 @@ export class HeliumAnimator {
       this._aimSegment(b['upperarm01.' + s], L.upperDir, up);
       this._aimSegment(b['lowerarm01.' + s], L.foreDir, fore);
       rig.aim(b['wrist.' + s], fore);
+    }
+    if (B.crawl > 0.001) this._reverseCrawl(B.crawl, sp);
+  }
+
+  _reverseCrawl(blend, speed) {
+    const rig = this.rig, b = this.b, cycle = this.phase * Math.PI * 2;
+    // Hips high, chest low, head craned back toward the player. The body faces
+    // opposite authoritative travel; planted limbs sweep forward in local space.
+    b.root.position.y = lerp(b.root.position.y, 0.78 + Math.sin(cycle * 2) * 0.025, blend);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(1.95, 0, Math.sin(cycle) * 0.045));
+    b.root.quaternion.slerp(q, blend);
+    for (const n of ['spine05', 'spine04', 'spine03', 'spine02', 'spine01']) {
+      q.setFromEuler(new THREE.Euler(-0.015, Math.sin(cycle + 0.7) * 0.015, 0));
+      b[n].quaternion.slerp(q, blend);
+    }
+    for (const n of ['neck01', 'neck02', 'neck03', 'head']) {
+      q.setFromEuler(new THREE.Euler(n === 'head' ? -0.65 : -0.39, this.headYaw * 0.18, this.tilt * 0.15));
+      b[n].quaternion.slerp(q, blend);
+    }
+    const moving = clamp(speed / 0.5, 0, 1);
+    const contact = (phase) => {
+      const ph = (phase + 1) % 1, duty = 0.57;
+      if (ph < duty) return { z: lerp(-0.34, 0.34, ph / duty) * moving, y: 0, planted: true };
+      const t = (ph - duty) / (1 - duty), ease = t * t * (3 - 2 * t);
+      return { z: lerp(0.34, -0.34, ease) * moving, y: Math.sin(t * Math.PI) * 0.16 * moving, planted: false };
+    };
+    for (const side of ['L', 'R']) {
+      const L = this.l[side], sign = side === 'L' ? 1 : -1;
+      const foot = this.feet[side], f = contact(this.phase + (side === 'L' ? 0 : 0.5));
+      foot.target.lerp(new THREE.Vector3(sign * 0.28, L.ankY + f.y, -0.4 + f.z), blend);
+      foot.contact = f.planted; foot.roll = 0;
+      const hip = rig.wp(b['upperleg01.' + side]);
+      const knee = rig.ik2(hip, L.thigh, L.shin, foot.target, new THREE.Vector3(sign * 0.65, 0, 1));
+      this._aimSegment(b['upperleg01.' + side], L.thighDir, new THREE.Vector3().subVectors(knee, hip));
+      this._aimSegment(b['lowerleg01.' + side], L.shinDir, new THREE.Vector3().subVectors(foot.target, knee));
+      rig.aim(b['foot.' + side], new THREE.Vector3(0, 0, 1));
+      // Diagonal hand/foot pairs scuttle in a reverse bear gait. Solve the arms
+      // as well as the legs, keeping palms close to the actual support plane.
+      const hand = contact(this.phase + (side === 'L' ? 0.5 : 0));
+      const target = rig.wp(b['wrist.' + side]).lerp(new THREE.Vector3(sign * 0.36, 0.11 + hand.y, 0.62 + hand.z), blend);
+      const shoulder = rig.wp(b['upperarm01.' + side]);
+      const delta = target.clone().sub(shoulder), max = L.upper + L.fore - 0.002;
+      if (delta.length() > max) {
+        // Preserve the hand's support height; shorten an overlong horizontal
+        // stride rather than pulling a planted palm up off the ground.
+        const horizontal = Math.hypot(delta.x, delta.z);
+        const reach = Math.sqrt(Math.max(0, max * max - delta.y * delta.y));
+        if (horizontal > 0) { target.x = shoulder.x + delta.x * reach / horizontal; target.z = shoulder.z + delta.z * reach / horizontal; }
+        target.y = clamp(target.y, shoulder.y - max, shoulder.y + max);
+      }
+      const elbow = rig.ik2(shoulder, L.upper, L.fore, target, new THREE.Vector3(sign, 0.2, -0.4));
+      this._aimSegment(b['upperarm01.' + side], L.upperDir, new THREE.Vector3().subVectors(elbow, shoulder));
+      this._aimSegment(b['lowerarm01.' + side], L.foreDir, new THREE.Vector3().subVectors(target, elbow));
+      rig.aim(b['wrist.' + side], new THREE.Vector3(sign * 0.1, -0.4, 1));
+      this.hands[side] = { target, contact: hand.planted };
     }
   }
 }

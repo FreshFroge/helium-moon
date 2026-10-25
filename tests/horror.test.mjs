@@ -38,6 +38,12 @@ test('freezing remains the sole proximity warning at every distance', () => {
   }
 });
 
+test('frost intensifies during the final approach instead of plateauing at 25 metres',()=>{
+  assert.ok(cueAt(25).cold<cueAt(10).cold);
+  assert.ok(cueAt(10).cold<cueAt(2.4).cold);
+  assert.ok(cueAt(2.4).cold<=.95);
+});
+
 test('terror rises continuously across every configurable ring boundary', () => {
   let previous = 0;
   for (let d = 100; d >= 0; d -= 0.25) {

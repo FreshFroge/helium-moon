@@ -6,10 +6,16 @@ This is a **work-in-progress build**: the full game loop is playable in single p
 
 ## Updated playtest build
 
-Latest behavior pass: Helium Voice uses occluded observation spots and preserves
-cover-seeking path detours. Close encounters can lead to attacks even under a
-flashlight. The skunk's lunge now reaches its bite range after a short windup.
-The train horn has been removed and the steady ambient wind is slightly stronger.
+Latest behavior pass: Helium Voice brakes to a creep within **2.4 m (8 feet)**
+while unseen and waits at about **1.8 m (6 feet)**. When he enters the target's
+screen, he accelerates and attacks; turning away after that does not cancel his
+lunge. Hiding spots require full silhouette occlusion from active teammates.
+He escapes in a fast **reverse bear crawl**, moving physically toward cover.
+Frost now strengthens during the final approach. See
+`docs/handoffs/CODEX_CLOSE_ENCOUNTERS.md` for tuning, checks and limitations.
+
+Cover-seeking path detours, the skunk's bite-range lunge, removal of the train
+horn and the slightly stronger steady ambient wind remain in this build.
 
 This revision starts from the editable source in the original `v0.1` release.
 It keeps the terror rings at **80 / 50 / 25 / 10 metres**, with **freezing as the

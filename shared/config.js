@@ -57,6 +57,8 @@ export const CONFIG = {
   // ---------------------------------------------------------------- monsters
   HV: {
     WALK: 1.35, STALK: 2.3, CHASE: 5.15, BURST: 6.6, RELOCATE: 4.2,
+    CREEP_DISTANCE: 2.4, CREEP_SPEED: 0.38, CREEP_STOP: 1.8,
+    RETREAT: 10.5,                 // fast, physical reverse bear crawl to cover
     SIGHT_FLASHLIGHT: 95, SIGHT_DARK: 24, SIGHT_FOV_DEG: 150,
     HEAR_SPRINT: 42, HEAR_WALK: 16, HEAR_CROUCH: 5, HEAR_INTERACT: 55, HEAR_VOICE: 38,
     ATTACK_RANGE: 1.7, ATTACK_COOLDOWN: 2.4, LOSE_TIME: 6.5, SEARCH_TIME: 24,

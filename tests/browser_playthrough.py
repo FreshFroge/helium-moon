@@ -57,8 +57,12 @@ async def play(port):
                             const z = def.z + Math.sin(angle) * radius;
                             if (!game.world.isPlayable(x, z)) continue;
                             game.tp(x, z, def.x, def.z);
-                            const y = station ? def.y + 0.6 : view.y + 0.1;
-                            game.look(game.player.yaw, Math.atan2(y - game.camera.position.y, radius));
+                            game.advance(3, 1/30, false);
+                            const y = station ? def.y + 0.6 : view.y + 0.15;
+                            // Aim after terrain/collision settles the fixture;
+                            // the initial requested radius may have shifted.
+                            const dx = def.x-game.camera.position.x, dz = def.z-game.camera.position.z;
+                            game.look(Math.atan2(-dx,-dz), Math.atan2(y - game.camera.position.y, Math.hypot(dx,dz)));
                             game.advance(3, 1/30, false);
                             const prompt = ui._prompt || '';
                             if (prompt.toLowerCase().includes(def.name.toLowerCase())) return prompt;
@@ -205,7 +209,15 @@ async def play(port):
             for item in ['fuel', 'fuse']:
                 await approach(item)
                 await advance(0.5)
-                assert await page.evaluate('id => game.objViews.items.get(id).glint.material.opacity > 0.01', item), f'{item} catches the flashlight'
+                glint = await page.evaluate('''id=>{
+                    const it=game.objViews.items.get(id),fl=game.flashlight;
+                    const dx=it.def.x-fl.light.position.x,dy=it.y+.15-fl.light.position.y,dz=it.def.z-fl.light.position.z;
+                    const d=Math.hypot(dx,dy,dz);
+                    return {opacity:it.glint.material.opacity,cos:(dx*fl.dir.x+dy*fl.dir.y+dz*fl.dir.z)/d,
+                        d,on:fl.on,intensity:fl.light.intensity,eye:game.camera.position.toArray(),target:[it.def.x,it.y,it.def.z],
+                        pitch:game.player.pitch,mode:game.mode,paused:game.paused};
+                }''',item)
+                assert glint['opacity'] > 0.01, f'{item} catches the flashlight: {glint}'
                 await press('e')
                 assert await page.evaluate('id => game.team[id] && game.objViews.items.get(id).held', item)
             print('  ok  fuel/fuse glints and pickups update the shared inventory and visible items')
@@ -258,6 +270,9 @@ async def play(port):
                     const at = pointAtDistance(game.world.trail,game.world.trailCum,500);
                     const target = pointAtDistance(game.world.trail,game.world.trailCum,506);
                     game.tp(target.x,target.z,at.x,at.z);
+                    // Let the real input transport deliver the fixture's player
+                    // position before aiming/placing the enemy relative to it.
+                    game.advance(3,1/30,false);
                     const sim = game.sim, player = sim.players.get(game.myId);
                     sim.state = 'play'; sim.time = 100; sim.director.enter('build');
                     sim[creature === 'hv' ? 'sf' : 'hv'].update = () => {};

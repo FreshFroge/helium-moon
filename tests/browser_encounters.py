@@ -1,0 +1,84 @@
+"""Focused real-client checks for screen-triggered encounters and crawl rendering.
+Position fixtures establish the encounter; actual AI supplies all movement/damage.
+Uses the same isolated-server harness as browser_playthrough.py.
+"""
+import os
+from pathlib import Path
+from playwright.async_api import async_playwright
+import browser_playthrough as harness
+
+async def play(port):
+    async with async_playwright() as pw:
+        browser=await pw.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE_PATH'),args=[
+            '--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--autoplay-policy=no-user-gesture-required'])
+        try:
+            page=await browser.new_page(viewport={'width':1280,'height':720})
+            errors=[]
+            page.on('pageerror',lambda e:errors.append(str(e)))
+            await page.goto(f'http://localhost:{port}/?manual=1&q=low')
+            await page.wait_for_function('window.READY || window.LOAD_ERROR',timeout=300000)
+            assert not await page.evaluate('window.LOAD_ERROR')
+            await page.locator('#loading').wait_for(state='hidden')
+            await page.click('#menu-main [data-act=single]')
+            result=await page.evaluate('''async()=>{
+                const {pointAtDistance}=await import('/shared/math.js');
+                const at=pointAtDistance(game.world.trail,game.world.trailCum,500);
+                const to=pointAtDistance(game.world.trail,game.world.trailCum,502.3);
+                game.tp(to.x,to.z,at.x,at.z);game.look(game.player.yaw+Math.PI,0);
+                game.advance(6,1/30,false);
+                const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
+                sim.state='play';sim.time=100;sim.director.update=()=>{};sim.director.enter('build');
+                sim.sf.update=()=>{};sim.mimic.update=()=>{};
+                hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);
+                hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.setState('chase');hv.speed=6.6;
+                game.advance(60,1/30,false);
+                const unseen={health:p.health,speed:hv.speed,d:hv.dist(p),committed:hv.closeCommitted,fov:p.viewFov,aspect:p.viewAspect};
+                game.look(game.player.yaw+Math.PI,-.15);
+                const spotted={committed:false,speed:0};
+                for(let i=0;i<6;i++) {
+                    game.advance(1,1/30,false);
+                    spotted.committed ||= hv.closeCommitted;
+                    spotted.speed=Math.max(spotted.speed,hv.speed);
+                }
+                game.look(game.player.yaw+Math.PI,0);
+                for(let i=0;i<90 && p.health===2;i++)game.advance(1,1/30,false);
+                game.advance(3,1/30,false);
+                return {unseen,spotted,hit:p.health,client:game.health};
+            }''')
+            assert result['unseen']['health']==2 and not result['unseen']['committed'],result
+            assert result['unseen']['speed']<=.38 and 1.6<result['unseen']['d']<2.4,result
+            assert result['unseen']['aspect']==1280/720,result
+            assert result['spotted']['committed'] and result['spotted']['speed']>.38,result
+            assert result['hit']<2 and result['client']==result['hit'],result
+            print('  ok  real client sends screen geometry, unseen creep -> sighting -> committed attack:',result,flush=True)
+            pose=await page.evaluate('''async()=>{
+                game.restart();game.advance(9,1/30,false);
+                const {pointAtDistance}=await import('/shared/math.js');
+                const at=pointAtDistance(game.world.trail,game.world.trailCum,500),end=pointAtDistance(game.world.trail,game.world.trailCum,470);
+                const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
+                sim.state='play';sim.time=100;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
+                game.tp(at.x+3,at.z+2,at.x,at.z);game.advance(3,1/30,false);
+                hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);
+                hv.retreatFrom(p,false,true);hv.path=game.world.findPath(hv.x,hv.z,end.x,end.z);hv.pathI=1;
+                hv.yaw=Math.atan2(hv.path[1][0]-hv.x,hv.path[1][1]-hv.z)+Math.PI;
+                game.advance(15,1/30,false);
+                const result={flags:game.hv.flags,blend:game.hv.anim.blend.crawl,head:game.hv.headPos().y-game.hv.pos.y,speed:hv.speed};
+                // Hold a real snapshot after motion so a rendered frame can be inspected.
+                sim.hv.update=()=>{};game.tp(hv.x+3,hv.z+2,hv.x,hv.z);game.look(game.player.yaw,-.3);
+                game.advance(12,1/30,false);game.step(0,true);
+                document.querySelector('#intro').style.display='none';
+                return result;
+            }''')
+            assert pose['flags']&16 and pose['blend']>.99 and pose['head']<.95 and pose['speed']>8,pose
+            print('  ok  authoritative retreat renders as a low four-limb crawl:',pose,flush=True)
+            output=Path(os.environ.get('HM_ARTIFACT_DIR','/tmp/helium-moon-encounters'))
+            output.mkdir(parents=True,exist_ok=True)
+            await page.screenshot(path=str(output/'reverse-crawl.png'))
+            assert not errors,errors
+            print('all focused browser encounter checks passed',flush=True)
+        finally:
+            await browser.close()
+
+if __name__=='__main__':
+    harness.play=play
+    harness.main()

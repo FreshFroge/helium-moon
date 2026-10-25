@@ -3,7 +3,7 @@
 // own their own movement (co-op trust model); the sim owns monsters, objectives,
 // health, revives, gas, mimicry and the outcome.
 import { CONFIG } from '../config.js';
-import { makeRng, pointAtDistance } from '../math.js';
+import { clamp, makeRng, pointAtDistance } from '../math.js';
 import { groundAt } from '../physics.js';
 import { HeliumVoiceAI } from './heliumVoice.js';
 import { SkunkAI } from './skunk.js';
@@ -84,6 +84,8 @@ export class GameSim {
     }
     if (Number.isFinite(m.yaw)) p.yaw = m.yaw;
     if (Number.isFinite(m.pitch)) p.pitch = m.pitch;
+    if (Number.isFinite(m.viewFov)) p.viewFov = clamp(m.viewFov, 40, 120);
+    if (Number.isFinite(m.viewAspect)) p.viewAspect = clamp(m.viewAspect, 0.3, 5);
     p.crouch = !!m.crouch; p.sprint = !!m.sprint; p.flash = !!m.flash;
     p.noise = Math.min(1, Math.max(0, +m.noise || 0));
     p.voice = Math.min(1, Math.max(0, +m.voice || 0));

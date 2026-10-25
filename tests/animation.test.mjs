@@ -81,4 +81,24 @@ assert.ok(unnatural.torsoYaw > 0.1 && Math.abs(unnatural.b.root.position.x) > 0.
 assert.ok(Math.abs(unnatural.headYaw + unnatural.torsoYaw - 0.8) < 0.015, 'neck compensates for torso tracking without doubling the gaze');
 console.log('  ok  creature-only layers preserve teammate behavior and independent head tracking');
 
+const crawler = new HeliumAnimator(character());
+let crawlFootError=0, crawlHandError=0, handHeight=0, headHeight=0;
+for(let i=0;i<360;i++) {
+  crawler.update(1/60,{speed:10.5,crawl:true,unnatural:true,state:6,yaw:0,lookYaw:0});
+  finitePose(crawler);
+  if(i>=60) headHeight=Math.max(headHeight,crawler.rig.wp(crawler.b.head).y);
+  for(const side of ['L','R']) {
+    const hand=crawler.hands[side], foot=crawler.feet[side];
+    crawlFootError=Math.max(crawlFootError,crawler.rig.wp(crawler.b['foot.'+side]).distanceTo(foot.target));
+    crawlHandError=Math.max(crawlHandError,crawler.rig.wp(crawler.b['wrist.'+side]).distanceTo(hand.target));
+    if(i>=60 && hand.contact) handHeight=Math.max(handHeight,Math.abs(hand.target.y-.11));
+  }
+}
+console.log({crawlFootError,crawlHandError,handHeight,headHeight});
+assert.ok(crawlFootError<.012 && crawlHandError<.012,'reverse crawl IK reaches all four contact targets');
+assert.ok(handHeight<.02 && headHeight<.95,'hands plant on the ground and the head stays below standing height');
+for(let i=0;i<120;i++){crawler.update(1/60,{speed:2,unnatural:true,state:3});finitePose(crawler);}
+assert.ok(crawler.blend.crawl<.001,'crawl blends back to the normal stalk');
+console.log('  ok  reverse bear crawl has finite grounded hands/feet and returns to walking');
+
 console.log('\nall animation tests passed');

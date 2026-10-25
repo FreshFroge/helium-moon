@@ -15,7 +15,9 @@ export function terrorAtDistance(distance, rings = CONFIG.TERROR) {
 export function horrorCues(terror) {
   const tr = clamp(terror, 0, 1);
   return {
-    cold: smoothstep(0.0, 0.6, tr) * 0.6,
+    // Cold develops gradually, then frost strengthens inside the inner ring.
+    // It used to plateau at 25 m, leaving the final approach without a change.
+    cold: smoothstep(0.0, 0.6, tr) * 0.6 + smoothstep(0.6, 1, tr) * 0.35,
     // The freezing aura is the sole proximity warning. Actual close-range
     // footsteps and direct encounters still make their own physical sounds.
     insects: 1, quietWildlife: false,

@@ -71,7 +71,7 @@ console.log('     HV seconds by state:', sec(hvStates));
 console.log('     SF6 seconds by state:', sec(sfStates));
 console.log('     events:', ev);
 ok(nan === 0, 'no NaN positions');
-ok(maxHvStep < CONFIG.HV.BURST * DT * 1.6, `Helium Voice never teleports (max ${maxHvStep.toFixed(2)} m per 50 ms step)`);
+ok(maxHvStep < Math.max(CONFIG.HV.BURST, CONFIG.HV.RETREAT) * DT * 1.6, `Helium Voice never teleports (max ${maxHvStep.toFixed(2)} m per 50 ms step)`);
 ok(maxSfStep < CONFIG.SF.DART * DT * 1.6, `SF6 never teleports (max ${maxSfStep.toFixed(2)} m per step)`);
 ok(offNav === 0, 'Helium Voice stays on walkable ground');
 ok((hvStates.stalk || 0) + (hvStates.watch || 0) > (hvStates.chase || 0) * 2, 'stalking/watching dominates over chasing (slow-burn pacing)');

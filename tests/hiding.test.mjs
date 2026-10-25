@@ -32,6 +32,10 @@ test('observation spots need real occlusion from every active teammate', () => {
   const {hv,sim,world,player}=fixture();
   world.lineOfSight=()=>1;
   assert.equal(hv.observationSpot(player),null,'dense vegetation scores do not excuse clear sightlines');
+  world.lineOfSight=()=>0.1;
+  assert.equal(hv.observationSpot(player),null,'translucent brush is not full concealment');
+  world.lineOfSight=(_x,_y,_z,x)=>x>0.2?1:0;
+  assert.equal(hv.concealedAt(0,10),false,'an exposed shoulder invalidates a center-occluded hiding spot');
   const other={...player,id:'two',x:5};sim.playerList.push(other);
   world.lineOfSight=ax=>ax===5?1:0;
   assert.equal(hv.observationSpot(player),null,'cover from one player is not cover from a teammate');

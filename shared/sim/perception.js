@@ -8,6 +8,26 @@ export const playerAlive = (p) => p.state === 'alive' || p.state === 'downed';
 export const playerActive = (p) => p.state === 'alive';
 export const playerFwd = (p) => [-Math.sin(p.yaw), -Math.cos(p.yaw)];
 
+// Match the perspective camera, including pitch, vertical FOV and aspect ratio.
+// Sample the silhouette: a head/shoulder appearing at a screen edge still counts.
+// This is authoritative geometry, not a client-provided "I saw him" flag.
+export function onScreen(world, p, x, y, z, h = 1.9, radius = 0.36) {
+  const yaw = p.yaw || 0, pitch = p.pitch || 0;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
+  const ey = p.y + eyeHeight(p);
+  const tanY = Math.tan((p.viewFov || 75) * Math.PI / 360), tanX = tanY * (p.viewAspect || 16 / 9);
+  for (const height of [h * 0.9, h * 0.5, h * 0.15]) for (const side of [0, -radius, radius]) {
+    const tx = x + cy * side, tz = z - sy * side;
+    const dx = tx - p.x, dy = y + height - ey, dz = tz - p.z;
+    const depth = -sy * cp * dx + sp * dy - cy * cp * dz;
+    if (depth < 0.06 || depth > (p.flash ? CONFIG.FLASHLIGHT.RANGE + 8 : 28)) continue;
+    const right = cy * dx - sy * dz, up = sy * sp * dx + cp * dy + cy * sp * dz;
+    if (Math.abs(right) > depth * tanX || Math.abs(up) > depth * tanY) continue;
+    if (world.lineOfSight(p.x, ey, p.z, tx, y + height, tz, { brushK: 0.3 }) > 0.2) return true;
+  }
+  return false;
+}
+
 // Openness of the sky at a point (moonlight reaching the ground) 0..1
 export function openness(world, x, z) {
   const trunk = world.sampleGrid(world.gCover, x, z);

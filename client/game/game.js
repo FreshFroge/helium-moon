@@ -561,6 +561,7 @@ export class Game {
     if (this.inputT <= 0 && this.net && !this.ended) {
       this.inputT = 1 / CONFIG.NET.INPUT_HZ;
       this.net.send({ t: 'in', x: +pl.pos.x.toFixed(2), y: +pl.pos.y.toFixed(2), z: +pl.pos.z.toFixed(2), yaw: +pl.yaw.toFixed(3), pitch: +pl.pitch.toFixed(3),
+        viewFov: this.camera.fov, viewAspect: this.camera.aspect,
         crouch: pl.crouching, sprint: pl.sprinting, flash: fl.on && fl.light.intensity > 1, noise: +(pl.noise + (this.useId && this._stationNoisy ? 0.6 : 0)).toFixed(2),
         voice: +this.voice.voiceLevel.toFixed(2), hidden: pl.hidden, use: this.useId || null, revive: this.reviveId || null });
     }
@@ -655,7 +656,7 @@ export class Game {
     const fl = this.flashlight, w = this.world, p = fl.light.position, d = fl.dir;
     const tmp = this._qtmp || (this._qtmp = []);
     const bodies = this._bodies || (this._bodies = []); bodies.length = 0;
-    if (this.hv.root.visible) bodies.push([this.hv.pos.x, this.hv.pos.y, this.hv.pos.z, 0.4, 1.95]);
+    if (this.hv.root.visible) bodies.push([this.hv.pos.x, this.hv.pos.y, this.hv.pos.z, this.hv.flags & 16 ? 0.7 : 0.4, this.hv.flags & 16 ? 0.95 : 1.95]);
     if (this.sf.root.visible) bodies.push([this.sf.pos.x, this.sf.pos.y, this.sf.pos.z, 0.55 * CONFIG.SF.MODEL_SCALE, CONFIG.SF.MODEL_SCALE]);
     for (const a of this.avatars.values()) if (a.root.visible) bodies.push([a.pos.x, a.pos.y, a.pos.z, 0.35, 1.8]);
     for (let k = 1; k < 48; k++) {

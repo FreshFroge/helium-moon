@@ -63,10 +63,10 @@ export class HeliumView {
     this.root.rotation.y = yaw;
     this.moved = prev.distanceTo(this.pos);
     if (this.root.visible) {
-      this.anim.update(dt, { speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st });
+      this.anim.update(dt, { speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), crawl: !!(flags & 16), lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st });
     }
   }
-  headPos(out = new THREE.Vector3()) { return out.set(this.pos.x, this.pos.y + 1.78, this.pos.z); }
+  headPos(out = new THREE.Vector3()) { this.root.updateMatrixWorld(true); return this.head.getWorldPosition(out); }
 }
 
 // ------------------------------------------------------------------ Sulfur Hexafluoride
