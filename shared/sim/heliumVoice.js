@@ -409,7 +409,7 @@ export class HeliumVoiceAI {
           this.reveal.counted=true;dir.onReveal(this.reveal.kind);this.presenceReportT=sim.time;
         }
       }
-      if (flashedOff) this.say('flashed_off');
+      if (flashedOff) { this.say('flashed_off'); if (this.litBy?.p) this.noteTactic(this.litBy.p.id, 'flash'); }
       if (!contact && (!deliberate || this.reveal.exposureT >= .9))
         this.retreatFrom(observer.p, !!this.litBy, true);
     }
@@ -466,6 +466,11 @@ export class HeliumVoiceAI {
         if (this.closingOn && !closing) this.closingOn = null;
         if (closing) {
           if (d <= C.HUNT_START_RANGE) {
+            // learned: they flash him off -> don't commit while they're facing him; wait for them to turn
+            if (this.counters(tp.id, 'flash') && sim.time - (this.closingOn.waitFrom ??= sim.time) < C.LEARN_WAIT) {
+              const [fx, fz] = playerFwd(tp), ex = this.x - tp.x, ez = this.z - tp.z, el = Math.hypot(ex, ez) || 1;
+              if ((fx * ex + fz * ez) / el > 0.35) { this.stop(dt); anim.still = 1; this.usedCounter(tp.id, 'flash'); break; }
+            }
             if (dir.allowChase(tp)) { this.startChase(tp); break; }
             this.closingOn = null;
           } else {
@@ -553,8 +558,14 @@ export class HeliumVoiceAI {
         const vis = sightOf(this.world, this, EYE, this.lookYaw, tp, C);
         if (vis > 0.02 || this.dist(tp) < 12) { this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time }; this.huntUnseenT = 0; }
         else this.huntUnseenT = (this.huntUnseenT || 0) + dt;
-        // Cut-off: lost sight of them for RELOCATE_CUTOFF_UNSEEN s mid-hunt -> reappear ahead (once per hunt)
-        if (!this.huntRelocated && this.huntUnseenT >= C.RELOCATE_CUTOFF_UNSEEN && this.dist(tp) > 25 && this.tryRelocate(tp, 'cutoff')) {
+        // remember sprinters (once per hunt, after 2 s of sprinting away)
+        this.huntSprintT = tp.sprint ? (this.huntSprintT || 0) + dt : 0;
+        if (this.huntSprintT > 2 && !this.huntSprintNoted) { this.huntSprintNoted = true; this.noteTactic(tp.id, 'sprint'); }
+        // Cut-off: lost sight of them for RELOCATE_CUTOFF_UNSEEN s mid-hunt -> reappear ahead (once per hunt);
+        // learned sprinters get cut off sooner
+        const cutAfter = this.counters(tp.id, 'sprint') ? C.LEARN_CUTOFF_UNSEEN : C.RELOCATE_CUTOFF_UNSEEN;
+        if (!this.huntRelocated && this.huntUnseenT >= cutAfter && this.dist(tp) > 25 && this.tryRelocate(tp, 'cutoff')) {
+          if (cutAfter < C.RELOCATE_CUTOFF_UNSEEN) this.usedCounter(tp.id, 'sprint');
           this.huntRelocated = true; this.huntUnseenT = 0; this.huntStall = null; this.replanT = 0;
           this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
         }
@@ -672,13 +683,31 @@ export class HeliumVoiceAI {
       if (this.state !== 'stalk') { this.setState('stalk'); this.replanT = 0; }
       return false;
     }
-    this.closingOn = null; this.trackT = 0; this.huntStall = null; this.huntUnseenT = 0; this.huntRelocated = false;
+    this.closingOn = null; this.trackT = 0; this.huntStall = null; this.huntUnseenT = 0; this.huntRelocated = false; this.huntSprintT = 0; this.huntSprintNoted = false; this.counterSaid = null;
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time };
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
     this.sim.director.onChaseStart(p);
     // usually the nonverbal cry; sometimes his own voice: "There you are." (Codex voice direction)
     if (this.say('hunt_start', { force: true })) { this.vocalT = this.sim.time; this.sim.director.onVocal(); } else this.vocal('scream', true);
+  }
+
+  // ---- "He learns your escapes" (SCARE_RESEARCH C2): per-player tactic memory with decay
+  tactic(pid, kind) {
+    const m = (this.learn ||= new Map()).get(pid); if (!m || !m[kind]) return 0;
+    return m[kind].n * Math.pow(0.5, (this.sim.time - m[kind].t) / C.LEARN_HALF_LIFE);
+  }
+  noteTactic(pid, kind) {
+    const L = (this.learn ||= new Map()); const m = L.get(pid) || {}; L.set(pid, m);
+    m[kind] = { n: this.tactic(pid, kind) + 1, t: this.sim.time };
+    this.sim.emit({ type: 'hv_learn', pid, kind, n: +m[kind].n.toFixed(2) });
+  }
+  counters(pid, kind) { return this.tactic(pid, kind) >= C.LEARN_COUNTER; }
+  // first time in a hunt that a counter is used on someone: sometimes he says "Again."
+  usedCounter(pid, kind) {
+    const k = pid + ':' + kind;
+    if ((this.counterSaid ||= new Set()).has(k)) return;
+    this.counterSaid.add(k); this.say('repeated_counter');
   }
 
   // "The forest holds its breath" (SCARE_RESEARCH C1): once per closing-in attempt, inside
