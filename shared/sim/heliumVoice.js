@@ -7,7 +7,7 @@ import { CONFIG } from '../config.js';
 import { clamp, lerp, angleDiff, pointAtDistance } from '../math.js';
 import { moveCharacter, groundAt } from '../physics.js';
 import { inSpawnZone, spawnZoneCost, spawnStepBlocked } from './zones.js';
-import { observedBy, onScreen, sightOf, noiseRadius, viewCost, playerActive, playerAlive, playerFwd } from './perception.js';
+import { eyeHeight, observedBy, onScreen, sightOf, noiseRadius, viewCost, playerActive, playerAlive, playerFwd } from './perception.js';
 
 const C = CONFIG.HV;
 export const HV_STATES = ['dormant', 'roam', 'investigate', 'stalk', 'watch', 'freeze', 'retreat', 'reveal', 'chase', 'search', 'still'];
@@ -238,7 +238,7 @@ export class HeliumVoiceAI {
       // can attenuate LOS but is not solid concealment.
       const a = Math.atan2(p.x - x, p.z - z), rx = Math.cos(a) * 0.32, rz = -Math.sin(a) * 0.32;
       for (const height of [1.8, 1.0, 0.25]) for (const side of [0, -1, 1]) {
-        if (w.lineOfSight(p.x, p.y + (p.crouch ? 1 : 1.6), p.z, x + rx * side, y + height, z + rz * side, { brushK: 0 }) > 0) return false;
+        if (w.lineOfSight(p.x, p.y + eyeHeight(p), p.z, x + rx * side, y + height, z + rz * side, { brushK: 0 }) > 0) return false;
       }
     }
     return true;
@@ -262,7 +262,7 @@ export class HeliumVoiceAI {
       if (!this.concealedAt(x, z)) continue;
       const cover = w.sampleGrid(w.gCover, x, z);
       const y = groundAt(w, x, z);
-      const vis = w.lineOfSight(p.x, p.y + 1.6, p.z, x, y + 1.7, z, { brushK: 0.3 });
+      const vis = w.lineOfSight(p.x, p.y + eyeHeight(p), p.z, x, y + 1.7, z, { brushK: 0.3 });
       let s = cover * 2.2;
       s += (1 - vis) * 2; // concealed watching; deliberate reveals are handled separately
       s -= viewCost(sim.playerList, x, z, 1) * 0.8;
@@ -283,7 +283,7 @@ export class HeliumVoiceAI {
       const x = this.x + Math.sin(a) * d, z = this.z + Math.cos(a) * d;
       if (!w.navWalkable(x, z) || !this.openingClear(x, z)) continue;
       const y = groundAt(w, x, z);
-      const vis = w.lineOfSight(from.x, from.y + 1.6, from.z, x, y + 1.6, z, { brushK: 0.35 });
+      const vis = w.lineOfSight(from.x, from.y + eyeHeight(from), from.z, x, y + 1.6, z, { brushK: 0.35 });
       const score = (1 - vis) * 3 + w.sampleGrid(w.gCover, x, z) - d / 60;
       candidates.push({ x, z, score });
     }
@@ -570,7 +570,7 @@ export class HeliumVoiceAI {
         const a = baseA + rng.range(-0.35, 0.35), d = rng.range(32, 46);
         const x = p.x + Math.sin(a) * d, z = p.z + Math.cos(a) * d;
         if (!w.navWalkable(x, z) || !this.openingClear(x, z)) continue;
-        const vis = w.lineOfSight(p.x, p.y + 1.6, p.z, x, groundAt(w, x, z) + 1.6, z, { brushK: 0.25 });
+        const vis = w.lineOfSight(p.x, p.y + eyeHeight(p), p.z, x, groundAt(w, x, z) + 1.6, z, { brushK: 0.25 });
         if (vis < 0.45) continue;
         plan = { kind, pid: p.id, spot: [x, z], phase: 'approach' };
       } else if (kind === 'crossing') {
@@ -579,7 +579,7 @@ export class HeliumVoiceAI {
         const pa = a + Math.PI / 2, half = rng.range(9, 14);
         const A = [cx + Math.sin(pa) * half, cz + Math.cos(pa) * half], B = [cx - Math.sin(pa) * half, cz - Math.cos(pa) * half];
         if (!w.navWalkable(A[0], A[1]) || !w.navWalkable(B[0], B[1]) || !w.navWalkable(cx, cz)) continue;
-        const vis = w.lineOfSight(p.x, p.y + 1.6, p.z, cx, groundAt(w, cx, cz) + 1.6, cz, { brushK: 0.2 });
+        const vis = w.lineOfSight(p.x, p.y + eyeHeight(p), p.z, cx, groundAt(w, cx, cz) + 1.6, cz, { brushK: 0.2 });
         if (vis < 0.4) continue;
         plan = rng() < 0.5 ? { kind, pid: p.id, spot: A, end: B, phase: 'approach' } : { kind, pid: p.id, spot: B, end: A, phase: 'approach' };
       }

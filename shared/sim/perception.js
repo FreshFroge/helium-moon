@@ -3,7 +3,7 @@
 import { CONFIG } from '../config.js';
 import { clamp, angleDiff } from '../math.js';
 
-export const eyeHeight = (p) => (p.crouch ? 1.0 : 1.6);
+export const eyeHeight = (p) => (p.crouch ? CONFIG.PLAYER.CROUCH_HEIGHT : CONFIG.PLAYER.HEIGHT) - 0.1;
 export const playerAlive = (p) => p.state === 'alive' || p.state === 'downed';
 export const playerActive = (p) => p.state === 'alive';
 export const playerFwd = (p) => [-Math.sin(p.yaw), -Math.cos(p.yaw)];

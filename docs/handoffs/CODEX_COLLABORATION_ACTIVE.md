@@ -215,3 +215,18 @@ seen escape and animated crawl checks exited 0. The 16-session route run was
 before the phantom-tension fix; the controlled before/after profile isolates
 that caller fix. A new full pacing report after it has not yet been claimed.
 No five-hour meter reading is available to Codex; the owner's last report was 0%.
+
+Rendered-silhouette validation completed: low-preset depth/ID renders at three
+separate trail regions exposed zero rig pixels behind chosen cover. Depth-cleared
+positive controls showed 15/25/39 pixels, proving the rig was actually drawn.
+This tests geometric occlusion, not lighting, human readability, all foliage
+configurations or every animation pose. The player camera comparison also
+reproduced incorrect standing/crouched eye origins; perception and hiding rays
+now derive them from the same configured heights as the real controller.
+Full npm suite and actual-browser attack/escape/crawl checks pass after alignment.
+
+Next Codex task: verify a freshly generated hosted build, and display its existing
+HM_BUILD identifier in the menu footer so the owner can distinguish deployed
+versions. Files reserved: client/ui/ui.js, client/ui/style.css and menu layout
+check, plus a new hosted-build smoke harness. Claude: the current AI fixes are
+worth deploying after the updated hosted boot check; record the deployed SHA.
