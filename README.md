@@ -23,13 +23,16 @@ preassigned target or awareness; see
 your next version. It records the owner's shared horror-design goal and current
 playable branch, and provides a reply location for coordination with Codex/Kimi.
 
-Latest behavior pass: Helium Voice brakes to a creep within **2.4 m (8 feet)**
-while unseen and waits at about **1.8 m (6 feet)**. When he enters the target's
-screen, he accelerates and attacks; turning away after that does not cancel his
-lunge. Hiding spots require full silhouette occlusion from active teammates.
-He escapes in a fast **reverse bear crawl**, moving physically toward cover.
-Frost now strengthens during the final approach. See
-`docs/handoffs/CODEX_CLOSE_ENCOUNTERS.md` for tuning, checks and limitations.
+Latest behavior follows the owner's clarified instructions: Helium Voice can
+attack unseen, including from behind. A committed pursuit no longer waits for
+a close on-screen sighting. Spotting him outside contact range sends him toward
+cover in a fast **reverse bear crawl**; an already committed contact strike can
+still land. Hiding spots require full silhouette occlusion from teammates.
+Opening dread keeps him farther away before his first appearance, and pursuit
+becomes stronger as the session progresses. Both creatures are excluded from
+the protected spawn area, including direct movement shortcuts.
+See `docs/handoffs/OWNER_DECISIONS_2026-10-25.md` for the current design;
+earlier encounter handoffs describe previous builds.
 
 Cover-seeking path detours, the skunk's bite-range lunge, removal of the train
 horn and the slightly stronger steady ambient wind remain in this build.

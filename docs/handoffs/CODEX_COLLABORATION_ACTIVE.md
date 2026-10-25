@@ -168,3 +168,26 @@ Actual browser unseen hits / seen retreats pass; Node attack, encounter,
 hiding, opening-traversal and 12-minute simulation checks pass. Opening test
 has cold but zero sightings/hits during ordinary traversal for two seeds.
 Spawn-zone wiring is the next active edit, not claimed complete yet.
+
+Owner workflow preference: keep a steady flow of focused tasks, avoiding
+redundant test runs, rapid polling and unnecessary tool work to conserve the
+five-hour allowance. The owner reported its meter at 0%; neither agent should
+claim to read or control that meter. Batch independent checks and use completed
+validation/results to choose the next task rather than repeatedly rerunning it.
+
+Spawn-zone wiring is complete: both creatures reject protected destinations;
+A* and fallback legs include zone costs; every movement segment, including
+lunges, is checked with body padding. Targets inside spawn are not pursued.
+Focus selection now falls back to an eligible player outside spawn rather
+than camping a protected focus player. The ten-minute exclusion regression is
+now mandatory (no TODO). Full npm suite and actual-browser attack/retreat/crawl
+checks pass. A hidden-player skunk ambush also now respects opening protection.
+The 12-minute sim fixture now establishes its initial trail positions explicitly
+instead of having its initial jump silently rejected by the 12 m input clamp.
+Its obsolete fixed stalk/chase ratio is replaced with opening protection and
+engagement of outside-spawn players; real damage remains covered by attack tests.
+
+Remaining D issue: full 16-session pacing invariants pass and unseen walkers
+can now be hit, but occasional first sightings still occur during opening.
+This is not marked resolved by the two focused opening fixtures. Codex is
+continuing with opening path clearance; Claude, please avoid that AI file.

@@ -6,7 +6,7 @@ import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
 import { CONFIG } from '../shared/config.js';
 import { pointAtDistance } from '../shared/math.js';
-import { spawnZone, inSpawnZone, spawnZoneCost, pushOutOfSpawn, BLOCK_COST } from '../shared/sim/zones.js';
+import { spawnZone, inSpawnZone, spawnZoneCost, pushOutOfSpawn, BLOCK_COST, spawnStepBlocked } from '../shared/sim/zones.js';
 
 const world = new World({});
 const zone = spawnZone(world);
@@ -53,7 +53,7 @@ test('excluding the zone does not cut the refuge in two (creatures can still rea
 });
 
 // Becomes a hard requirement once the AI wiring lands (Codex, backlog #9 / task B).
-test('creatures never enter the spawn zone during a 10-minute session', { todo: !process.env.HM_ZONES_WIRED && 'until zones.js is wired into heliumVoice.js / skunk.js' }, () => {
+test('creatures never enter the spawn zone during a 10-minute session', () => {
   const sim = new GameSim(world, { seed: 7 });
   sim.addPlayer('p1', 'P1');
   let hvIn = 0, sfIn = 0;
@@ -66,4 +66,12 @@ test('creatures never enter the spawn zone during a 10-minute session', { todo: 
   }
   assert.equal(hvIn, 0, `Helium Voice spent ${(hvIn * 0.05).toFixed(1)} s in the spawn zone`);
   assert.equal(sfIn, 0, `SF6 spent ${(sfIn * 0.05).toFixed(1)} s in the spawn zone`);
+});
+
+test('whole movement segments and their capsule padding cannot cut across spawn',()=>{
+  assert.equal(spawnStepBlocked(world,zone.x-zone.r-5,zone.z,zone.x+zone.r+5,zone.z),true);
+  assert.equal(spawnStepBlocked(world,zone.x-zone.r-5,zone.z+zone.r+2,zone.x+zone.r+5,zone.z+zone.r+2),false);
+  assert.equal(spawnStepBlocked(world,zone.x-1,zone.z+zone.r+.1,zone.x+1,zone.z+zone.r+.1),true);
+  const sim=new GameSim(world,{seed:5});
+  for(const actor of [sim.hv,sim.sf])assert.equal(actor.planTo(zone.x,zone.z),false);
 });

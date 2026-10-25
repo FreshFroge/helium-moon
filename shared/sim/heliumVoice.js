@@ -6,6 +6,7 @@
 import { CONFIG } from '../config.js';
 import { clamp, lerp, angleDiff, pointAtDistance } from '../math.js';
 import { moveCharacter, groundAt } from '../physics.js';
+import { inSpawnZone, spawnZoneCost, spawnStepBlocked } from './zones.js';
 import { observedBy, onScreen, sightOf, noiseRadius, viewCost, playerActive, playerAlive, playerFwd } from './perception.js';
 
 const C = CONFIG.HV;
@@ -36,12 +37,12 @@ export class HeliumVoiceAI {
       const p = pointAtDistance(w.trail, w.trailCum, rng.range(220, 420));
       const a = rng.range(0, Math.PI * 2), d = rng.range(25, 60);
       const x = p.x + Math.sin(a) * d, z = p.z + Math.cos(a) * d;
-      if (w.navWalkable(x, z) && w.sampleGrid(w.gCover, x, z) > 0.25) { this.place(x, z); return; }
+      if (w.navWalkable(x, z) && this.outsideSpawn(x,z) && w.sampleGrid(w.gCover, x, z) > 0.25) { this.place(x, z); return; }
     }
     const p = pointAtDistance(w.trail, w.trailCum, 300);
     const i = w.nearestNav(p.x + 20, p.z, 30); const [x, z] = w.cellPos(i); this.place(x, z);
   }
-  place(x, z) { this.x = x; this.z = z; this.y = groundAt(this.world, x, z); this.path = null; this.finalGoal = null; }
+  place(x, z) { if (!this.outsideSpawn(x,z)) return false; this.x = x; this.z = z; this.y = groundAt(this.world, x, z); this.path = null; this.finalGoal = null; }
 
   setState(s, info) {
     this.state = s; this.stateT = 0; this.path = null; this.goal = null; this.finalGoal = null;
@@ -51,6 +52,19 @@ export class HeliumVoiceAI {
 
   dist(p) { return Math.hypot(p.x - this.x, p.z - this.z); }
 
+  outsideSpawn(x,z) { return !this.world.trail || !inSpawnZone(this.world,x,z,0.4); }
+
+  focusPlayer() {
+    const preferred=this.sim.director.focusPlayer();
+    if(preferred && playerActive(preferred) && this.outsideSpawn(preferred.x,preferred.z))return preferred;
+    let best=null,distance=Infinity;
+    for(const p of this.sim.playerList){
+      if(!playerActive(p)||!this.outsideSpawn(p.x,p.z))continue;
+      const d=this.dist(p);if(d<distance){best=p;distance=d;}
+    }
+    return best;
+  }
+
   openingDistance() {
     const d = this.sim.director?.minDistance?.() || 0;
     // Stay beyond the simulation's lit visibility range, while still entering
@@ -59,7 +73,7 @@ export class HeliumVoiceAI {
   }
   openingClear(x, z) {
     const distance = this.openingDistance();
-    return !distance || this.sim.playerList.every(p => !playerActive(p) || Math.hypot(x-p.x,z-p.z) >= distance);
+    return this.outsideSpawn(x,z) && (!distance || this.sim.playerList.every(p => !playerActive(p) || Math.hypot(x-p.x,z-p.z) >= distance));
   }
 
 
@@ -70,7 +84,7 @@ export class HeliumVoiceAI {
     this.observers = []; this.litBy = null;
     for (const p of sim.playerList) {
       if (!playerAlive(p)) continue;
-      const vis = sightOf(this.world, this, EYE, this.lookYaw, p, C);
+      const vis = this.outsideSpawn(p.x,p.z) ? sightOf(this.world, this, EYE, this.lookYaw, p, C) : 0;
       let aw = this.awareness.get(p.id) || 0;
       if (vis > 0.05) {
         const d = this.dist(p);
@@ -93,7 +107,7 @@ export class HeliumVoiceAI {
     this.litT = this.litBy ? this.litT + dt : 0;
     // hearing
     for (const p of sim.playerList) {
-      if (!playerAlive(p)) continue;
+      if (!playerAlive(p) || !this.outsideSpawn(p.x,p.z)) continue;
       const r = noiseRadius(p, C);
       if (r <= 0) continue;
       const d = this.dist(p);
@@ -125,6 +139,7 @@ export class HeliumVoiceAI {
 
   // ---------------------------------------------------------------- movement
   planTo(x, z, mode = 'cover') {
+    if (!this.outsideSpawn(x,z)) { this.path=null;this.finalGoal=null;return false; }
     const w = this.world, sim = this.sim, R = CONFIG.GRID_RES, gw = w.gw, x0 = w.minX, z0 = w.minZ;
     // long trips are planned in legs of <=110 m (bounded A* cost per tick; re-planned on arrival)
     const D = Math.hypot(x - this.x, z - this.z);
@@ -149,9 +164,11 @@ export class HeliumVoiceAI {
         return c;
       };
     }
+    const coverCost = costFn;
+    costFn = i => { const cx=x0+(i%gw)*R,cz=z0+((i/gw)|0)*R; return spawnZoneCost(w,cx,cz)+(coverCost?coverCost(i):0); };
     this.path = w.findPath(this.x, this.z, gx, gz, { costFn, maxExpand: mode === 'direct' ? 9000 : 14000 });
     // leg target unreachable (e.g. across the river): try a short plain leg instead of an unbounded search
-    if (!this.path && this.finalGoal) { const k = 45 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
+    if (!this.path && this.finalGoal) { const k = 45 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: i => spawnZoneCost(w,...w.cellPos(i)), maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
     this.pathI = 1; this.goal = [x, z];
     return !!this.path;
   }
@@ -180,6 +197,7 @@ export class HeliumVoiceAI {
         && this.dist(p) >= minimum && Math.hypot(p.x-r.x,p.z-r.z) < minimum)) {
       this.path = null; this.stop(dt); return false;
     }
+    if (spawnStepBlocked(this.world,this.x,this.z,r.x,r.z)) { this.path=null;this.stop(dt);return false; }
     const moved = Math.hypot(r.x - this.x, r.z - this.z);
     // A tight waypoint beside solid geometry can return a large penetration
     // correction. Replan instead of snapping the creature through the obstacle.
@@ -271,12 +289,13 @@ export class HeliumVoiceAI {
 
   roamGoal() {
     const w = this.world, rng = this.rng, sim = this.sim;
-    const tp = sim.director.focusPlayer();
+    const tp = this.focusPlayer();
     for (let k = 0; k < 40; k++) {
       let x, z;
-      if (tp && sim.director.wantsPresence()) {
+      if (tp && (sim.director.wantsPresence() || this.openingDistance() > 0)) {
         // drift into the outer terror ring of the focus player
-        const a = rng.range(0, Math.PI * 2), d = rng.range(55, 110);
+        const a = rng.range(0, Math.PI * 2), minimum = this.openingDistance();
+        const d = minimum ? rng.range(minimum + 3, Math.max(minimum + 4, CONFIG.TERROR.OUTER - 3)) : rng.range(55, 110);
         x = tp.x + Math.sin(a) * d; z = tp.z + Math.cos(a) * d;
       } else {
         // wander the stretch of trail around whoever he is following, never the whole map
@@ -304,7 +323,10 @@ export class HeliumVoiceAI {
     }
 
     let tp = this.target != null ? sim.players.get(this.target) : null;
-    if (tp && !playerAlive(tp)) this.target = null;
+    if (tp && (!playerAlive(tp) || !this.outsideSpawn(tp.x,tp.z))) {
+      if(this.state==='chase')this.retreatFrom(tp,false,true);
+      this.target=null;tp=null;
+    }
     const anim = this.anim;
     anim.run = 0; anim.reach = 0; anim.still = 0;
     let lookP = tp && playerAlive(tp) && (this.awareness.get(tp.id) || 0) > 0.6 ? tp : null;
@@ -341,7 +363,7 @@ export class HeliumVoiceAI {
         break;
       }
       case 'roam': {
-        const fpl = dir.focusPlayer();
+        const fpl = this.focusPlayer();
         if (this.path && this.goal && fpl && dir.wantsPresence() && Math.hypot(this.goal[0] - fpl.x, this.goal[1] - fpl.z) > 120) this.path = null;
         if (!this.path) { const g = this.roamGoal(); if (g) this.planTo(g[0], g[1], 'cover'); }
         const near = sim.nearestPlayer(this.x, this.z);
@@ -512,6 +534,7 @@ export class HeliumVoiceAI {
   }
 
   startChase(p) {
+    if (!this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time };
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
@@ -521,6 +544,7 @@ export class HeliumVoiceAI {
 
   // ---------------------------------------------------------------- deliberate reveals
   requestReveal(kind, p) {
+    if (!this.outsideSpawn(p.x,p.z) || this.openingDistance()) return false;
     if (!['roam', 'stalk', 'watch', 'search'].includes(this.state)) return false;
     if (this.dist(p) > 150) return false;
     const w = this.world, rng = this.rng;

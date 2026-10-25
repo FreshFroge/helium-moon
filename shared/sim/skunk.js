@@ -5,6 +5,7 @@
 import { CONFIG } from '../config.js';
 import { lerp, angleDiff, pointAtDistance } from '../math.js';
 import { moveCharacter, groundAt } from '../physics.js';
+import { inSpawnZone, spawnZoneCost, spawnStepBlocked } from './zones.js';
 import { observedBy, noiseRadius, playerActive, playerAlive } from './perception.js';
 
 const C = CONFIG.SF;
@@ -20,6 +21,8 @@ export class SkunkAI {
     this.target = null; this.inv = null;
   }
 
+  outsideSpawn(x,z) { return !this.world.trail || !inSpawnZone(this.world,x,z,0.4); }
+
   // dense-brush spot near wet / overgrown ground, preferably near players
   lurkSpot(near, minD = 20, maxD = 80) {
     const w = this.world, rng = this.rng;
@@ -27,7 +30,7 @@ export class SkunkAI {
     for (let k = 0; k < 50; k++) {
       const a = rng.range(0, Math.PI * 2), d = rng.range(minD, maxD);
       const x = near.x + Math.sin(a) * d, z = near.z + Math.cos(a) * d;
-      if (!w.navWalkable(x, z)) continue;
+      if (!w.navWalkable(x, z) || !this.outsideSpawn(x,z)) continue;
       const brush = w.sampleGrid(w.gBrush, x, z);
       const wet = w.isWetZone(x, z) ? 0.6 : 0;
       const trail = w.trailDistAt(x, z);
@@ -48,14 +51,15 @@ export class SkunkAI {
   setState(s, info) { this.state = s; this.stateT = 0; this.path = null; this.finalGoal = null; if (info) Object.assign(this, info); }
 
   planTo(x, z) {
+    if(!this.outsideSpawn(x,z)){this.path=null;this.finalGoal=null;return false;}
     const w = this.world, gB = w.gBrush, gT = w.gTrail;
     const D = Math.hypot(x - this.x, z - this.z);
     let gx = x, gz = z; this.finalGoal = null;
     if (D > 90) { const k = 90 / D; gx = this.x + (x - this.x) * k; gz = this.z + (z - this.z) * k; this.finalGoal = [x, z]; }
     // avoid open trail and clearings, prefer brush
-    const costFn = (i) => (gB[i] < 0.2 ? 1.2 : 0) + (gT[i] < 2.5 ? 3 : 0);
+    const costFn = (i) => (gB[i] < 0.2 ? 1.2 : 0) + (gT[i] < 2.5 ? 3 : 0) + spawnZoneCost(w,...w.cellPos(i));
     this.path = w.findPath(this.x, this.z, gx, gz, { costFn, maxExpand: 10000 });
-    if (!this.path && this.finalGoal) { const k = 40 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
+    if (!this.path && this.finalGoal) { const k = 40 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: i => spawnZoneCost(w,...w.cellPos(i)), maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
     this.pathI = 1;
     return !!this.path;
   }
@@ -69,6 +73,7 @@ export class SkunkAI {
     this.speed = lerp(this.speed, speed, 1 - Math.exp(-dt * 6));
     const step = Math.min(d, this.speed * dt);
     const r = moveCharacter(this.world, this, dx / d * step, dz / d * step, 0.25, { nav: true, slope: false, step: 0.5 });
+    if(spawnStepBlocked(this.world,this.x,this.z,r.x,r.z)){this.path=null;this.speed=0;return false;}
     this.x = r.x; this.z = r.z; this.y = groundAt(this.world, this.x, this.z);
     this.yaw += angleDiff(this.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 10);
     return false;
@@ -84,7 +89,7 @@ export class SkunkAI {
     // senses: proximity + sound (not sight)
     let nearest = null, nd = 1e9;
     for (const p of sim.playerList) {
-      if (!playerAlive(p)) continue;
+      if (!playerAlive(p) || !this.outsideSpawn(p.x,p.z)) continue;
       const d = this.dist(p);
       if (d < nd) { nd = d; nearest = p; }
       const r = noiseRadius(p, CONFIG.HV) * 0.75;
@@ -100,7 +105,7 @@ export class SkunkAI {
         a.low = 1; this.speed = lerp(this.speed, 0, dt * 6);
         if (nearest) this.lookYaw = Math.atan2(nearest.x - this.x, nearest.z - this.z);
         if (nearest && nd < C.AMBUSH_RADIUS && dir.allowSkunkAmbush() && sim.time - this.gasT > C.GAS_COOLDOWN) { this.target = nearest.id; this.setState('ambush'); break; }
-        if (nearest && nearest.hidden && nd < 14 && sim.time - this.gasT > C.GAS_COOLDOWN) { this.target = nearest.id; this.setState('ambush'); break; }
+        if (nearest && nearest.hidden && nd < 14 && dir.allowSkunkAmbush() && sim.time - this.gasT > C.GAS_COOLDOWN) { this.target = nearest.id; this.setState('ambush'); break; }
         if (this.inv && sim.time - this.inv.t < 1 && this.dist(this.inv) > 10 && this.stateT > 4) this.setState('investigate');
         else if (this.stateT > this.lurkFor) this.setState('prowl');
         if (rng() < dt * 0.02 && sim.time - this.vocalT > 30 && nd < 45) this.vocal('rumble');
@@ -110,7 +115,8 @@ export class SkunkAI {
         a.low = 1;
         if (!this.path) {
           // set up beside the route ahead of the focus player, in the brush just off the trail
-          const fp = dir.focusPlayer() || nearest;
+          const focus = dir.focusPlayer();
+          const fp = focus && this.outsideSpawn(focus.x,focus.z) ? focus : nearest;
           let s = null;
           if (fp && this.rng() < 0.7) {
             const ti = this.world.trailInfo(fp.x, fp.z);
@@ -139,7 +145,7 @@ export class SkunkAI {
       }
       case 'ambush': {
         const p = sim.players.get(this.target);
-        if (!p || !playerAlive(p)) { this.setState('retreat'); break; }
+        if (!p || !playerAlive(p) || !this.outsideSpawn(p.x,p.z)) { this.flee(p || this); break; }
         a.fast = 1;
         const d = this.dist(p);
         if (this.stateT - dt <= 1e-6) { this.vocal('growl', true); sim.director.onSkunk(); }
@@ -150,6 +156,7 @@ export class SkunkAI {
           const dx = p.x - this.x, dz = p.z - this.z;
           const step = Math.min(d - contact, this.speed * dt);
           const r = moveCharacter(this.world, this, dx / d * step, dz / d * step, 0.25, { nav: true, slope: false });
+          if(spawnStepBlocked(this.world,this.x,this.z,r.x,r.z)){this.flee(p);break;}
           this.x = r.x; this.z = r.z; this.y = groundAt(this.world, this.x, this.z);
           this.yaw += angleDiff(this.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 12);
         } else this.setState('rear', { target: p.id });
@@ -157,6 +164,7 @@ export class SkunkAI {
       }
       case 'rear': {
         const p = sim.players.get(this.target);
+        if(p && !this.outsideSpawn(p.x,p.z)){this.flee(p);break;}
         a.rear = 1; a.gas = this.stateT > 0.8 ? 1 : 0; this.speed = 0;
         if (p) this.yaw += angleDiff(this.yaw, Math.atan2(p.x - this.x, p.z - this.z)) * Math.min(1, dt * 6);
         if (this.stateT > 0.4 && this.stateT - dt <= 0.4) this.vocal('warn', true);
@@ -203,6 +211,7 @@ export class SkunkAI {
   }
 
   requestEmerge(p) {
+    if(!this.outsideSpawn(p.x,p.z))return false;
     if (!['lurk', 'prowl'].includes(this.state)) return false;
     const w = this.world;
     // a brush edge 10-18 m from them, inside their view
@@ -211,7 +220,7 @@ export class SkunkAI {
     for (let k = 0; k < 30; k++) {
       const a = base + this.rng.range(-0.5, 0.5), d = this.rng.range(10, 18);
       const x = p.x + Math.sin(a) * d, z = p.z + Math.cos(a) * d;
-      if (!w.navWalkable(x, z) || w.sampleGrid(w.gBrush, x, z) < 0.15) continue;
+      if (!w.navWalkable(x, z) || !this.outsideSpawn(x,z) || w.sampleGrid(w.gBrush, x, z) < 0.15) continue;
       if (Math.hypot(x - this.x, z - this.z) > 70) continue;
       this.target = p.id;
       this.setState('emerge', { emergePhase: 'go' });

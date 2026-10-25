@@ -42,7 +42,14 @@ const names = ['p1', 'p2', 'p3'];
 names.forEach((id) => sim.addPlayer(id, id));
 const pace = { p1: 1.6, p2: 1.2, p3: 0.0 };
 const along = { p1: 3, p2: 4.6, p3: 6.2 };
+// Establish the scripted trail fixture once. The kiosk spawn is farther than
+// the input protocol's 12 m movement limit from these initial trail points.
+for(const id of names){
+  const p=sim.players.get(id),q=pointAtDistance(world.trail,world.trailCum,along[id]);
+  Object.assign(p,{x:q.x,z:q.z,y:world.heightAt(q.x,q.z),lastX:q.x,lastZ:q.z});
+}
 const ev = {}, hvStates = {}, sfStates = {};
+let openingChases = 0;
 let maxHvStep = 0, maxSfStep = 0, offNav = 0, nan = 0, worst = 0, steps = 0; const times = [];
 let prevHv = [sim.hv.x, sim.hv.z], prevSf = [sim.sf.x, sim.sf.z];
 const DT = 0.05;
@@ -58,6 +65,7 @@ for (let t = 0; t < 12 * 60; t += DT) {
   }
   const s0 = performance.now(); sim.step(DT); const el = performance.now() - s0; times.push(el); if (sim.time > 3) worst = Math.max(worst, el); steps++;
   for (const e of sim.drainEvents()) { ev[e.type] = (ev[e.type] || 0) + 1; }
+  if (sim.hv.state === 'chase' && sim.director.inDread()) openingChases++;
   hvStates[sim.hv.state] = (hvStates[sim.hv.state] || 0) + 1; sfStates[sim.sf.state] = (sfStates[sim.sf.state] || 0) + 1;
   const dh = Math.hypot(sim.hv.x - prevHv[0], sim.hv.z - prevHv[1]), ds = Math.hypot(sim.sf.x - prevSf[0], sim.sf.z - prevSf[1]);
   if (sim.hv.state !== 'dormant' && sim.time > CONFIG.SESSION.INTRO_TIME + 1) { maxHvStep = Math.max(maxHvStep, dh); if (world.nearestNav(sim.hv.x, sim.hv.z, 2) < 0) offNav++; }
@@ -74,7 +82,8 @@ ok(nan === 0, 'no NaN positions');
 ok(maxHvStep < Math.max(CONFIG.HV.BURST, CONFIG.HV.RETREAT) * DT * 1.6, `Helium Voice never teleports (max ${maxHvStep.toFixed(2)} m per 50 ms step)`);
 ok(maxSfStep < CONFIG.SF.DART * DT * 1.6, `SF6 never teleports (max ${maxSfStep.toFixed(2)} m per step)`);
 ok(offNav === 0, 'Helium Voice stays on walkable ground');
-ok((hvStates.stalk || 0) + (hvStates.watch || 0) > (hvStates.chase || 0) * 2, 'stalking/watching dominates over chasing (slow-burn pacing)');
+ok(openingChases === 0, 'opening dread stays free of chases');
+ok((hvStates.stalk || 0) + (hvStates.watch || 0) > 0, 'players outside protected spawn are engaged rather than ignored');
 ok((ev.hv_vocal || 0) >= 3 && (ev.hv_vocal || 0) < 60, `vocals are present but sparse (${ev.hv_vocal || 0} in the session)`);
 ok((ev.mimic || 0) >= 1, `mimicry happened (${ev.mimic || 0}x) with a talking player`);
 times.sort((a, b) => a - b);

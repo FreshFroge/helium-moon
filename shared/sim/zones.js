@@ -52,3 +52,12 @@ export function pushOutOfSpawn(world, x, z) {
   const ux = d > 1e-6 ? dx / d : 1, uz = d > 1e-6 ? dz / d : 0;
   return { x: s.x + ux * edge, z: s.z + uz * edge, moved: true };
 }
+
+// Test the whole movement segment, not just its endpoint: short lunges and
+// grid corner shortcuts must not cut through the protected circle.
+export function spawnStepBlocked(world, ax, az, bx, bz, padding = 0.4) {
+  if (!world.trail?.length) return false;
+  const zone = spawnZone(world), dx = bx-ax, dz = bz-az, length2 = dx*dx+dz*dz;
+  const t = length2 ? Math.max(0,Math.min(1,((zone.x-ax)*dx+(zone.z-az)*dz)/length2)) : 0;
+  return inSpawnZone(world,ax+dx*t,az+dz*t,padding);
+}
