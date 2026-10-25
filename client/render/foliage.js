@@ -2,6 +2,7 @@
 // sticks and stumps. All instanced with chunked distance culling.
 import * as THREE from 'three';
 import { SIGHTLINE, blocksSight } from './sightline.js';
+import { setRange } from './trees.js';
 import { generateTree } from './treegen.js';
 import { patchMaterial, windDepthMaterial } from './shaderlib.js';
 import { makeRng, makeNoise2 } from '../../shared/math.js';
@@ -75,8 +76,7 @@ export class InstancedScatter {
     for (let k = 0; k < meshes.length; k++) for (let q = 0; q < meshes[k].list.length; q++) {
       const mm = meshes[k], m = mm.list[q];
       m.count = mm.count; m.visible = mm.count > 0;   // skip program/uniform setup for empty sets
-      m.instanceMatrix.clearUpdateRanges(); m.instanceMatrix.addUpdateRange(0, mm.count * 16);
-      m.instanceMatrix.needsUpdate = mm.count > 0;
+      setRange(m.instanceMatrix, mm.count * 16);
     }
   }
 }

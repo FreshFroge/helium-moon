@@ -65,3 +65,16 @@ walking on Low, without rendering:
 - Instanced tree and foliage sets with no instances this frame are now hidden.
   That skips their program/uniform setup in both the main and shadow passes
   (~40 per frame).
+
+### Oct 25 morning (Claude)
+
+Same profiler, Low, no rendering: **96 → 63 KB/frame.**
+- Reused scratch objects in the flashlight, animators (Euler and quaternions),
+  shadow-camera snap, player camera, anomaly and interaction checks.
+- Tree and foliage instance update ranges reuse one `{start, count}` object.
+- Far-LOD trees share one mesh per species across variants: Low −25…−34 draw
+  calls per view (−8%) and −40…−55 GPU geometries.
+- Sim A* is 3–5× faster with identical plans: no destructuring in the inner loop,
+  a hole-sifting heap, and cheaper cost functions. Over 3 × 12 min of play, plan
+  p99 went from 16.4 to 4.2 ms and ticks over 25 ms from 7 to 1. That matters in
+  single-player, where the sim shares the main thread.

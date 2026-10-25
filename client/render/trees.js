@@ -13,6 +13,15 @@ const LEAF_TINT = { oak: 0xb4bea2, ash: 0xaebd9e, aspen: 0xc4b488, cedar: 0x8899
 const VARIANTS = 3;
 const CHUNK = 48;
 
+// One reused {start, count} per attribute: three.js only reads the range during upload
+// and clears the list afterwards, so addUpdateRange's fresh object every frame is garbage.
+export function setRange(attr, n) {
+  attr.clearUpdateRanges();
+  if (n <= 0) { attr.needsUpdate = false; return; }
+  const r = attr.userData_range || (attr.userData_range = { start: 0, count: 0 });
+  r.start = 0; r.count = n; attr.updateRanges.push(r); attr.needsUpdate = true;
+}
+
 export class TreeSystem {
   constructor(world, bank, preset) {
     this.world = world; this.preset = preset;
@@ -183,8 +192,8 @@ export class TreeSystem {
       const mm = arch[ai].meshes[l]; if (!mm) continue;
       // empty meshes would still bind programs/uniforms every pass (main + shadow)
       mm.bark.visible = mm.count > 0; if (mm.leaves) mm.leaves.visible = mm.count > 0;
-      mm.bark.count = mm.count; mm.bark.instanceMatrix.clearUpdateRanges(); mm.bark.instanceMatrix.addUpdateRange(0, mm.count * 16); mm.bark.instanceMatrix.needsUpdate = mm.count > 0;
-      if (mm.leaves) { mm.leaves.count = mm.count; mm.leaves.instanceMatrix.clearUpdateRanges(); mm.leaves.instanceMatrix.addUpdateRange(0, mm.count * 16); mm.leaves.instanceMatrix.needsUpdate = mm.count > 0; }
+      mm.bark.count = mm.count; setRange(mm.bark.instanceMatrix, mm.count * 16);
+      if (mm.leaves) { mm.leaves.count = mm.count; setRange(mm.leaves.instanceMatrix, mm.count * 16); }
     }
     this.stats.drawn = drawn;
   }
