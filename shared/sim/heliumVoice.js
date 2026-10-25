@@ -169,8 +169,8 @@ export class HeliumVoiceAI {
     const safetyCost = i => {
       const cx=x0+(i%gw)*R,cz=z0+((i/gw)|0)*R;
       let cost=spawnZoneCost(w,cx,cz);
-      for(const [px,pz] of openingPlayers){
-        const distance=Math.hypot(cx-px,cz-pz);
+      for(let k=0;k<openingPlayers.length;k++){
+        const ox=cx-openingPlayers[k][0],oz=cz-openingPlayers[k][1],distance=Math.sqrt(ox*ox+oz*oz);
         if(distance<opening)return cost+1e5;
         if(distance<opening+8)cost+=8*Math.pow(1-(distance-opening)/8,2);
       }

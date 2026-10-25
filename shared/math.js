@@ -167,23 +167,25 @@ export class BinaryHeap {
   constructor() { this.items = []; this.prio = []; }
   get size() { return this.items.length; }
   clear() { this.items.length = 0; this.prio.length = 0; }
+  // hole-sifting (no destructuring swaps): same resulting order, far cheaper in the A* inner loop
   push(item, p) {
-    const it = this.items, pr = this.prio; it.push(item); pr.push(p);
-    let i = it.length - 1;
-    while (i > 0) { const j = (i - 1) >> 1; if (pr[j] <= pr[i]) break; [it[i], it[j]] = [it[j], it[i]]; [pr[i], pr[j]] = [pr[j], pr[i]]; i = j; }
+    const it = this.items, pr = this.prio; let i = it.length; it.push(item); pr.push(p);
+    while (i > 0) { const j = (i - 1) >> 1; const pj = pr[j]; if (pj <= p) break; it[i] = it[j]; pr[i] = pj; i = j; }
+    it[i] = item; pr[i] = p;
   }
   pop() {
     const it = this.items, pr = this.prio; const top = it[0];
-    const last = it.pop(), lp = pr.pop();
-    if (it.length) {
-      it[0] = last; pr[0] = lp; let i = 0;
+    const last = it.pop(), lp = pr.pop(), n = it.length;
+    if (n) {
+      let i = 0;
       for (;;) {
-        const l = i * 2 + 1, r = l + 1; let m = i;
-        if (l < it.length && pr[l] < pr[m]) m = l;
-        if (r < it.length && pr[r] < pr[m]) m = r;
-        if (m === i) break;
-        [it[i], it[m]] = [it[m], it[i]]; [pr[i], pr[m]] = [pr[m], pr[i]]; i = m;
+        const l = i * 2 + 1, r = l + 1; let m = -1, mp = lp;
+        if (l < n && pr[l] < mp) { m = l; mp = pr[l]; }
+        if (r < n && pr[r] < mp) { m = r; mp = pr[r]; }
+        if (m < 0) break;
+        it[i] = it[m]; pr[i] = mp; i = m;
       }
+      it[i] = last; pr[i] = lp;
     }
     return top;
   }

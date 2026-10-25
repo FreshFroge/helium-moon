@@ -8,6 +8,7 @@ import {
   clamp, lerp, smoothstep, makeRng, makeNoise2, cumulativeLengths, pointAtDistance,
   nearestOnPolyline, pointInPolygon, distanceTransform, rasterPolyline, TAU, BinaryHeap,
 } from './math.js';
+const NAV_DX = [1, -1, 0, 0, 1, -1, 1, -1], NAV_DY = [0, 0, 1, -1, 1, 1, -1, -1], NAV_DL = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
 
 // Species table. Leaf texture + bark texture names are resolved by the client.
 export const SPECIES = [
@@ -942,26 +943,28 @@ export class World {
     G[s] = 0; from[s] = -1; stamp[s] = seq;
     heap.push(s, hfn(s));
     let best = s, bestH = hfn(s), exp = 0;
-    const DIRS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [-1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, -1, Math.SQRT2]];
+    const DX = NAV_DX, DY = NAV_DY, DL = NAV_DL, navCost = this.navCost, gh = this.gh;
+    const xStamp = this._navExtraStamp, xCost = this._navExtraCost;
     while (heap.size) {
       const cur = heap.pop();
       if (cur === t) { best = t; break; }
       if (++exp > maxExp) break;
       const cx = cur % gw, cy = (cur / gw) | 0;
       const gc = G[cur];
-      for (const [dx, dy, dl] of DIRS) {
+      for (let d = 0; d < 8; d++) {
+        const dx = DX[d], dy = DY[d], dl = DL[d];
         const nx = cx + dx, ny = cy + dy;
-        if (nx < 0 || ny < 0 || nx >= gw || ny >= this.gh) continue;
+        if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
         const ni = ny * gw + nx;
-        const c = this.navCost[ni];
+        const c = navCost[ni];
         if (c <= 0) continue;
-        if (dx && dy && (this.navCost[cy * gw + nx] <= 0 || this.navCost[ny * gw + cx] <= 0)) continue;
+        if (dx && dy && (navCost[cy * gw + nx] <= 0 || navCost[ny * gw + cx] <= 0)) continue;
         let weight = 0;
         if (extra) {
-          if (this._navExtraStamp[ni] !== seq) {
-            this._navExtraStamp[ni] = seq; this._navExtraCost[ni] = extra(ni);
+          if (xStamp[ni] !== seq) {
+            xStamp[ni] = seq; xCost[ni] = extra(ni);
           }
-          weight = this._navExtraCost[ni];
+          weight = xCost[ni];
         }
         const ng = gc + dl * (c + weight);
         if (stamp[ni] === seq && ng >= G[ni]) continue;

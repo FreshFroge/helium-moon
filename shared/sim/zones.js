@@ -40,7 +40,9 @@ export function inSpawnZone(world, x, z, extra = 0) {
 }
 
 export function spawnZoneCost(world, x, z) {
-  const s = spawnZone(world), d = Math.hypot(x - s.x, z - s.z);
+  const s = spawnZone(world), ex = x - s.x, ez = z - s.z, dd = ex * ex + ez * ez, outer = s.r + s.margin;
+  if (dd >= outer * outer) return 0;
+  const d = Math.sqrt(dd);
   if (d < s.r) return BLOCK_COST;
   if (d < s.r + s.margin) { const k = 1 - (d - s.r) / s.margin; return 40 * k * k; }
   return 0;
