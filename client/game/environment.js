@@ -59,11 +59,12 @@ export class Environment {
     const sd = this.preset.shadowDist;
     const md = this.sky.moonDir;
     const fwd = this._fwd; camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
-    const center = cp.clone().addScaledVector(fwd, sd * 0.45);
+    const S = this._envS || (this._envS = { c: new THREE.Vector3(), o: new THREE.Vector3(), nd: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), lc: new THREE.Vector3() });
+    const center = S.c.copy(cp).addScaledVector(fwd, sd * 0.45);
     const texel = (sd * 2) / this.preset.shadowMap;
-    const lightRot = this._lightRot.lookAt(new THREE.Vector3(), md.clone().negate(), new THREE.Vector3(0, 1, 0));
+    const lightRot = this._lightRot.lookAt(S.o.set(0, 0, 0), S.nd.copy(md).negate(), S.up);
     const inv = this._inv.copy(lightRot).invert();
-    const lc = center.clone().applyMatrix4(inv);
+    const lc = S.lc.copy(center).applyMatrix4(inv);
     lc.x = Math.round(lc.x / texel) * texel; lc.y = Math.round(lc.y / texel) * texel;
     center.copy(lc.applyMatrix4(lightRot));
     this.moonLight.position.copy(center).addScaledVector(md, 200);

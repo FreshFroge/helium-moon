@@ -716,7 +716,7 @@ export class Game {
       const consider = (x, y, z, r, o) => {
         const dx = x - pl.pos.x, dz = z - pl.pos.z, dh = Math.hypot(dx, dz);
         if (dh > r || Math.abs(y - pl.pos.y) > 2.2) return;
-        const to = new THREE.Vector3(x - eye.x, y - eye.y, z - eye.z).normalize();
+        const to = (this._v6 || (this._v6 = new THREE.Vector3())).set(x - eye.x, y - eye.y, z - eye.z).normalize();
         const facing = dh < 0.9 ? 1 : to.dot(f);
         if (facing < 0.35) return;
         const score = dh - facing;

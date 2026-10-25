@@ -138,7 +138,7 @@ export class PlayerController {
     const shx = sh * (Math.sin(this.shakeT * 37) * 0.6 + Math.sin(this.shakeT * 23) * 0.4) * 0.03;
     const shy = sh * (Math.sin(this.shakeT * 31 + 1) * 0.6 + Math.sin(this.shakeT * 17) * 0.4) * 0.03;
     const cam = this.camera;
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    const right = (this._right || (this._right = new THREE.Vector3())).set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     cam.position.set(this.pos.x, this.pos.y + eye + bobY - this.landDip, this.pos.z).addScaledVector(right, bobX);
     const breathe = Math.sin(performance.now() * 0.0012) * 0.004 * s.headBob;
     const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35;

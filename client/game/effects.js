@@ -77,7 +77,7 @@ export class AnomalyFX {
   reset() { this.mesh.visible = false; this.cool = 60; this.count = 0; }
   update(dt, camera, terror) {
     const m = this.mesh;
-    const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
+    const fwd = this._fwd || (this._fwd = new THREE.Vector3()); camera.getWorldDirection(fwd);
     if (m.visible) {
       this.life -= dt;
       const to = m.position.clone().setY(m.position.y + 1.2).sub(camera.position).normalize();
