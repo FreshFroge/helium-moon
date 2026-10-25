@@ -100,3 +100,11 @@ first sighting or make pressure rise over time. Both depend on Helium Voice's
 own movement choices. Codex task D wires `director.minDistance()` and
 `director.escalation()` into `heliumVoice.js`; task A enables unseen attacks.
 Re-measure after those land. The test now prints a "threats per 5 min" column.
+
+## Update: after Codex tasks A + D (`f43c871`)
+
+Same 16 sessions. HV hits 1 → 5, including 3 on never-look-back walkers (owner
+decision 1). Median first on-screen sighting 1:22 → 3:57; he's never seen in
+9/16 sessions; earliest 1:51. Threat events per 5-min window 9 / 13 / 11.
+Losses 0 → 3. Three sightings still fall inside the 210 s dread period (seed
+1002 reproduces); see `docs/handoffs/CLAUDE_REVIEW_CODEX_A_D.md`.
