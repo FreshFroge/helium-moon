@@ -48,3 +48,20 @@ Observations (backlog #15):
 - (Fixed by the 128 m chunks for terrain; still true for trees.) Draw calls barely fall on Low, so per-draw overhead (the main cost on
   integrated GPUs and in the browser) isn't reduced by the preset.
 - The "into the trees" view is about 1.7–2× the trail views at every preset.
+
+## CPU-side: per-frame garbage (October 25, 2026)
+
+Measured with the CDP sampling heap profiler during 10 s of scripted trail
+walking on Low, without rendering:
+- **Before: 231 KB/frame.** Top sources: the foliage update (71 KB), `Math.hypot`
+  (48 KB) and the tree update (29 KB).
+- `Math.hypot` and `for…of` over typed arrays allocate in V8. In loops that touch
+  thousands of instances per frame, that garbage drives minor-GC pauses
+  (hitches).
+- Fix: indexed loops plus `Math.sqrt` in `trees.js`, `foliage.js` and `terrain.js`.
+- **After: 96 KB/frame (−58%).**
+- Remaining top sources: the tree update (16 KB), `_beamDistance` (9 KB) and
+  `nearestOnPolyline` (6 KB).
+- Instanced tree and foliage sets with no instances this frame are now hidden.
+  That skips their program/uniform setup in both the main and shadow passes
+  (~40 per frame).

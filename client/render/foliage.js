@@ -48,24 +48,31 @@ export class InstancedScatter {
 
   update(camera, frustum, distScale = 1) {
     const maxD = this.maxDist * distScale;
-    for (const mm of this.meshes) mm.count = 0;
-    const cx = camera.position.x, cz = camera.position.z;
-    for (const c of this.chunkList) {
-      const ccx = (c.cx + 0.5) * CH, ccz = (c.cz + 0.5) * CH;
-      if (Math.hypot(ccx - cx, ccz - cz) - CH * 0.71 > maxD) continue;
+    // hot loop (thousands of instances per frame): indexed loops and no Math.hypot,
+    // both of which allocate in V8 and cost ~70 KB/frame of garbage here
+    const meshes = this.meshes, pos = this.pos, mats = this.mats, vari = this.var, chunks = this.chunkList;
+    for (let k = 0; k < meshes.length; k++) meshes[k].count = 0;
+    const cx = camera.position.x, cz = camera.position.z, maxD2 = maxD * maxD;
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const c = chunks[ci];
+      const ex = (c.cx + 0.5) * CH - cx, ez = (c.cz + 0.5) * CH - cz;
+      if (Math.sqrt(ex * ex + ez * ez) - CH * 0.71 > maxD) continue;
       if (!frustum.intersectsBox(c.box)) continue;
-      for (const i of c.idx) {
-        const dx = this.pos[i * 3] - cx, dz = this.pos[i * 3 + 2] - cz;
-        if (dx * dx + dz * dz > maxD * maxD) continue;
-        const mm = this.meshes[this.var[i]];
+      const idx = c.idx;
+      for (let n = 0; n < idx.length; n++) {
+        const i = idx[n];
+        const dx = pos[i * 3] - cx, dz = pos[i * 3 + 2] - cz;
+        if (dx * dx + dz * dz > maxD2) continue;
+        const mm = meshes[vari[i]];
         if (mm.count >= mm.cap) continue;
-        const o = mm.count * 16, src = i * 16;
-        for (const m of mm.list) { const arr = m.instanceMatrix.array; for (let j = 0; j < 16; j++) arr[o + j] = this.mats[src + j]; }
+        const o = mm.count * 16, src = i * 16, list = mm.list;
+        for (let q = 0; q < list.length; q++) { const arr = list[q].instanceMatrix.array; for (let j = 0; j < 16; j++) arr[o + j] = mats[src + j]; }
         mm.count++;
       }
     }
-    for (const mm of this.meshes) for (const m of mm.list) {
-      m.count = mm.count;
+    for (let k = 0; k < meshes.length; k++) for (let q = 0; q < meshes[k].list.length; q++) {
+      const mm = meshes[k], m = mm.list[q];
+      m.count = mm.count; m.visible = mm.count > 0;   // skip program/uniform setup for empty sets
       m.instanceMatrix.clearUpdateRanges(); m.instanceMatrix.addUpdateRange(0, mm.count * 16);
       m.instanceMatrix.needsUpdate = mm.count > 0;
     }

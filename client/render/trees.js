@@ -135,13 +135,15 @@ export class TreeSystem {
     const d0 = P.treeLod0, d1 = P.treeLod1, dFar = P.treeFar, shadowR = P.shadowDist * 0.8;
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
-    for (const a of this.arch) for (const mm of a.meshes) mm.count = 0;
+    const arch = this.arch, chunks = this.chunkList;
+    for (let ai = 0; ai < arch.length; ai++) { const ms = arch[ai].meshes; for (let l = 0; l < ms.length; l++) ms[l].count = 0; }
     const cx = camera.position.x, cz = camera.position.z;
     const mats = this.mats, pos = this.pos, archOf = this.archOf;
     let drawn = 0;
-    for (const c of this.chunkList) {
-      const ccx = (c.cx + 0.5) * CHUNK, ccz = (c.cz + 0.5) * CHUNK;
-      const cd = Math.hypot(ccx - cx, ccz - cz) - CHUNK * 0.71;
+    for (let ci = 0; ci < chunks.length; ci++) {   // indexed + sqrt: no per-frame garbage
+      const c = chunks[ci];
+      const ex = (c.cx + 0.5) * CHUNK - cx, ez = (c.cz + 0.5) * CHUNK - cz;
+      const cd = Math.sqrt(ex * ex + ez * ez) - CHUNK * 0.71;
       if (cd > dFar) continue;
       const inView = this.frustum.intersectsBox(c.box);
       if (!inView && cd > shadowR) continue;
@@ -153,7 +155,7 @@ export class TreeSystem {
         if (d > dFar) continue;
         if (!inView && d > shadowR) continue;
         let l = d < d0 ? 0 : d < d1 ? 1 : 2;
-        const a = this.arch[archOf[i]];
+        const a = arch[archOf[i]];
         let mm = a.meshes[l];
         if (mm.count >= mm.cap) { if (l < 2) { l++; mm = a.meshes[l]; if (mm.count >= mm.cap) continue; } else continue; }
         const arr = mm.bark.instanceMatrix.array;
@@ -163,7 +165,10 @@ export class TreeSystem {
         mm.count++; drawn++;
       }
     }
-    for (const a of this.arch) for (const mm of a.meshes) {
+    for (let ai = 0; ai < arch.length; ai++) for (let l = 0; l < arch[ai].meshes.length; l++) {
+      const mm = arch[ai].meshes[l];
+      // empty meshes would still bind programs/uniforms every pass (main + shadow)
+      mm.bark.visible = mm.count > 0; if (mm.leaves) mm.leaves.visible = mm.count > 0;
       mm.bark.count = mm.count; mm.bark.instanceMatrix.clearUpdateRanges(); mm.bark.instanceMatrix.addUpdateRange(0, mm.count * 16); mm.bark.instanceMatrix.needsUpdate = mm.count > 0;
       if (mm.leaves) { mm.leaves.count = mm.count; mm.leaves.instanceMatrix.clearUpdateRanges(); mm.leaves.instanceMatrix.addUpdateRange(0, mm.count * 16); mm.leaves.instanceMatrix.needsUpdate = mm.count > 0; }
     }

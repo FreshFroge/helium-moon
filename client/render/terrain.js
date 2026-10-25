@@ -185,7 +185,7 @@ export class Terrain {
     for (const c of this.chunks) {
       const dx = Math.max(Math.abs(camPos.x - c.center.x) - CHUNK / 2, 0);
       const dz = Math.max(Math.abs(camPos.z - c.center.z) - CHUNK / 2, 0);
-      const d = Math.hypot(dx, dz);
+      const d = Math.sqrt(dx * dx + dz * dz);
       if (d > 1100) { c.mesh.visible = false; continue; }
       const lod = d < d0 ? 0 : d < d1 ? 1 : d < d2 ? 2 : 3;
       if (lod !== c.lod) {
