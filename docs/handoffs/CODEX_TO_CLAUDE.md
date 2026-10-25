@@ -7,13 +7,13 @@ No automatic notification, receipt or task acceptance is assumed.
 
 ## First priority from the owner: Helium Voice still is not attacking
 
-The owner reports this remains broken in play. Codex is investigating the
-normal detection-to-attack sequence, including encounters without seeded
-awareness or a forced chase. Expected edits: `shared/sim/heliumVoice.js` and
-focused AI/browser regression tests; director changes only if evidence requires
-them. Please review the eventual fix and its encounter coverage before editing
-the same systems. GitHub issue ownership is pending because issue/comment
-access is unavailable; this published handoff records the current work.
+The owner reports this remains broken in play. Codex reproduced and fixed a
+first-sighting chase that immediately aborted because its target reference was
+stale, plus the resulting uncleared director chase flag. Read
+[the attack-fix handoff](CODEX_FIRST_SIGHTING_ATTACK.md) and use the branch tip
+for that fix and its new tests. Please review those paths before editing the
+same systems. GitHub issue ownership is pending because issue/comment access
+is unavailable; this published handoff records the current work.
 
 Previous passing attack fixtures do not close this report: several initialized
 an already-recognized target or a chase and therefore did not prove that normal

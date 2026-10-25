@@ -38,6 +38,39 @@ test('a close flashlight encounter remains dangerous during the director cooldow
   assert.ok(p.health<2,'standing within arm reach cannot exploit a flashlight/cooldown immunity');
 });
 
+for(const flash of [true,false]) test(`first sighting reaches a real attack without preassigned awareness (flashlight ${flash})`,()=>{
+  for(const seed of [1,2,3,4,5,6,7,8]) {
+    const sim=new GameSim(world,{seed}),p=sim.addPlayer('tester','Tester'),hv=sim.hv;
+    sim.state='play';sim.time=100;sim.sf.update=()=>{};sim.mimic.update=()=>{};
+    const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
+    Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z)+Math.PI,pitch:0,flash});
+    hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
+    assert.equal(hv.target,null);assert.equal(hv.awareness.size,0);
+    let retreatBeforeHit=false;
+    for(let t=0;t<8 && p.health===2;t+=.05){sim.step(.05);if(hv.state==='retreat'&&p.health===2)retreatBeforeHit=true;}
+    assert.ok(p.health<2,`seed ${seed}: natural first sighting must lead to a damaging attack`);
+    assert.equal(retreatBeforeHit,false,`seed ${seed}: a close first-sighting chase cannot abort into retreat`);
+    assert.equal(sim.director.chasing,false,'a completed hit closes the director chase');
+  }
+});
+
+test('an observer-triggered chase uses the newly selected teammate immediately',()=>{
+  const sim=new GameSim(world,{seed:2}),old=sim.addPlayer('old','Old'),p=sim.addPlayer('new','New'),hv=sim.hv;
+  sim.state='play';sim.time=100;sim.sf.update=()=>{};sim.mimic.update=()=>{};
+  old.state='downed';hv.target=old.id;
+  const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
+  Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z)+Math.PI,pitch:0,flash:true});
+  hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
+  for(let t=0;t<8&&p.health===2;t+=.05)sim.step(.05);
+  assert.ok(p.health<2,'the living observer becomes the actual attack target');
+});
+
+test('losing a chase target clears the director chase flag',()=>{
+  const {sim,p,actor}=encounter('hv');
+  actor.startChase(p);p.state='dead';sim.step(.05);
+  assert.equal(actor.state,'retreat');assert.equal(sim.director.chasing,false);
+});
+
 test('a player who leaves during the skunk windup can avoid its bite',()=>{
   const {sim,p,actor}=encounter('sf');
   sim.step(.05);assert.equal(actor.state,'ambush');

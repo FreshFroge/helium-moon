@@ -271,7 +271,7 @@ export class HeliumVoiceAI {
     this.stateT += dt;
     if (this.state === 'dormant') { this.stop(dt); return; }
     this.perceive(dt);
-    const tp = this.target != null ? sim.players.get(this.target) : null;
+    let tp = this.target != null ? sim.players.get(this.target) : null;
     if (tp && !playerAlive(tp)) this.target = null;
     const anim = this.anim;
     anim.run = 0; anim.reach = 0; anim.still = 0;
@@ -299,6 +299,12 @@ export class HeliumVoiceAI {
         else this.setState('freeze', { freezeFor: this.rng.range(1.2, 3.2), watcher: o.p.id });
       }
     }
+
+    // Reactions above can start a chase of a player who was not the previous
+    // target. Resolve again before executing that new state: otherwise the
+    // first chase tick sees null/an old teammate and immediately retreats.
+    tp = this.target != null ? sim.players.get(this.target) : null;
+    if (this.state === 'chase' && tp) lookP = tp;
 
     switch (this.state) {
       case 'still': {
@@ -471,6 +477,7 @@ export class HeliumVoiceAI {
   }
 
   retreatFrom(p, lit = false, quick = false) {
+    if (this.state === 'chase' && this.sim.director.chasing) this.sim.director.onChaseEnd(false);
     p ||= this.sim.players.get(this.target) || { x: this.x + 1, y: this.y, z: this.z };
     const away = this.coverAway(p, lit ? 14 : 10, lit ? 34 : 26);
     this.setState('retreat');

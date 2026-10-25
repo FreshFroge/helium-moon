@@ -20,6 +20,32 @@ async def play(port):
             assert not await page.evaluate('window.LOAD_ERROR')
             await page.locator('#loading').wait_for(state='hidden')
             await page.click('#menu-main [data-act=single]')
+            for seed,flash in [(2,True),(2,False),(7,True)]:
+                first=await page.evaluate('''async([seed,flash])=>{
+                    const random=Math.random;
+                    try { Math.random=()=>seed/2**31;game.restart(); } finally { Math.random=random; }
+                    const {pointAtDistance}=await import('/shared/math.js');
+                    const at=pointAtDistance(game.world.trail,game.world.trailCum,500);
+                    const to=pointAtDistance(game.world.trail,game.world.trailCum,506);
+                    game.tp(to.x,to.z,at.x,at.z);game.flashlight.on=flash;game.advance(6,1/30,false);
+                    const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
+                    sim.state='play';sim.time=100;sim.sf.update=()=>{};sim.mimic.update=()=>{};
+                    hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
+                    const initial={seed:sim.seed,target:hv.target,awareness:hv.awareness.size};
+                    let chased=false,aborted=false;
+                    for(let i=0;i<240 && p.health===2;i++){
+                        game.advance(1,1/30,false);
+                        chased ||= hv.state==='chase';
+                        aborted ||= hv.state==='retreat'&&p.health===2;
+                    }
+                    game.advance(6,1/30,false);
+                    return {initial,chased,aborted,server:p.health,client:game.health,chasing:sim.director.chasing};
+                }''',[seed,flash])
+                assert first['initial']=={'seed':seed,'target':None,'awareness':0},first
+                assert first['chased'] and not first['aborted'],first
+                assert first['server']<2 and first['client']==first['server'] and not first['chasing'],first
+                print(f'  ok  normal first sighting reaches actual attack (seed {seed}, flashlight {flash}):',first,flush=True)
+            await page.evaluate('game.restart()')
             result=await page.evaluate('''async()=>{
                 const {pointAtDistance}=await import('/shared/math.js');
                 const at=pointAtDistance(game.world.trail,game.world.trailCum,500);

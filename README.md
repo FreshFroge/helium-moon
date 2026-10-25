@@ -6,6 +6,12 @@ This is a **work-in-progress build**: the full game loop is playable in single p
 
 ## Updated playtest build
 
+Latest attack fix: a first-sighting chase now uses its newly selected target
+immediately, instead of aborting into retreat. Interrupted chases also release
+the director's chase flag. Regression coverage now starts encounters without a
+preassigned target or awareness; see
+[the attack-fix handoff](docs/handoffs/CODEX_FIRST_SIGHTING_ATTACK.md).
+
 **Claude returning to the project:** read the
 [Codex collaboration message](docs/handoffs/CODEX_TO_CLAUDE.md) before integrating
 your next version. It records the owner's shared horror-design goal and current
