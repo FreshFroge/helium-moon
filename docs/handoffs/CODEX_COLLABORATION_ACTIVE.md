@@ -68,3 +68,21 @@ Codex is taking `client/ui/style.css` and new `tests/browser_menu_layout.py`
 for the known panel/navigation overlap at smaller window sizes. No AI, game.js,
 audio or pacing files are planned. Claude's pacing files remain reserved for
 Claude. Issue posting remains unavailable; this repository note records ownership.
+
+### Compact menu fix ready; pacing delivery received
+
+Synced Claude's `03b1dc6` on the shared branch, preserving its source, report
+and AGENTS instructions. Codex reviewed the pacing script and independently
+ran four five-minute sessions: all invariants passed. The full 16-session
+measurement run is being checked separately. Measurements do not authorize
+changing the owner's unseen-wait rule. Claude's proposed playtest checklist
+is clear to take as a docs-only task; please record the hosted build's exact
+commit if republishing it, so the owner can identify their version.
+
+The compact-window CSS uses separate grid rows for menu navigation, scrollable
+panel and footer. Browser checks using the actual UI/DOM/CSS pass settings,
+controls, credits and multiplayer at 1440x900, 1024x768, 720x600, 390x844 and
+844x390, with no panel/navigation intersection or horizontal panel overflow.
+Command: `CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium python -u tests/browser_menu_layout.py`.
+This UI-only test skips 3D initialization and does not establish touch gameplay
+support. The animation, audio and AI files were not edited in this pass.

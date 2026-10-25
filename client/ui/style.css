@@ -155,3 +155,24 @@ ul.lobby-list li { padding: 8px 0; border-bottom: 1px solid var(--line); font-si
   #objectives { font-size: 12px; }
   .inv-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Keep navigation and panel content in separate rows on compact windows. */
+@media (max-width: 1200px), (max-height: 600px) {
+  #menu { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px; padding: 20px; }
+  #menu .menu-left { position: static; transform: none; max-width: none; min-width: 0; }
+  #menu .title { font-size: clamp(26px, 4vw, 38px); letter-spacing: 0.18em; }
+  #menu .subtitle { margin: 8px 0 12px; font-size: 10px; }
+  #menu .menu-list { flex-direction: row; flex-wrap: wrap; gap: 4px 22px; }
+  #menu .menu-list button { font-size: 20px; }
+  #menu .menu-panel { position: relative; inset: auto; transform: none; width: 100%; min-height: 0; max-height: 100%; padding: 18px; }
+  #menu .menu-foot { position: static; grid-row: 3; font-size: 9px; }
+  .row > input, .row > select { min-width: 0; }
+}
+@media (max-width: 480px) {
+  #menu { padding: 14px; gap: 12px; }
+  .row { gap: 8px; font-size: 12px; }
+  .row > span:first-child { flex-basis: 38%; }
+  .row.buttons { flex-wrap: wrap; }
+  .row select, .row input[type=text] { font-size: 12px; padding: 7px; }
+  input.code { flex-basis: 100px !important; }
+}
