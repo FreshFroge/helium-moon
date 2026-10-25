@@ -28,9 +28,10 @@ test('a committed chase attacks a player who never looks back',()=>{
   assert.equal(sim.director.chasing,false,'the hit ends the chase');
 });
 
-// Hunts (owner, Oct 25 2026): once a hunt is on, the ONLY way to call it off is a
-// flashlight on him from within 7 ft (CONFIG.HV.HUNT_BREAK_LIT_DIST). Being seen at range,
-// losing sight and time no longer end it.
+// Hunts: once a hunt is on, the ONLY way to call it off is to cut his strings - hold a
+// flashlight beam on the control above him (CONFIG.HV.CONTROL_*; owner, Puppet rework).
+// Being seen, lit at any range, losing sight and time do not end it.
+function aimAt(p,q){const ey=p.y+1.6;p.yaw=Math.atan2(-(q.x-p.x),-(q.z-p.z));p.pitch=Math.atan2(q.y-ey,Math.hypot(q.x-p.x,q.z-p.z));}
 test('a glimpse at range does not call off a hunt',()=>{
   const {sim,p,hv}=encounter(10);p.yaw+=Math.PI;          // turns and looks, light on
   tick(sim,.2);
@@ -40,32 +41,47 @@ test('a glimpse at range does not call off a hunt',()=>{
   assert.ok(p.health<MAXH,'the hunt follows through to a hit');
 });
 
-test('holding the light on him as he charges: he breaks off only once within 7 ft',()=>{
+test('the old 7-ft flashlight rule is gone: a beam in his face does not stop him',()=>{
   const {sim,p,hv}=encounter(12);p.yaw+=Math.PI;          // faces him with the light the whole time
-  let brokeAt=null,start=null;
-  for(let t=0;t<5&&brokeAt==null;t+=.05){sim.step(.05);if(hv.state==='collapse'){brokeAt=hv.dist(p);start=[hv.x,hv.z];}}
-  assert.ok(brokeAt!=null,'the 7 ft flashlight calls the hunt off');
-  assert.ok(brokeAt<=CONFIG.HV.HUNT_BREAK_LIT_DIST+.05,`not before he is within 7 ft (broke off at ${brokeAt?.toFixed(2)} m)`);
-  assert.equal(p.health,MAXH,'no hit when the light lands in time');
-  // Puppet: strings cut - he collapses where he stands
-  assert.ok(hv.snapshot()[7]&256,'the collapse reaches every client');assert.equal(sim.director.chasing,false);
-  tick(sim,2);
-  assert.equal(hv.state,'collapse','he lies there while watched');
-  assert.ok(Math.hypot(hv.x-start[0],hv.z-start[1])<.05,'no movement while watched');
-  p.yaw+=Math.PI;tick(sim,.6);                           // look away...
-  p.yaw+=Math.PI;                                         // ...and back: gone
-  assert.ok(Math.hypot(hv.x-start[0],hv.z-start[1])>20,'gone the moment nobody was looking');
-  assert.notEqual(hv.state,'chase');
+  let collapsed=false;
+  for(let t=0;t<50&&p.health===MAXH;t+=.05){aimAt(p,{x:hv.x,y:hv.y+1.6,z:hv.z});sim.step(.05);collapsed||=hv.state==='collapse';}
+  assert.equal(collapsed,false);assert.ok(p.health<MAXH,'he gets you anyway');
 });
 
-test('a teammate can flash him off from within 7 ft',()=>{
-  const {sim,p,hv}=encounter(6);                         // target facing away
+test('holding the beam on the control above him cuts the strings: he collapses, then is gone',()=>{
+  const {sim,p,hv}=encounter(16);
+  tick(sim,.05);assert.ok(hv.controlPos(),'a hunt has a control above him');
+  const snap=hv.snapshot();assert.ok(snap[15]>=CONFIG.HV.CONTROL_UP[0]-.01,'clients receive where it hangs');
+  let cutAt=null,events=[];
+  for(let t=0;t<6&&cutAt==null;t+=.05){const c=hv.controlPos();if(c)aimAt(p,c);sim.step(.05);events.push(...sim.drainEvents());if(hv.state==='collapse')cutAt=t;}
+  assert.ok(cutAt!=null,'the strings were cut');
+  assert.ok(cutAt>=CONFIG.HV.CONTROL_TIME-.06,`not instantly (${cutAt?.toFixed(2)} s)`);
+  assert.ok(events.some(e=>e.type==='hv_cut'&&e.pid===p.id));
+  assert.equal(sim.director.chasing,false);assert.equal(p.health,MAXH);
+  assert.ok(hv.snapshot()[7]&256,'the collapse reaches every client');
+  const at=[hv.x,hv.z];
+  aimAt(p,{x:hv.x,y:hv.y+.3,z:hv.z});tick(sim,2);
+  assert.equal(hv.state,'collapse','he lies there while watched');
+  assert.ok(Math.hypot(hv.x-at[0],hv.z-at[1])<.05,'no movement while watched');
+  p.yaw+=Math.PI;tick(sim,.6);                            // look away...
+  assert.ok(Math.hypot(hv.x-at[0],hv.z-at[1])>20,'...and he is gone');
+});
+
+test('the beam has to stay on it: a sweep across the control is not enough',()=>{
+  const {sim,p,hv}=encounter(16);
+  for(let k=0;k<6;k++){for(let i=0;i<4;i++){const c=hv.controlPos();if(c)aimAt(p,c);sim.step(.05);}p.yaw+=Math.PI;tick(sim,.6);p.yaw-=Math.PI;}
+  assert.notEqual(hv.state,'collapse');
+});
+
+test('a teammate can cut the strings',()=>{
+  const {sim,p,hv}=encounter(8);                         // target facing away
   const q=sim.addPlayer('two','Two');
-  Object.assign(q,{x:hv.x+1.6,z:hv.z,y:world.heightAt(hv.x+1.6,hv.z),flash:true,pitch:0,viewFov:75,viewAspect:16/9});
-  q.yaw=Math.atan2(q.x-hv.x,q.z-hv.z);                    // teammate looks at him (camera faces -Z)
+  const back=pointAtDistance(world.trail,world.trailCum,478);   // on the open trail behind him
+  Object.assign(q,{x:back.x,z:back.z,y:world.heightAt(back.x,back.z),flash:true,pitch:0,viewFov:75,viewAspect:16/9});
   hv.target=p.id;
-  tick(sim,.1);
-  assert.equal(hv.state,'collapse');assert.equal(p.health,MAXH);
+  let cut=false;
+  for(let t=0;t<4&&!cut;t+=.05){const c=hv.controlPos();if(c)aimAt(q,c);sim.step(.05);cut=hv.state==='collapse';}
+  assert.ok(cut);assert.equal(p.health,MAXH);
 });
 
 test('losing sight or time no longer ends a hunt',()=>{

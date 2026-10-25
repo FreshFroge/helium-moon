@@ -81,7 +81,16 @@ export const CONFIG = {
     // the target is downed/dead, or the target reaches the spawn area (he can't enter).
     // The client's hunt hum plays only within HUNT_HUM_RANGE of him.
     HUNT_START_RANGE: 42, HUNT_CLOSE_TIMEOUT: 45,
-    HUNT_BREAK_LIT_DIST: 2.13, HUNT_TRACK_EVERY: 2.5,
+    HUNT_BREAK_LIT_DIST: 2.13, HUNT_TRACK_EVERY: 2.5,   // HUNT_BREAK_LIT_DIST: legacy 7-ft rule, replaced by CONTROL below
+    // "Cut the strings" (owner, Oct 25 Puppet rework: "find a more creative way to end a hunt").
+    // During a hunt faint strings run from his head and hands up into the canopy, to the
+    // control - a dark wooden crossbar CONTROL_UP m above him, CONTROL_BACK m behind him (away
+    // from the hunted player). Holding a flashlight beam on it (within CONTROL_CONE deg of the
+    // beam's centre) for CONTROL_TIME s cuts the strings: he collapses and the hunt is over.
+    // To look up at it you usually lose sight of him, and unwatched he moves. Anyone can cut it.
+    // Learned: players who cut him often get a control hung higher and further back.
+    CONTROL_UP: [9, 12], CONTROL_BACK: [2, 4], CONTROL_LEARNED: 1.35, CONTROL_TIME: 1.5,
+    CONTROL_CONE: 11, CONTROL_DECAY: 0.6,
     HUNT_PACE: [0.88, 1.18], HUNT_PACE_INTERVAL: [0.9, 2.3],
     HUNT_CUTOFF_JITTER: [0.65, 1.25],
     HUNT_PROWL_RANGE: [3.66, 4.57], HUNT_PROWL_TIME: [26, 34], // 12-15 ft for about 30 s before the final rush

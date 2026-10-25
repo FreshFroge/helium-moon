@@ -403,13 +403,13 @@ export class HeliumVoiceAI {
         && sim.time - this.attackT >= C.ATTACK_COOLDOWN
         && (dir.allowChase(tp) || close || this.dist(tp) < C.ATTACK_RANGE * 2)) this.startChase(tp);
 
-    // Hunts (owner, Oct 25): once a hunt is on, the ONLY way to call it off is a
-    // flashlight on him from within 7 ft (HUNT_BREAK_LIT_DIST). Puppet: he collapses like his
-    // strings were cut. Once he has you in his grab the light no longer matters.
-    const flashedOff = this.state === 'chase' && !(this.grab && this.grab.phase === 'hold') && this.litBy && this.litBy.ob.d <= C.HUNT_BREAK_LIT_DIST;
-    if (flashedOff) {
-      this.say('flashed_off'); if (this.litBy?.p) this.noteTactic(this.litBy.p.id, 'flash');
-      this.collapseFrom(this.litBy.p);
+    // Hunts: the ONLY way to call one off is to cut his strings - a flashlight held on the
+    // control above him (CONTROL_*). He collapses. Once he has you in his grab it's too late.
+    const cutBy = this.state === 'chase' && !(this.grab && this.grab.phase === 'hold') ? this.updateControl(dt) : null;
+    if (cutBy) {
+      this.say('flashed_off'); this.noteTactic(cutBy.id, 'flash');
+      sim.emit({ type: 'hv_cut', pid: cutBy.id, x: +this.x.toFixed(2), z: +this.z.toFixed(2) });
+      this.collapseFrom(cutBy);
     } else if (watched && !['chase', 'retreat', 'collapse', 'lie'].includes(this.state)) {
       // Watched outside a hunt: he is "worn". He freezes mid-pose and holds, head locked on
       // whoever is looking; after FREEZE s he backs away upright, facing them. Look away and
@@ -823,6 +823,7 @@ export class HeliumVoiceAI {
     this.huntCutMul = this.rng.range(...C.HUNT_CUTOFF_JITTER);
     this.huntProwlFor = this.rng.range(...C.HUNT_PROWL_TIME); this.huntProwlT = 0;
     this.huntOrbitDir = this.rng() < 0.5 ? -1 : 1; this.huntOrbitAt = 0;
+    this.control = this.newControl(p);
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time }; this.windup = null; this.lingerUntil = null; this.grab = null; this.lbWatched = false; this.lbNext = this.sim.time + 0.4;
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
@@ -902,6 +903,46 @@ export class HeliumVoiceAI {
     this.awareness.set(tp.id, 0.5);
     // he stays over them, staring, then backs away into the dark facing them
     this.setState('watch', { watchDur: C.LINGER + 3 }); this.lingerUntil = sim.time + C.LINGER;
+  }
+
+  // world position of the control (the crossbar above him) for the current hunt
+  // the control above him for a hunt (higher and further back for players who cut him before)
+  newControl(p) {
+    const learned = p && this.counters(p.id, 'flash') ? C.CONTROL_LEARNED : 1;
+    return { up: this.rng.range(C.CONTROL_UP[0], C.CONTROL_UP[1]) * learned, back: this.rng.range(C.CONTROL_BACK[0], C.CONTROL_BACK[1]) * learned,
+      side: this.rng.range(-1.5, 1.5), lit: 0 };
+  }
+
+  controlPos() {
+    const tp = this.target != null ? this.sim.players.get(this.target) : null;
+    if (this.state !== 'chase') return null;
+    const c = this.control ||= this.newControl(tp);
+    // behind him as seen from the hunted player; it follows him through the trees
+    const a = tp ? Math.atan2(this.x - tp.x, this.z - tp.z) : this.yaw + Math.PI;
+    const bx = Math.sin(a), bz = Math.cos(a);
+    return { x: this.x + bx * c.back + bz * c.side, y: this.y + c.up, z: this.z + bz * c.back - bx * c.side };
+  }
+
+  // accumulates beam time on the control; returns the player who cut the strings, or null
+  updateControl(dt) {
+    const c = this.control, cp = this.controlPos();
+    if (!c || !cp) return null;
+    const w = this.world, cosCone = Math.cos(C.CONTROL_CONE * Math.PI / 180);
+    let by = null;
+    for (const p of this.sim.playerList) {
+      if (!playerActive(p) || !p.flash) continue;
+      const ey = p.y + eyeHeight(p), dx = cp.x - p.x, dy = cp.y - ey, dz = cp.z - p.z, d = Math.hypot(dx, dy, dz);
+      if (d > CONFIG.FLASHLIGHT.RANGE || d < 0.5) continue;
+      // view direction (camera looks down -Z at yaw 0)
+      const cpch = Math.cos(p.pitch || 0), vx = -Math.sin(p.yaw || 0) * cpch, vy = Math.sin(p.pitch || 0), vz = -Math.cos(p.yaw || 0) * cpch;
+      if ((dx * vx + dy * vy + dz * vz) / d < cosCone) continue;
+      if (w.lineOfSight(p.x, ey, p.z, cp.x, cp.y, cp.z, { brushK: 0 }) < 0.5) continue;
+      by = p; break;
+    }
+    c.lit = by ? c.lit + dt : Math.max(0, c.lit - dt * C.CONTROL_DECAY);
+    c.by = by || c.by;
+    if (by && c.lit >= C.CONTROL_TIME) { c.lit = 0; return by; }
+    return null;
   }
 
   slipAround(tp) {
@@ -1188,6 +1229,14 @@ export class HeliumVoiceAI {
         | (a.frozen ? 128 : 0) | (a.collapse ? 256 : 0) | (a.prone ? 512 : 0) | (a.rise ? 1024 : 0) | (a.grab ? 2048 : 0) | (a.back ? 4096 : 0),
       +a.tilt.toFixed(2), +a.jaw.toFixed(2), HV_STATES.indexOf(this.state),
       // 11: grab kind (GRAB_KINDS index), 12: grab phase 0 none / 1 reach / 2 hold, 13: peek kind
-      a.grab ? GRAB_KINDS.indexOf(this.grab?.kind) : 0, a.grab ? (this.grab?.phase === 'hold' ? 2 : 1) : 0, a.peek || 0];
+      a.grab ? GRAB_KINDS.indexOf(this.grab?.kind) : 0, a.grab ? (this.grab?.phase === 'hold' ? 2 : 1) : 0, a.peek || 0,
+      // 14-17: the control above him during a hunt (offset from him) and cut progress 0..1
+      ...this.controlSnap()];
+  }
+
+  controlSnap() {
+    const cp = this.controlPos();
+    if (!cp) return [0, 0, 0, 0];
+    return [+(cp.x - this.x).toFixed(2), +(cp.y - this.y).toFixed(2), +(cp.z - this.z).toFixed(2), +Math.min(1, this.control.lit / C.CONTROL_TIME).toFixed(2)];
   }
 }
