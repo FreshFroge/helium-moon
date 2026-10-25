@@ -21,14 +21,14 @@ export class PlayerController {
     this.surface = SURFACE.DIRT; this.inWater = 0; this.inBrush = 0;
     this.onFootstep = null; this.onLand = null;
     this.speed = 0; this.noise = 0;
-    this.injured = 0; this.slow = 1; this.downed = 0; this.hidden = false;
+    this.injured = 0; this.slow = 1; this.downed = 0; this.hidden = false; this.covered = false; this.hasCamoBlanket = false; this.lean = 0;
     this.lookLock = null;
   }
 
   spawn(x, z, yaw) {
     this.pos.set(x, supportHeight(this.world, x, z, 10), z);
     this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = -0.05;
-    this.stamina = P.STAMINA_MAX; this.crouch = 0; this.downed = 0;
+    this.stamina = P.STAMINA_MAX; this.crouch = 0; this.downed = 0; this.covered = false; this.hasCamoBlanket = false;
   }
 
   update(dt, input, opts = {}) {
@@ -60,12 +60,17 @@ export class PlayerController {
     if (len > 0) { fx /= len; fz /= len; }
     this.crouching = !frozen && input.down('crouch');
     this.crouch = lerp(this.crouch, this.crouching || this.downed > 0.5 ? 1 : 0, 1 - Math.exp(-dt * 9));
+    this.inputLean = frozen ? 0 : (input.down('leanRight') ? 1 : 0) - (input.down('leanLeft') ? 1 : 0);
+    this.covered = !frozen && this.hasCamoBlanket && this.crouching && input.down('camouflage') && this.speed < 0.35;
     const wantSprint = !frozen && input.down('sprint') && fz < 0 && !this.crouching && !this.exhausted;
     this.surface = this.world.surfaceAt(this.pos.x, this.pos.z);
     const depth = waterDepthAt(this.world, this.pos.x, this.pos.z);
     this.inWater = this.world.deckAt(this.pos.x, this.pos.z) !== null ? 0 : depth;
     this.inBrush = this.world.gridAt(this.world.gBrush, this.pos.x, this.pos.z);
-    this.hidden = this.crouching && this.inBrush > 0.55 && this.speed < 1.2;
+    // Brush and dense grass both conceal a crouched, still player.  This deliberately
+    // creates hiding options away from tree trunks and other hard objects.
+    const grass = this._grassAt(this.pos.x, this.pos.z);
+    this.hidden = this.covered || (this.crouching && this.speed < 1.2 && (this.inBrush > 0.35 || grass >= 3));
     let mul = 1;
     if (this.surface === SURFACE.MUD) mul *= P.MUD_SLOW;
     if (this.inWater > 0.12) mul *= lerp(1, P.WATER_SLOW, clamp(this.inWater / 0.6, 0, 1));
@@ -141,10 +146,25 @@ export class PlayerController {
     const shy = sh * (Math.sin(this.shakeT * 31 + 1) * 0.6 + Math.sin(this.shakeT * 17) * 0.4) * 0.03;
     const cam = this.camera;
     const right = (this._right || (this._right = new THREE.Vector3())).set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    cam.position.set(this.pos.x, this.pos.y + eye + bobY - this.landDip, this.pos.z).addScaledVector(right, bobX);
+    const wantLean = this.downed > 0.5 ? 0 : this.inputLean || 0;
+    this.lean = lerp(this.lean || 0, wantLean, 1 - Math.exp(-dt * 14));
+    cam.position.set(this.pos.x, this.pos.y + eye + bobY - this.landDip, this.pos.z).addScaledVector(right, bobX + this.lean * 0.28);
     const breathe = Math.sin(performance.now() * 0.0012) * 0.004 * s.headBob;
-    const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35 + (this.extraRoll || 0);
+    const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35 + this.lean * 0.075 + (this.extraRoll || 0);
     cam.rotation.set(this.pitch + shy + breathe, this.yaw + shx, roll, 'YXZ');
     cam.updateMatrixWorld();
+  }
+
+  _grassAt(x, z) {
+    const w = this.world;
+    if (!w.grass) return 0;
+    if (!w._playerGrassCells) {
+      w._playerGrassCells = new Map();
+      for (const g of w.grass) {
+        const key = Math.floor(g[0] / 4) + ',' + Math.floor(g[2] / 4);
+        w._playerGrassCells.set(key, (w._playerGrassCells.get(key) || 0) + 1);
+      }
+    }
+    return w._playerGrassCells.get(Math.floor(x / 4) + ',' + Math.floor(z / 4)) || 0;
   }
 }

@@ -7,12 +7,16 @@ export const DEFAULT_BINDINGS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
   sprint: 'ShiftLeft', crouch: 'KeyC', crouchAlt: 'ControlLeft', jump: 'Space',
   interact: 'KeyE', flashlight: 'KeyF', inventory: 'Tab', chat: 'Enter', talk: 'KeyV',
+  leanLeft: 'KeyQ', leanRight: 'KeyR',
+  camouflage: 'KeyX',
 };
 
 export const BINDING_LABELS = {
   forward: 'Move forward', back: 'Move back', left: 'Strafe left', right: 'Strafe right',
   sprint: 'Sprint', crouch: 'Crouch', crouchAlt: 'Crouch (alt)', jump: 'Jump', interact: 'Interact / revive',
   flashlight: 'Lighter', inventory: 'Objectives & notes', chat: 'Text chat', talk: 'Push to talk',
+  leanLeft: 'Lean left', leanRight: 'Lean right',
+  camouflage: 'Use camouflage blanket',
 };
 
 const DEFAULTS = {

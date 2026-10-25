@@ -596,6 +596,7 @@ export class HeliumVoiceAI {
         if (this.grab) { this.updateGrab(dt, tp); lookP = tp; break; }
         if ((this.hide?.t || 0) > 0) lookP = null; else this.lookAtPoint(tp.x, tp.y + 1.5, tp.z);   // hiding: he doesn't know where to look
         const d = this.dist(tp);
+        const openingSearch = sim.time < (this.huntHideUntil ?? -1);
         // Looking back at him (owner): each fresh look freezes him for a beat, then he comes on
         // upright with dead arms. Unwatched he runs low, on all fours (operated).
         const seenByTarget = this.observers.some((o) => o.p.id === tp.id);
@@ -647,7 +648,7 @@ export class HeliumVoiceAI {
           this.huntPace = this.rng.range(...C.HUNT_PACE);
           this.huntPaceAt = sim.time + this.rng.range(...C.HUNT_PACE_INTERVAL);
         }
-        const burst = d < 12 ? C.BURST : C.CHASE;
+        const burst = openingSearch ? C.STALK : (d < 12 ? C.BURST : C.CHASE);
         if (d < 7 && this.world._straightWalkable([this.x, this.z], [tp.x, tp.z])) {
           // close enough to lunge straight at them
           this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1;
@@ -670,7 +671,7 @@ export class HeliumVoiceAI {
         if (!watched && d < 5 && this.huntStall && sim.time - this.huntStall.t > 1.5 && sim.time - (this.slipT ?? -9) > 3) this.slipAround(tp);
         // still pinned: his arms reach round it (GRAB_AROUND)
         const around = d < C.GRAB_AROUND && this.huntStall && sim.time - this.huntStall.t > 1.5;
-        if ((d < C.GRAB_REACH || around) && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
+        if (!openingSearch && (d < C.GRAB_REACH || around) && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
             && (around || this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2)) {
           this.startGrab(tp, around);
           lookP = tp;
@@ -809,6 +810,7 @@ export class HeliumVoiceAI {
     this.huntPace = this.rng.range(...C.HUNT_PACE);
     this.huntPaceAt = this.sim.time + this.rng.range(...C.HUNT_PACE_INTERVAL);
     this.huntCutMul = this.rng.range(...C.HUNT_CUTOFF_JITTER);
+    this.huntHideUntil = this.sim.time + this.rng.range(...C.HUNT_HIDE_WINDOW);
     this.hide = { t: 0 };
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time }; this.windup = null; this.lingerUntil = null; this.grab = null; this.lbWatched = false; this.lbNext = this.sim.time + 0.4;
     this.setState('chase'); this.replanT = 0;
@@ -896,7 +898,10 @@ export class HeliumVoiceAI {
   // Returns the player he lost, or null.
   hidden(tp) {
     if (!tp.flash && (tp.moveSpeed || 0) < C.HIDE_STILL && !tp.sprint && noiseRadius(tp, C) <= C.HIDE_NOISE) {
-      return sightOf(this.world, this, EYE, this.lookYaw, tp, C) < 0.02 && !this.observers.some((o) => o.p.id === tp.id && o.ob?.lit);
+      // A deployed blanket removes the need for hard cover, but only while the player is
+      // crouched, motionless, dark and quiet; moving or leaving the light on exposes them.
+      return (tp.covered || sightOf(this.world, this, EYE, this.lookYaw, tp, C) < 0.02)
+        && !this.observers.some((o) => o.p.id === tp.id && o.ob?.lit);
     }
     return false;
   }

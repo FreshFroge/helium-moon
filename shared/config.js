@@ -93,6 +93,9 @@ export const CONFIG = {
     // heard them instead of tracking them. Learned hiders need HIDE_LEARNED x longer. After a
     // successful hide, HIDE_GRACE s (solo / team) with no new hunt on that player.
     HIDE_TIME: 6, HIDE_STILL: 0.6, HIDE_NOISE: 6, HIDE_MIN_DIST: 2.5, HIDE_LEARNED: 1.5, HIDE_GRACE: [45, 25],
+    // A hunt opens with an escape window. He searches and closes pressure, but cannot grab;
+    // this gives players time to kill the light and settle into brush or a broken sightline.
+    HUNT_HIDE_WINDOW: [15, 20],
     HUNT_PACE: [0.88, 1.18], HUNT_PACE_INTERVAL: [0.9, 2.3],
     HUNT_CUTOFF_JITTER: [0.65, 1.25],
     HUNT_LUNGE_DIST: 4,   // within this (clear line), the final lunge uses real collision, not the 2 m nav grid

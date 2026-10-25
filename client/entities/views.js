@@ -307,6 +307,12 @@ export class ObjectiveViews {
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.012, 0.068), new THREE.MeshStandardMaterial({ color: 0x1d5c8c, roughness: 0.45 }));
       body.position.y = 0.006; g.add(body);
       const top = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.011, 0.012), X.grey); top.position.set(0, 0.006, 0.04); g.add(top);
+    } else if (it.kind === 'blanket') {
+      const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.48, 0.36, 5, 4), new THREE.MeshStandardMaterial({ color: 0x3b4a2c, roughness: 1, side: THREE.DoubleSide }));
+      cloth.rotation.x = -Math.PI / 2; cloth.rotation.z = 0.28; cloth.position.y = 0.025;
+      const folds = cloth.geometry.attributes.position;
+      for (let i = 0; i < folds.count; i++) folds.setY(i, Math.sin(i * 5.7) * 0.012);
+      folds.needsUpdate = true; g.add(cloth);
     } else if (it.kind === 'note') {
       const n = NOTES.find((q) => q.id === it.note);
       const lines = (n ? n.text : '').split('\n').slice(0, 7).map((t) => ({ text: t.length > 34 ? t.slice(0, 33) + '…' : t, font: 'italic 19px "Cormorant Garamond", Georgia, serif', lh: 1.4 }));

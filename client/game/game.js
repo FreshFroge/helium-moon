@@ -464,6 +464,7 @@ export class Game {
         this.objViews.setHeld(e.id, true);
         if (e.pid === this.myId) {
           if (e.kind === 'battery') { this.flashlight.addBattery(CONFIG.FLASHLIGHT.BATTERY_PICKUP); A.ui('clink', 0.6); this.ui.toast('A spare lighter. More fuel.', 2000); }
+          else if (e.kind === 'blanket') { this.player.hasCamoBlanket = true; A.ui('paper', 0.55); this.ui.toast('Camouflage blanket: crouch, light off, hold X while still to hide.', 4500); }
           else if (e.kind === 'note') { A.ui('paper', 0.8); const n = NOTES.find((q) => q.id === e.note); if (n) { this.notesRead.push(n.id); this.reading = n; this.ui.showNote(n); } }
           else { A.ui('clink', 0.7); this.ui.toast(e.kind === 'fuel' ? 'Picked up the gas can.' : 'Picked up the fuse kit.', 3000); }
         } else if (it && e.kind !== 'battery') this.ui.toast(`${this._name(e.pid)} found ${e.kind === 'note' ? 'a note' : it.name.toLowerCase()}.`, 3000);
@@ -697,7 +698,7 @@ export class Game {
       this.net.send({ t: 'in', x: +pl.pos.x.toFixed(2), y: +pl.pos.y.toFixed(2), z: +pl.pos.z.toFixed(2), yaw: +pl.yaw.toFixed(3), pitch: +pl.pitch.toFixed(3),
         viewFov: this.camera.fov, viewAspect: this.camera.aspect,
         crouch: pl.crouching, sprint: pl.sprinting, flash: fl.on && fl.light.intensity > 1, noise: +(pl.noise + (this.useId && this._stationNoisy ? 0.6 : 0)).toFixed(2),
-        voice: +this.voice.voiceLevel.toFixed(2), hidden: pl.hidden, use: this.useId || null, revive: this.reviveId || null });
+        voice: +this.voice.voiceLevel.toFixed(2), hidden: pl.hidden, covered: pl.covered, use: this.useId || null, revive: this.reviveId || null });
     }
     // ---- HUD
     this._fade(dt);

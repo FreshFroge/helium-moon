@@ -61,7 +61,7 @@ export class GameSim {
     const sp = this.spawnPoint(this.players.size);
     const p = {
       id, name: String(name || 'Visitor').slice(0, 20), ...sp, pitch: 0, crouch: false, sprint: false, flash: true,
-      noise: 0, voice: 0, use: null, revive: null, hidden: false, health: CONFIG.PLAYER.MAX_HEALTH, state: 'alive',
+      noise: 0, voice: 0, use: null, revive: null, hidden: false, covered: false, health: CONFIG.PLAYER.MAX_HEALTH, state: 'alive',
       bleedT: 0, reviveT: 0, hurtT: -999, quietT: 0, moveDir: null, lastX: sp.x, lastZ: sp.z, escapeT: 0, interactNoise: false,
     };
     this.players.set(id, p);
@@ -94,7 +94,7 @@ export class GameSim {
     p.crouch = !!m.crouch; p.sprint = !!m.sprint; p.flash = !!m.flash;
     p.noise = Math.min(1, Math.max(0, +m.noise || 0));
     p.voice = Math.min(1, Math.max(0, +m.voice || 0));
-    p.hidden = !!m.hidden;
+    p.hidden = !!m.hidden; p.covered = !!m.covered && this.obj.items.some((it) => it.kind === 'blanket' && it.holder === p.id);
     p.use = typeof m.use === 'string' ? m.use : null;
     p.revive = m.revive != null ? m.revive : null;
   }

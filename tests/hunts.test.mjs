@@ -71,11 +71,14 @@ test('hunts sample bounded changes in pursuit pace and unseen cutoff timing', ()
   assert.ok(Math.max(...intervals)-Math.min(...intervals)>.5,'cadence duration varies across hunts');
 });
 
-test('a hunt does not circle within twelve to fifteen feet before attacking',()=>{
+test('a hunt gives a hiding window, then does not circle within twelve to fifteen feet before attacking',()=>{
   const {sim,p,hv}=fixture(4.2,31);p.flash=false;
   hv.startChase(p);
+  const opening=hv.huntHideUntil-sim.time;
+  for(let t=0;t<opening-.1;t+=.05)sim.step(.05);
+  assert.equal(p.health,MAXH,'the opening window gives a player time to hide');
   for(let t=0;t<12&&p.health===MAXH;t+=.05)sim.step(.05);
-  assert.ok(p.health<MAXH,'a close hunt commits to its attack instead of orbiting the target');
+  assert.ok(p.health<MAXH,'after the hiding window, a close hunt commits instead of orbiting');
   assert.equal(hv.huntProwlT,undefined,'no close-range prowl timer remains');
 });
 
@@ -95,7 +98,7 @@ test('fail-safe: a hunt on a target he cannot reach ends instead of running fore
   hv.startChase(p);
   let ended = null;
   for (let t = 0; t < 60 && ended == null; t += 0.05) { sim.step(0.05); for (const e of sim.drainEvents()) if (e.type === "chase" && !e.on) ended = t; }
-  assert.ok(ended != null && ended < CONFIG.HV.HUNT_STALL_TIME + 8, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
+  assert.ok(ended != null && ended < Math.max(...CONFIG.HV.HUNT_HIDE_WINDOW) + CONFIG.HV.HUNT_STALL_TIME + 8, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
   assert.equal(sim.director.chasing, false);
 });
 
