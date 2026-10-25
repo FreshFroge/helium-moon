@@ -45,6 +45,8 @@ test('screen checks account for pitch, screen edges, aspect ratio and occlusion'
   p.pitch=1.4;assert.equal(onScreen(clear,p,0,0,-3),false);
   p.pitch=0;assert.equal(onScreen({lineOfSight:()=>0},p,0,0,-3),false);
   assert.equal(onScreen(clear,p,0,0,3),false);
+  p.viewFov=120;p.viewAspect=3;
+  assert.equal(onScreen(clear,p,70,0,-40),false,'a wide frustum cannot extend the physical sight range');
 });
 
 test('server accepts bounded screen settings for individual co-op players',()=>{

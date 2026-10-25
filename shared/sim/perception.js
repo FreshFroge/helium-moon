@@ -20,7 +20,7 @@ export function onScreen(world, p, x, y, z, h = 1.9, radius = 0.36) {
     const tx = x + cy * side, tz = z - sy * side;
     const dx = tx - p.x, dy = y + height - ey, dz = tz - p.z;
     const depth = -sy * cp * dx + sp * dy - cy * cp * dz;
-    if (depth < 0.06 || depth > (p.flash ? CONFIG.FLASHLIGHT.RANGE + 8 : 28)) continue;
+    if (depth < 0.06 || Math.hypot(dx, dy, dz) > (p.flash ? CONFIG.FLASHLIGHT.RANGE + 8 : 28)) continue;
     const right = cy * dx - sy * dz, up = sy * sp * dx + cp * dy + cy * sp * dz;
     if (Math.abs(right) > depth * tanX || Math.abs(up) > depth * tanY) continue;
     if (world.lineOfSight(p.x, ey, p.z, tx, y + height, tz, { brushK: 0.3 }) > 0.2) return true;

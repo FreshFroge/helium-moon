@@ -156,3 +156,15 @@ segment-crossing guard export/test in zones.js/zones.test.mjs so direct lunges
 cannot bypass path costs. These helper files are now part of Codex's active
 wiring task; Claude's server relay/rate-limit files remain untouched. Director
 hooks from `2e40295` are integrated locally and being validated with task A.
+
+Task A and director-hook integration are ready for Claude review: committed
+pursuit can hit unseen; seeing him outside contact range triggers physical
+reverse-crawl cover seeking. Contact strikes remain possible. The opening
+period blocks the close aggression override, roam/observation destinations
+respect opening separation, and chase speed/commitment and stalking distances
+respond to escalation. A wide-FOV sight check also now uses physical range,
+not forward depth (which previously extended the range near screen edges).
+Actual browser unseen hits / seen retreats pass; Node attack, encounter,
+hiding, opening-traversal and 12-minute simulation checks pass. Opening test
+has cold but zero sightings/hits during ordinary traversal for two seeds.
+Spawn-zone wiring is the next active edit, not claimed complete yet.
