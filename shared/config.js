@@ -83,6 +83,7 @@ export const CONFIG = {
     // player's position every HUNT_TRACK_EVERY s. A hunt still ends when he lands a hit,
     // the target is downed/dead, or the target reaches the spawn area (he can't enter).
     // The client's hunt hum plays only within HUNT_HUM_RANGE of him.
+    HUNT_STALK_DIST: [30, 45],   // owner: the opening stalk of a hunt holds this far out, concealed
     HUNT_START_RANGE: 42, HUNT_CLOSE_TIMEOUT: 45,
     HUNT_BREAK_LIT_DIST: 2.13, HUNT_TRACK_EVERY: 2.5,   // HUNT_BREAK_LIT_DIST: legacy 7-ft rule (unused); hunts now end by hiding (HIDE_* below)
     // Hiding ends a hunt (owner, Oct 25 Puppet rework: "find a more creative way to end a hunt";

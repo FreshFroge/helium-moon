@@ -605,13 +605,17 @@ export class HeliumVoiceAI {
           // changes into the post-window stuck-hunt fail-safe.
           this.huntStall = null;
           this.replanT = (this.replanT || 0) - dt;
-          if (!this.path || this.replanT <= 0 || d < 8) {
-            const spot = d < 8 ? this.coverAway(tp, 12, 24) : this.observationSpot(tp, 'behind', 10, 24);
+          // owner: far out, so the player can't easily tell where he is (HUNT_STALK_DIST), in cover,
+          // changing position only now and then
+          const [near, far] = C.HUNT_STALK_DIST, tooClose = d < near - 4;
+          if (!this.path || this.replanT <= 0 || (tooClose && !this.stalkBackingOff)) {
+            const spot = tooClose ? this.coverAway(tp, near, far) : this.observationSpot(tp, 'behind', near, far);
             if (spot) this.planTo(spot[0], spot[1], 'cover');
-            else if (d < 8) this.path = null;
-            this.replanT = 1.2;
+            else if (tooClose) this.path = null;
+            this.stalkBackingOff = tooClose;
+            this.replanT = tooClose ? 1.2 : this.rng.range(4, 7);
           }
-          if (d >= 8 || this.path) this.followPath(dt, C.STALK * 0.9);
+          if (this.path) this.followPath(dt, tooClose ? C.STALK * 1.3 : C.STALK * 0.9);
           else this.stop(dt);
           anim.run = 0;
           break;
@@ -916,7 +920,8 @@ export class HeliumVoiceAI {
   // quiet. HIDE_TIME s of that and he has lost them. Learned hiders need HIDE_LEARNED x longer.
   // Returns the player he lost, or null.
   hidden(tp) {
-    if (!tp.flash && (tp.moveSpeed || 0) < C.HIDE_STILL && !tp.sprint && noiseRadius(tp, C) <= C.HIDE_NOISE) {
+    // standing upright in the open is not hiding, however far he is: crouch, get in brush or under cover
+    if (!tp.flash && (tp.crouch || tp.hidden || tp.covered) && (tp.moveSpeed || 0) < C.HIDE_STILL && !tp.sprint && noiseRadius(tp, C) <= C.HIDE_NOISE) {
       // A deployed blanket removes the need for hard cover, but only while the player is
       // crouched, motionless, dark and quiet; moving or leaving the light on exposes them.
       // sight is tested toward them, not along wherever his head happens to point: otherwise looking
