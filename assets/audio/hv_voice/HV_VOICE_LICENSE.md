@@ -45,3 +45,17 @@ At the owner's request ("recreate his voice"), and with the same consent, these
 
 `lines.json` maps line ids to files. The game chooses lines on the server in
 `shared/sim/voiceLines.js`.
+
+## Upscaling (owner request, Oct 25)
+
+All lines are now 48 kHz.
+- **Cloned lines:** the vocoder stops at 12 kHz. Above that, the band is rebuilt
+  by spectral band replication: the whitened texture of 5.9–11.8 kHz is shifted up
+  an octave and shaped to continue the spectrum at −12 dB/oct, fading out by
+  19 kHz.
+- **Real lines:** spectral denoise with a noise profile taken from the quietest
+  frames.
+- **Both:** a gentle 9 kHz air shelf and −18 LUFS loudness.
+
+Transcripts and speaker similarity were re-checked after processing and are
+unchanged.
