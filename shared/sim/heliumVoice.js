@@ -382,7 +382,12 @@ export class HeliumVoiceAI {
       // reaction previously cancelled them on their very first visible frame,
       // making the reveal's own show/cross logic effectively unreachable.
       const deliberate=this.state==='reveal' && this.reveal;
-      if(deliberate)this.reveal.exposureT=(this.reveal.exposureT||0)+dt;
+      if(deliberate){
+        this.reveal.exposureT=(this.reveal.exposureT||0)+dt;
+        if(!this.reveal.counted && this.reveal.exposureT>=.2){
+          this.reveal.counted=true;dir.onReveal(this.reveal.kind);this.presenceReportT=sim.time;
+        }
+      }
       if (!contact && (!deliberate || this.reveal.exposureT >= .9))
         this.retreatFrom(observer.p, !!this.litBy, true);
     }
@@ -568,6 +573,7 @@ export class HeliumVoiceAI {
   }
 
   retreatFrom(p, lit = false, quick = false) {
+    const countedReveal=this.state==='reveal' && this.reveal?.counted;
     if (this.state === 'chase' && this.sim.director.chasing) this.sim.director.onChaseEnd(false);
     p ||= this.sim.players.get(this.target) || { x: this.x + 1, y: this.y, z: this.z };
     const minimum = Math.max(lit ? 14 : 10, this.openingDistance() - this.dist(p) + 10);
@@ -577,8 +583,10 @@ export class HeliumVoiceAI {
     if (this.path?.length > 1) this.yaw = Math.atan2(this.path[1][0] - this.x, this.path[1][1] - this.z) + Math.PI;
     // Only perceived escapes add tension. Unseen repositioning must not
     // keep the director in permanent recovery while the player hears nothing.
-    if (this.observers?.length || this.dist(p) <= C.FOOTSTEP_MAX_DISTANCE || this.sim.time-this.attackT < .2)
-      this.sim.director.onReveal('retreat');
+    if (!countedReveal && this.sim.time-(this.presenceReportT??-999)>=5
+        && (this.observers?.length || this.dist(p) <= C.FOOTSTEP_MAX_DISTANCE || this.sim.time-this.attackT < .2)){
+      this.sim.director.onReveal('retreat');this.presenceReportT=this.sim.time;
+    }
   }
 
   startChase(p) {
@@ -591,10 +599,7 @@ export class HeliumVoiceAI {
   }
 
   // ---------------------------------------------------------------- deliberate reveals
-  requestReveal(kind, p) {
-    if (!this.outsideSpawn(p.x,p.z) || this.openingDistance()) return false;
-    if (!['roam', 'stalk', 'watch', 'search'].includes(this.state)) return false;
-    if (this.dist(p) > 150) return false;
+  revealPlan(kind,p) {
     const w = this.world, rng = this.rng;
     const [fx, fz] = playerFwd(p);
     const baseA = Math.atan2(fx, fz);
@@ -612,12 +617,21 @@ export class HeliumVoiceAI {
         const cx = p.x + Math.sin(a) * d, cz = p.z + Math.cos(a) * d;
         const pa = a + Math.PI / 2, half = rng.range(9, 14);
         const A = [cx + Math.sin(pa) * half, cz + Math.cos(pa) * half], B = [cx - Math.sin(pa) * half, cz - Math.cos(pa) * half];
-        if (!w.navWalkable(A[0], A[1]) || !w.navWalkable(B[0], B[1]) || !w.navWalkable(cx, cz)) continue;
+        if (!w.navWalkable(A[0], A[1]) || !w.navWalkable(B[0], B[1]) || !w.navWalkable(cx, cz)
+            || !this.openingClear(A[0],A[1]) || !this.openingClear(B[0],B[1]) || !this.openingClear(cx,cz)) continue;
         const vis = w.lineOfSight(p.x, p.y + eyeHeight(p), p.z, cx, groundAt(w, cx, cz) + 1.6, cz, { brushK: 0.2 });
         if (vis < 0.4) continue;
         plan = rng() < 0.5 ? { kind, pid: p.id, spot: A, end: B, phase: 'approach' } : { kind, pid: p.id, spot: B, end: A, phase: 'approach' };
       }
     }
+    return plan ? {...plan,origin:[p.x,p.z],lastPlanAt:this.sim.time} : null;
+  }
+
+  requestReveal(kind, p) {
+    if (!this.outsideSpawn(p.x,p.z) || this.openingDistance()) return false;
+    if (!['roam', 'stalk', 'watch', 'search'].includes(this.state)) return false;
+    if (this.dist(p) > 150) return false;
+    const plan=this.revealPlan(kind,p);
     if (!plan) return false;
     this.reveal = plan; this.target = p.id;
     this.setState('reveal');
@@ -631,27 +645,35 @@ export class HeliumVoiceAI {
     if (!r || !p || !playerActive(p)) { this.setState('roam'); return; }
     const C2 = C;
     if (r.phase === 'approach') {
+      // A walker can pass the original reveal location while he travels there.
+      // Refresh only unseen plans, at most every three seconds, while retaining
+      // the original overall approach deadline and accumulated exposure.
+      if(!r.counted && r.origin && sim.time-r.lastPlanAt>=3
+          && Math.hypot(p.x-r.origin[0],p.z-r.origin[1])>12){
+        r.lastPlanAt=sim.time;
+        const fresh=this.revealPlan(r.kind,p);
+        if(fresh && this.planTo(fresh.spot[0],fresh.spot[1],'cover'))Object.assign(r,fresh);
+      }
       const far = Math.hypot(r.spot[0] - this.x, r.spot[1] - this.z) > 25 && !this.observers.length;
       const done = this.followPath(dt, far ? C2.RELOCATE : C2.STALK);
       if (this.stateT > 40 || (done && Math.hypot(r.spot[0] - this.x, r.spot[1] - this.z) > 3)) {
-        this.reveal = null; this.retreatFrom(p, false, true); return;
+        this.retreatFrom(p, false, true); this.reveal = null; return;
       }
       if (done) { r.phase = r.kind === 'watcher' ? 'show' : 'cross'; r.t = 0; if (r.kind === 'crossing') this.planTo(r.end[0], r.end[1], 'direct'); }
     } else if (r.phase === 'show') {
       // stand motionless between the trees, facing them, until seen (or bored)
       r.t += dt; this.stop(dt); this.anim.still = 1;
+      this.yaw += angleDiff(this.yaw,Math.atan2(p.x-this.x,p.z-this.z))*Math.min(1,dt*3);
       if (this.observers.some((o) => o.p.id === p.id)) r.seenT = (r.seenT || 0) + dt;
       if ((r.seenT || 0) > this.rng.range(1.2, 2.6) || (this.litBy && (r.exposureT || 0) >= .9) || r.t > 30) {
-        sim.director.onReveal('watcher');
-        this.reveal = null; this.retreatFrom(p, false, true);
+        this.retreatFrom(p, false, true); this.reveal = null;
       }
     } else if (r.phase === 'slip') {
       this.retreatFrom(p, false, true); this.reveal = null;
     } else if (r.phase === 'cross') {
       r.t = (r.t || 0) + dt;
       const done = this.followPath(dt, C2.WALK * 1.25);
-      if (r.t > 1 && !r.counted && this.observers.some((o) => o.p.id === p.id)) { r.counted = true; sim.director.onReveal('crossing'); }
-      if (done || r.t > 25) { this.reveal = null; this.retreatFrom(p, false, true); }
+      if (done || r.t > 25) { this.retreatFrom(p, false, true); this.reveal = null; }
     }
   }
 

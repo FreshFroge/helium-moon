@@ -281,3 +281,10 @@ Next claimed task #17: Helium Voice planned-appearance reliability and actual
 sighting accounting. Codex reserves shared/sim/heliumVoice.js, director reporting
 if needed, and new reveal regression/browser checks. Current route pass is
 published at a7754ba; continuing rather than waiting for review.
+
+Task #17 source, 11 regressions, full npm and real-browser watcher/crossing
+checks pass. Review: CODEX_PLANNED_APPEARANCES.md. Next claimed task #18:
+shared/world.js _navigation only, new navigation-blocking tests and the existing
+sim test. Brush currently reopens 114 solid large-trunk cells; simple synthetic
+reproduction also fails. Taking it immediately while keeping Claude's renderer
+files and quality presets free.

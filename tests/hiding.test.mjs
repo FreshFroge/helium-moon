@@ -125,7 +125,8 @@ test('a cylinder overlapping a trunk recovers gradually instead of rejecting eve
 
 test('an intentional appearance registers briefly before physically retreating',()=>{
   const {hv,player}=fixture();hv.x=30;
-  hv.setState('reveal');hv.reveal={pid:player.id,phase:'show'};
+  hv.setState('reveal');hv.reveal={pid:player.id,kind:'watcher',phase:'show'};
+  hv.sim.director.onReveal=()=>{};
   hv.perceive=()=>{hv.observers=[{p:player}];hv.litBy=null;};
   hv.vocals=()=>{};hv.updateReveal=()=>{};hv.followPath=()=>false;
   hv.concealedAt=()=>false;hv.coverAway=()=>null;
