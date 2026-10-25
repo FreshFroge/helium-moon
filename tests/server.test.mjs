@@ -75,6 +75,18 @@ try {
   const vs = await B.wait((m) => m.t === 'voice_state');
   ok(vs.id === A.id && vs.mic === true, 'voice state broadcast');
 
+  // Direct WebRTC can fail behind restrictive NAT/firewall policy. The bounded
+  // PCM fallback is addressed only to current lobby peers and gets its sender
+  // identity from the server, never from an untrusted client header.
+  const voiceClip = (to, n = 3200) => {
+    const head = new TextEncoder().encode(JSON.stringify({ k: 'voice', from: 'forged', to, sr: 16000, seq: 7 }));
+    const b = new Uint8Array(4 + head.length + n); new DataView(b.buffer).setUint32(0, head.length, true); b.set(head, 4); return b;
+  };
+  A.ws.send(voiceClip([B.id, C.id])); await sleep(250);
+  const relayedHead = B.bin.length ? JSON.parse(new TextDecoder().decode(new Uint8Array(B.bin[0], 4, new DataView(B.bin[0]).getUint32(0, true)))) : null;
+  ok(B.bin.length === 1 && C.bin.length === 0 && relayedHead?.from === A.id && relayedHead?.k === 'voice', 'voice fallback is server-authenticated and limited to current lobby targets');
+  A.bin.length = 0; B.bin.length = 0; C.bin.length = 0;
+
   // non-host cannot start
   B.send({ t: 'start' }); await sleep(300);
   ok(!B.msgs.some((m) => m.t === 'start'), 'non-host cannot start');

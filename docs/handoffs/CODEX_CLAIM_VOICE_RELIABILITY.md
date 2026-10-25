@@ -20,3 +20,27 @@ direct path fails to connect, only while the user-enabled mic is transmitting,
 and only inside the current lobby. It must preserve proximity gain, occlusion,
 mute/death behavior and privacy. Claude's Helium Voice audio/AI and wildlife
 files remain untouched.
+
+## Result
+
+Implemented and verified. The browser now waits four seconds for a direct route,
+then relays only to affected lobby peers while continuing to prefer WebRTC for
+any connected peer. The server replaces the claimed sender ID and rejects
+oversized, malformed, over-rate, disabled-microphone and out-of-room frames.
+The receiving side retains distance gain, terrain/foliage occlusion and player
+state handling. The HUD/settings indicate `SERVER RELAY` when it is active.
+
+The first end-to-end run revealed a real lifecycle defect: microphones enabled
+before multiplayer connected were never announced to the new socket. Lobby
+entry now announces an already-live mic, which changed the restrictive-network
+test from 66 sent / 0 received frames to 62 sent / 62 received frames and 15/30
+speaking samples. Push-to-talk, open-mic gating, mimicry, text chat, revive and
+both page-error checks also passed.
+
+Teammate footsteps now have their own mix: 45% base gain, full level only within
+4 m, and silence at 11 m. Local footsteps retain their existing direct mix.
+
+Validation: full `npm test` passes, including the authenticated relay protocol
+regression and the teammate footstep envelope. `tests/browser_multiplayer.py`
+passes completely with two real Chromium clients under the managed policy that
+blocks usable direct WebRTC candidates.

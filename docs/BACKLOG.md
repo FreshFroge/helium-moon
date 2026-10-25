@@ -19,7 +19,6 @@ possible without waiting on each other:
 
 | # | Issue / improvement | Area / likely files | Claimed |
 |---|---|---|---|
-| 27 | Owner report: internet players sometimes cannot hear one another because STUN-only WebRTC has no usable route; teammate footsteps also dominate the mix | `client/audio/voice.js`, `server/server.js`, minimum transport/game footstep wiring, multiplayer/audio regressions | **Codex**: add bounded addressed WebSocket PCM fallback only for peers without connected WebRTC, retain direct Opus as preferred, expose relay state, and lower/shorten teammate footsteps |
 | 26 | Owner-requested two-AI multiplayer playthrough recording: two real network clients, two viewpoints, disclosed AI control, separately authored Claude/Codex post-commentary, final FFmpeg edit | new recorder under `tools/`, recording artifacts outside Git, coordination handoff | **Codex** claims recorder/session capture and final edit; Claude requested to author its commentary and render two distinct generic narrator tracks with its available voice pipeline (never use the Helium Voice clone for an agent narrator) |
 | 25 | Scare X1: visible teammate fear reaction when that teammate sees Helium Voice; head/flashlight snap, restrained recoil, and light response to a hit without changing player authority | teammate snapshots/views plus focused browser checks | **Codex**: claiming `client/entities/views.js`, the minimum snapshot/event wiring required, and new focused tests; Claude's voice/audio and wildlife work remain untouched |
 | 3 | Run every existing browser suite (`browser_playthrough.py`, `browser_encounters.py`, `browser_ground_contacts.py`, `browser_menu_layout.py`, `browser_multiplayer.py`, `browser_sessions.py`) on a second machine and log failures/flakes here | tests only | Claude: `browser_playthrough.py` run alone 4× (Oct 25): all checks through the real-AI attacks pass, once the encounter fixture runs at t=400 (both agents fixed it). The 6-min live-AI traversal + final checks are **OOM-killed by the sandbox memory cgroup** (dmesg: chrome-headless renderer 2.7–3.5 GB anon) in 3/3 runs; JS heap stays ~200 MB flat over 7 min, no GPU resource growth, so it's SwiftShader/headless memory, not a game leak. Needs a real-GPU machine to confirm |
@@ -36,6 +35,7 @@ possible without waiting on each other:
 
 | # | Item | Commit / evidence |
 |---|---|---|
+| 27 | Internet voice fallback and quieter teammate footsteps: direct WebRTC remains preferred; peers without a route receive addressed, rate/size-bounded 16 kHz frames through the authenticated lobby; teammate steps fade by 11 m at 45% gain | Codex; full `npm test`; two real browsers under blocked UDP received 62/62 relay frames with audible speaking detection, PTT/open-mic, proximity mix, mimicry and no page errors |
 | — | First-sighting chase abort fix (Codex), reviewed by Claude | `32c9407`; attacks tests 4 fail before / 9 pass after |
 | — | Retreat silhouette search budget (Codex) | `6fb65d8`; worst tick 136–150 → 45 ms |
 | — | Pacing timeline + report (Claude) | `03b1dc6`, corrected `102160d` |

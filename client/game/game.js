@@ -199,6 +199,10 @@ export class Game {
 
   _onLobby(m) {
     this.lobby = m;
+    // The player may enable their microphone before opening a multiplayer
+    // connection. Announce the current state once the lobby socket exists so
+    // the authenticated fallback can accept voice frames when WebRTC is blocked.
+    if (this.voice.micOn && this.net?.networked) this.net.send({ t: 'voice_state', mic: true });
     this.voice.syncPeers(m.players.map((p) => p.id));
     this.ui.lobby(m, this.myId || this.net.myId());
     if (m.state === 'lobby' && (this.mode === 'playing' || this.mode === 'ended')) this._toLobbyView();
@@ -653,7 +657,7 @@ export class Game {
         if (a.stride > sl && a.state === 0) {
           a.stride = 0;
           const surf = this.world.surfaceAt(a.pos.x, a.pos.z), wd = this.world.waterAt(a.pos.x, a.pos.z);
-          this.audio.footstep({ surface: surf, water: wd !== null ? Math.max(0, wd - this.world.heightAt(a.pos.x, a.pos.z)) : 0, brush: this.world.gridAt(this.world.gBrush, a.pos.x, a.pos.z), loud: a.flags & 4 ? 1 : a.flags & 1 ? 0.15 : 0.45, speed: a.speed }, { x: a.pos.x, y: a.pos.y + 0.1, z: a.pos.z });
+          this.audio.footstep({ teammate: true, surface: surf, water: wd !== null ? Math.max(0, wd - this.world.heightAt(a.pos.x, a.pos.z)) : 0, brush: this.world.gridAt(this.world.gBrush, a.pos.x, a.pos.z), loud: a.flags & 4 ? 0.45 : a.flags & 1 ? 0.04 : 0.18, speed: a.speed }, { x: a.pos.x, y: a.pos.y + 0.1, z: a.pos.z });
         }
       }
       // flashlight

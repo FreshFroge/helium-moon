@@ -39,6 +39,8 @@ export class VoiceSystem {
     this.peers = new Map();
     this.phrases = []; this.seg = null; this.segQuiet = 0; this.phraseSeq = 1;
     this.suppressUntil = 0; this.playing = new Set();
+    this.relayTargets = []; this.relayChunks = []; this.relayN = 0; this.relaySeq = 1;
+    this.relaySent = 0; this.relayReceived = 0;
     this.onChange = null; this.error = '';
     settings.onChange(() => this._settingsChanged());
   }
@@ -92,6 +94,7 @@ export class VoiceSystem {
     this.stream = null; this.track = null; this.sendTrack = null;
     try { this.src && this.src.disconnect(); this.hp && this.hp.disconnect(); } catch (e) { /* */ }
     this._teardownCapture();
+    this.relayTargets = []; this.relayChunks = []; this.relayN = 0;
     this.clearPhrases(true);
     for (const p of this.peers.values()) if (p.sender) p.sender.replaceTrack(null).catch(() => {});
     this.transmitting = false; this.level = 0;
@@ -107,8 +110,9 @@ export class VoiceSystem {
   async _settingsChanged() {
     if (!this.settings.mimicOptIn) this.clearPhrases(true);
     if (this.micOn) {
-      if (this.settings.mimicOptIn && !this.capNode) await this._setupCapture();
-      if (!this.settings.mimicOptIn) this._teardownCapture();
+      // Capture also supplies the server voice fallback when direct WebRTC is
+      // unavailable; mimicry remains separately opt-in below.
+      if (!this.capNode) await this._setupCapture();
       // switch device if changed
       const cur = this.track && this.track.getSettings ? this.track.getSettings().deviceId : '';
       if (this.settings.micDevice && cur && this.settings.micDevice !== cur) { this.disableMic(); await this.enableMic(); }
@@ -117,7 +121,7 @@ export class VoiceSystem {
 
   // ---------------------------------------------------------------- phrase capture (in memory only)
   async _setupCapture() {
-    if (!this.micOn || !this.settings.mimicOptIn || this.capNode) return;
+    if (!this.micOn || this.capNode) return;
     const ctx = this.ctx;
     try {
       if (!this._workletLoaded) {
@@ -148,7 +152,10 @@ export class VoiceSystem {
     // only the local microphone is ever captured, only while transmitting, and never while
     // mimicry/signature playback is audible (so the game cannot record its own output)
     const now = this.ctx.currentTime;
-    const ok = this.settings.mimicOptIn && this.micOn && this.transmitting && now > this.suppressUntil && this.inGame;
+    const live = this.micOn && this.transmitting && this.inGame;
+    if (live && this.relayTargets.length) this._captureRelay(block);
+    else if (this.relayN) { this.relayChunks = []; this.relayN = 0; }
+    const ok = this.settings.mimicOptIn && live && now > this.suppressUntil;
     const ratio = this.ctx.sampleRate / CAP_SR;
     if (ok && this.gateOpen) {
       if (!this.seg) this.seg = { chunks: [], n: 0 };
@@ -160,6 +167,27 @@ export class VoiceSystem {
       this.segQuiet += block.length / this.ctx.sampleRate;
       if (this.segQuiet > 0.3 || !ok) this._closeSegment();
     }
+  }
+
+  _captureRelay(block) {
+    const ratio = this.ctx.sampleRate / CAP_SR, n = Math.floor(block.length / ratio);
+    if (!n) return;
+    const ds = new Float32Array(n);
+    for (let i = 0; i < n; i++) ds[i] = block[Math.floor(i * ratio)];
+    this.relayChunks.push(ds); this.relayN += n;
+    if (this.relayN < 1600) return; // ~100 ms packets: low latency without flooding the server
+    const pcm = new Float32Array(this.relayN); let o = 0;
+    for (const c of this.relayChunks) { pcm.set(c, o); o += c.length; }
+    this.relayChunks = []; this.relayN = 0;
+    let head = new TextEncoder().encode(JSON.stringify({ k: 'voice', to: this.relayTargets, sr: CAP_SR, seq: this.relaySeq++ }));
+    if (head.length % 2) head = new TextEncoder().encode(new TextDecoder().decode(head) + ' '); // align Int16 payload
+    const buf = new ArrayBuffer(4 + head.length + pcm.length * 2);
+    new DataView(buf).setUint32(0, head.length, true);
+    new Uint8Array(buf, 4, head.length).set(head);
+    const out = new Int16Array(buf, 4 + head.length, pcm.length);
+    for (let i = 0; i < pcm.length; i++) out[i] = clamp(pcm[i], -1, 1) * 32767;
+    this.net.binary(buf);
+    this.relaySent++;
   }
 
   _closeSegment() {
@@ -209,7 +237,12 @@ export class VoiceSystem {
     } else { this.transmitting = false; this.level = 0; }
     // proximity mix for every remote voice
     const ctxT = this.ctx ? this.ctx.currentTime : 0;
+    const relayTargets = []; let relayChanged = false;
     for (const [id, p] of this.peers) {
+      const direct = p.pc.connectionState === 'connected';
+      const relay = !direct && now - p.createdAt > 4000;
+      if (relay) relayTargets.push(id);
+      if (relay !== p.relay) { p.relay = relay; relayChanged = true; }
       if (!p.e) continue;
       const pl = c.players && c.players.get(id);
       let gain = 0.85, lp = 18000, vis = 1;
@@ -234,8 +267,10 @@ export class VoiceSystem {
       } else if (p.e) { p.e.setPos(c.me ? c.me.x : 0, c.me ? c.me.y : 0, c.me ? c.me.z - 0.5 : 0); }
       p.e.out.gain.setTargetAtTime(gain, ctxT, 0.08);
       p.e.lp.frequency.setTargetAtTime(lp, ctxT, 0.08);
-      p.speaking = p.analyser ? this._peerLevel(p) > 0.15 : false;
+      p.speaking = (p.analyser ? this._peerLevel(p) > 0.15 : false) || (p.relayUntil || 0) > ctxT;
     }
+    this.relayTargets = relayTargets;
+    if (relayChanged) this._notify();
   }
 
   _peerLevel(p) {
@@ -260,14 +295,18 @@ export class VoiceSystem {
   _makePeer(id, initiator) {
     const fromServer = typeof window !== 'undefined' && Array.isArray(window.HM_ICE_SERVERS) && window.HM_ICE_SERVERS.length ? window.HM_ICE_SERVERS : null;
     const pc = new RTCPeerConnection({ iceServers: fromServer || ICE });
-    const p = { id, pc, sender: null, e: null, initiator, el: null, analyser: null, speaking: false };
+    const p = { id, pc, sender: null, e: null, initiator, el: null, analyser: null, speaking: false,
+      createdAt: performance.now(), relay: false, relayAt: 0, relayUntil: 0 };
     this.peers.set(id, p);
     const tr = pc.addTransceiver('audio', { direction: 'sendrecv' });
     p.sender = tr.sender;
     this._attachTrack(p);
     pc.onicecandidate = (e) => { if (e.candidate) this.net.sig(id, { type: 'ice', c: e.candidate }); };
     pc.ontrack = (e) => this._onRemoteTrack(p, e.streams[0] || new MediaStream([e.track]));
-    pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed') { this.dropPeer(id); } };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') { p.relay = false; p.relayAt = 0; }
+      this._notify();
+    };
     if (initiator) {
       pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => this.net.sig(id, { type: 'offer', sdp: pc.localDescription })).catch((e) => console.warn('offer failed', e));
     }
@@ -300,16 +339,21 @@ export class VoiceSystem {
   }
 
   _onRemoteTrack(p, stream) {
-    if (p.e) return;
+    if (p.src) return;
     // Chrome only feeds remote WebRTC audio into Web Audio if the stream is also attached to a media element
     const el = new Audio(); el.srcObject = stream; el.muted = true; el.play().catch(() => {});
     p.el = el;
     const ctx = this.ctx;
     const src = ctx.createMediaStreamSource(stream);
-    p.e = this.audio.emitter({ bus: 'voice', ref: 1000, rolloff: 1, reverb: 0.06 });
+    this._ensurePeerEmitter(p);
     p.analyser = ctx.createAnalyser(); p.analyser.fftSize = 512; p.tb = new Float32Array(512);
     src.connect(p.e.input); src.connect(p.analyser);
     p.src = src;
+  }
+
+  _ensurePeerEmitter(p) {
+    if (!p.e) p.e = this.audio.emitter({ bus: 'voice', ref: 1000, rolloff: 1, reverb: 0.06 });
+    return p.e;
   }
 
   dropPeer(id) {
@@ -355,13 +399,25 @@ export class VoiceSystem {
     try {
       const dv = new DataView(buf), hl = dv.getUint32(0, true);
       const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hl)));
-      if (head.k !== 'mimic' || !(head.sr > 4000 && head.sr <= 48000)) return;
+      if (!(head.sr > 4000 && head.sr <= 48000)) return;
       const off = 4 + hl, n = Math.floor((buf.byteLength - off) / 2);
       if (n <= 0 || n > head.sr * 8) return;
       const i16 = new Int16Array(buf.slice(off, off + n * 2));
       const pcm = new Float32Array(n); for (let k = 0; k < n; k++) pcm[k] = i16[k] / 32767;
-      this.playMimic(pcm, head.sr, head);
+      if (head.k === 'voice') this._playRelayedVoice(head, pcm);
+      else if (head.k === 'mimic') this.playMimic(pcm, head.sr, head);
     } catch (e) { /* malformed */ }
+  }
+
+  _playRelayedVoice(head, pcm) {
+    const p = this.peers.get(head.from);
+    if (!p || p.pc.connectionState === 'connected' || head.sr !== CAP_SR) return;
+    this.relayReceived++;
+    const ctx = this.ctx, e = this._ensurePeerEmitter(p), src = ctx.createBufferSource();
+    src.buffer = this.audio.toBuffer(pcm, head.sr); src.connect(e.input);
+    let at = Math.max(ctx.currentTime + 0.04, p.relayAt || 0);
+    if (at - ctx.currentTime > 0.45) at = ctx.currentTime + 0.04; // shed stale network backlog
+    src.start(at); p.relayAt = at + src.buffer.duration; p.relayUntil = p.relayAt + 0.08;
   }
 
   playMimic(pcm, sr, at) {
@@ -378,9 +434,12 @@ export class VoiceSystem {
   endSession() { this.clearPhrases(false); this.seg = null; }
 
   status() {
+    let direct = 0, relayed = 0;
+    for (const p of this.peers.values()) { if (p.pc.connectionState === 'connected') direct++; else if (p.relay) relayed++; }
     return {
       mic: this.micState, transmitting: this.transmitting, level: this.level, mode: this.settings.voiceMode,
-      mimic: this.settings.mimicOptIn && this.micOn, phrases: this.phrases.length, error: this.error,
+      mimic: this.settings.mimicOptIn && this.micOn, phrases: this.phrases.length, direct, relayed,
+      relaySent: this.relaySent, relayReceived: this.relayReceived, error: this.error,
     };
   }
 

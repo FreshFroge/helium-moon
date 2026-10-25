@@ -104,12 +104,14 @@ async def main():
         lobby_txt = await B.inner_text('#panel')
         ok('Alpha' in lobby_txt and 'Bravo' in lobby_txt, 'lobby screen lists both players')
         # WebRTC voice connection
+        direct_voice = False
         try:
             await A.wait_for_function("[...game.voice.peers.values()].some(p => p.pc.connectionState === 'connected')", timeout=20000)
             await B.wait_for_function("[...game.voice.peers.values()].some(p => p.pc.connectionState === 'connected' && p.e)", timeout=20000)
+            direct_voice = True
             ok(True, 'WebRTC voice connected peer-to-peer (Opus)')
         except Exception as e:
-            ok(False, 'WebRTC voice connected: ' + str(e)[:80])
+            print('      direct WebRTC unavailable; checking secure server voice fallback:', str(e)[:80])
             policy_file = '/etc/chromium/policies/managed/misc.json'
             try:
                 with open(policy_file) as policy:
@@ -122,9 +124,13 @@ async def main():
                 print(f'      {name} RTC diagnostics:', json.dumps(await rtc_diagnostics(pg)))
                 print(f'      {name} signalling warnings:', [line for line in pg.logs if 'offer failed' in line or 'voice signalling error' in line])
         codec = await received_codec(B)
-        if not codec:
+        if direct_voice and not codec:
             await asyncio.sleep(2); codec = await received_codec(B)
-        ok(codec and 'opus' in codec.lower(), f'voice codec {codec}')
+        if direct_voice: ok(codec and 'opus' in codec.lower(), f'voice codec {codec}')
+        else:
+            await pump(pages, 5, 4)
+            relays = [await pg.evaluate("game.voice.status().relayed") for pg in pages]
+            ok(all(v > 0 for v in relays), f'voice falls back to the authenticated lobby relay when direct WebRTC has no route ({relays})')
         await A.click('#lb-start')
         for pg in pages: await pg.wait_for_function("game.mode === 'playing'", timeout=10000)
         ok(True, 'host started the game; both clients in the session')
@@ -150,8 +156,10 @@ async def main():
             await pump(pages, 0.15, 3)
             lvl.append(await A.evaluate("game.voice.level")); tx.append(await A.evaluate("game.voice.transmitting"))
             heard.append(await B.evaluate("game.voice.isSpeaking([...game.voice.peers.keys()][0])"))
+        if not direct_voice:
+            print('      relay diagnostics:', [await pg.evaluate("game.voice.status()") for pg in pages])
         ok(max(lvl) > 0.3 and any(tx) and not all(tx), f'open mic gates on speech (level peak {max(lvl):.2f}, transmitting {sum(tx)}/30 samples)')
-        ok(any(heard), f'teammate hears the voice over WebRTC ({sum(heard)}/30 samples speaking)')
+        ok(any(heard), f"teammate hears the voice over {'WebRTC' if direct_voice else 'server fallback'} ({sum(heard)}/30 samples speaking)")
         btx = await B.evaluate("game.voice.transmitting")
         ok(not btx, 'push-to-talk player is silent while the key is up')
         await B.keyboard.down('v'); await pump(pages, 0.4, 3)

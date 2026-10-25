@@ -35,6 +35,8 @@ export const CONFIG = {
     STAMINA_MAX: 9, STAMINA_REGEN: 1.15, STAMINA_REGEN_DELAY: 1.2,
     STEP_HEIGHT: 0.42, MUD_SLOW: 0.72, WATER_SLOW: 0.55, BRUSH_SLOW: 0.78,
     MAX_HEALTH: 2,
+    // Teammates remain locatable nearby without sounding like another threat.
+    REMOTE_STEP_FADE_START: 4, REMOTE_STEP_MAX_DISTANCE: 11, REMOTE_STEP_GAIN: 0.45,
   },
   FLASHLIGHT: {
     BATTERY_SECONDS: 540, BATTERY_PICKUP: 0.55, LOW: 0.18,

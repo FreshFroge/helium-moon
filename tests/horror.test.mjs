@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CONFIG } from '../shared/config.js';
-import { terrorAtDistance, horrorCues, distanceGain, creatureFootstepCue, skunkVocalCue } from '../shared/horror.js';
+import { terrorAtDistance, horrorCues, distanceGain, creatureFootstepCue, teammateFootstepCue, skunkVocalCue } from '../shared/horror.js';
 
 const cueAt = (meters) => horrorCues(terrorAtDistance(meters));
 const footstepAt = (creature, meters, speed) => {
@@ -100,7 +100,11 @@ test('moving listener gain reaches actual zero independently of the panner dista
   assert.equal(gains[4], gains[0]);
 });
 
-test('teammate and local footsteps do not inherit creature attenuation', () => {
+test('teammate footsteps use a quieter short-range mix while local steps remain direct', () => {
   assert.equal(creatureFootstepCue(undefined, 2), null);
   assert.equal(creatureFootstepCue('teammate', 5), null);
+  const cue=teammateFootstepCue();
+  assert.equal(distanceGain(cue.fadeStart, cue),1);
+  assert.equal(distanceGain(cue.maxDistance, cue),0);
+  assert.ok(cue.gain<CONFIG.HV.FOOTSTEP_CHASE_GAIN);
 });

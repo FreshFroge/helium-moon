@@ -146,7 +146,7 @@ export class UI {
       body = `<div class="row"><span>Microphone</span><span class="mic-state ${live ? 'on' : ''}">${st}</span>
           <button class="small" data-mic="${live ? 'off' : 'on'}">${live ? 'Turn off' : 'Enable microphone'}</button></div>
         ${window.HM_EMBEDDED ? '<p class="hint warn">This hosted page cannot open a microphone. Voice chat and voice mimicry work in the downloadable build.</p>' : ''}
-        ${v.error ? `<p class="hint warn">${esc(v.error)}</p>` : '<p class="hint">The microphone is only opened when you press the button above, and only used for proximity voice chat (and mimicry, if you opt in below). Nothing is transmitted unless you are talking.</p>'}
+        ${v.error ? `<p class="hint warn">${esc(v.error)}</p>` : `<p class="hint">The microphone is only opened when you press the button above, and only used for proximity voice chat (and mimicry, if you opt in below). Nothing is transmitted unless you are talking.${v.relayed ? ` ${v.relayed} voice connection${v.relayed === 1 ? '' : 's'} using the secure server relay because a direct path was unavailable.` : ''}</p>`}
         <label class="row"><span>Input device</span><select data-k="micDevice" id="mic-devices"><option value="">Default</option></select></label>
         <label class="row"><span>Mode</span><select data-k="voiceMode"><option value="ptt" ${s.voiceMode === 'ptt' ? 'selected' : ''}>Push to talk (${esc(s.keyName(s.bindings.talk))})</option><option value="open" ${s.voiceMode === 'open' ? 'selected' : ''}>Open mic (voice activated)</option></select></label>
         ${slider('micSensitivity', 'Open-mic sensitivity', 0, 1, 0.01, (v2) => Math.round(v2 * 100) + '%')}
@@ -211,7 +211,7 @@ export class UI {
     const m = this.el.mic;
     m.classList.toggle('hidden', st.mic !== 'live');
     m.classList.toggle('tx', !!st.transmitting);
-    m.innerHTML = `<span class="dot"></span>MIC · ${st.mode === 'ptt' ? 'PUSH TO TALK' : 'OPEN'}${st.mimic ? ' · MIMICRY ON' : ''}`;
+    m.innerHTML = `<span class="dot"></span>MIC · ${st.mode === 'ptt' ? 'PUSH TO TALK' : 'OPEN'}${st.relayed ? ' · SERVER RELAY' : ''}${st.mimic ? ' · MIMICRY ON' : ''}`;
     const lvl = $('#mic-level'); if (lvl) lvl.style.width = `${Math.round(st.level * 100)}%`;
   }
 

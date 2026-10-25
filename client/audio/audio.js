@@ -8,7 +8,7 @@ import { PLAYER_BREATH_FILE, recordedBreathPhrase } from './playerBreath.js';
 import { impulse, rngFor } from './dsp.js';
 import { assetUrl } from '../render/textures.js';
 import { clamp, lerp, smoothstep } from '../../shared/math.js';
-import { horrorCues, distanceGain, creatureFootstepCue, skunkVocalCue } from '../../shared/horror.js';
+import { horrorCues, distanceGain, creatureFootstepCue, teammateFootstepCue, skunkVocalCue } from '../../shared/horror.js';
 import { SURFACE } from '../../shared/world.js';
 
 const SURF_NAME = { [SURFACE.LITTER]: 'litter', [SURFACE.DIRT]: 'dirt', [SURFACE.MUD]: 'mud', [SURFACE.GRASS]: 'grass', [SURFACE.SILT]: 'silt', [SURFACE.WATER]: 'water', [SURFACE.GRAVEL]: 'gravel', [SURFACE.WOOD]: 'wood', [SURFACE.ASPHALT]: 'asphalt' };
@@ -427,7 +427,7 @@ export class AudioEngine {
     // than positional sounds. Include brush so it cannot dominate the dry step.
     const localGain = pos ? 1 : 0.25;
     const g = (0.25 + info.loud * 0.55) * (pos ? 1.3 : 0.75) * localGain;
-    const cue = pos ? creatureFootstepCue(info.creature, info.speed) : null;
+    const cue = pos ? (info.teammate ? teammateFootstepCue() : creatureFootstepCue(info.creature, info.speed)) : null;
     const sourceGain = cue ? cue.gain : 1;
     const rate = 0.92 + Math.random() * 0.16;
     if (pos) this.play(this.lib[`fs_${name}${k}`], { pos, gain: g * sourceGain, rate, ref: 3, reverb: cue ? 0.07 : 0.15, range: cue });

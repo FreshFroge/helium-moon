@@ -42,7 +42,13 @@ export function creatureFootstepCue(creature, speed) {
     const C = CONFIG.SF;
     return { fadeStart: C.FOOTSTEP_FADE_START, maxDistance: C.FOOTSTEP_MAX_DISTANCE, gain: C.FOOTSTEP_GAIN };
   }
-  return null; // local and teammate footsteps retain their normal mix
+  return null; // local footsteps retain their normal first-person mix
+}
+
+export function teammateFootstepCue() {
+  const C = CONFIG.PLAYER;
+  return { fadeStart: C.REMOTE_STEP_FADE_START, maxDistance: C.REMOTE_STEP_MAX_DISTANCE,
+    gain: C.REMOTE_STEP_GAIN };
 }
 
 export function skunkVocalCue(kind) {

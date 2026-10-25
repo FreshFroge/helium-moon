@@ -66,9 +66,9 @@ release ZIP and Claude's separately hosted page do not update automatically.
 node server/server.js          # Node 18+; no npm install needed
 ```
 
-Open `http://localhost:8080` (friends on your network use `http://<your-LAN-IP>:8080`). One player chooses *Multiplayer → Create lobby* and shares the 5-letter code; others *Join*. The host starts the game. Over the internet you need a port-forward or a tunnel to port 8080 (and for voice chat, players behind strict NATs may need a TURN server; only public STUN is configured).
+Open `http://localhost:8080` (friends on your network use `http://<your-LAN-IP>:8080`). One player chooses *Multiplayer → Create lobby* and shares the 5-letter code; others *Join*. The host starts the game. Over the internet you need a port-forward or a tunnel to port 8080. Voice tries direct WebRTC first and automatically uses the same authenticated game connection when a firewall or strict NAT blocks the direct route.
 
-To relay voice for players behind strict NATs, start the server with a TURN service, e.g.
+For lower-latency direct voice across strict NATs, you can optionally start the server with a TURN service, e.g.
 `TURN_URL=turn:turn.example.com:3478 TURN_USERNAME=user TURN_CREDENTIAL=pass node server/server.js`
 (or `HM_ICE_SERVERS='[{"urls":"turn:...","username":"...","credential":"..."}]'`). The server passes the list to every
 client in its welcome message; TURN credentials therefore reach players' browsers, so prefer short-lived ones.
@@ -96,7 +96,7 @@ WASD move · Shift sprint · C / Ctrl crouch · Space jump · E interact (hold t
 ## Microphone, voice chat and mimicry (privacy)
 
 - The microphone is only requested when you press **Enable microphone** in Settings → Voice & Mic. Nothing is transmitted unless you are holding push-to-talk (default) or the open-mic gate is open. Mute = turn the microphone off.
-- Voice chat is peer-to-peer WebRTC (Opus), mixed by distance: clear within 5 m, quieter 10–20 m, muffled beyond, silent past 46 m, low-passed when trees or terrain are in the way. The creatures react to how loud you are, never to what you say (no speech recognition).
+- Voice chat prefers peer-to-peer WebRTC (Opus). If a peer has no direct route after four seconds, live 16 kHz audio is addressed only to that peer through the authenticated lobby WebSocket; it is not stored. Both paths use the same proximity mix: clear within 5 m, quieter 10–20 m, muffled beyond, silent past 46 m, and low-passed when trees or terrain are in the way. The creatures react to how loud you are, never to what you say (no speech recognition).
 - **Voice mimicry is a separate opt-in.** When on, 0.9–4 s phrases you say while transmitting are kept in browser memory only (max 6, 2-minute expiry). The server only ever sees a phrase id and duration. When the sim picks one, your own browser pitch-shifts and distorts it, plays it from a concealed spot 15–35 m behind the listener, shares that processed clip with your lobby once, and deletes the original. Nothing is saved, uploaded to any speech service, or used for training. Turning mimicry or the microphone off, or leaving the session, deletes everything immediately. Capture is suspended while mimicry or the signature line is playing, so the game cannot record its own output. Echo cancellation is requested; use headphones.
 
 ## Status and validation
@@ -133,19 +133,17 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium python3 tests/browser_playthrough.py
 - Session regressions exercise actual socket closure and host migration when
   changing modes, rejected joins, retries and leaving.
 - Two actual browser clients verify player synchronization, text chat, revive,
-  microphone gating, phrase capture/opt-out and processed mimic clip relay.
-  **Three voice checks remain blocked in the cloud browser:** connection,
-  received Opus and audible remote speech. The managed Chromium policy disables
-  non-proxied UDP, so there are no usable ICE candidate pairs despite successful
-  offer/answer signalling. Those assertions remain enabled and the test exits
-  with failure; voice is not claimed verified here.
+  microphone gating, phrase capture/opt-out and processed mimic clip relay. The
+  managed cloud Chromium cannot create a direct UDP route; that case now verifies
+  the automatic lobby relay, audible remote activity, proximity filtering and
+  push-to-talk/open-mic behavior with no page errors.
 
 Remaining limitations:
 
 - Real-GPU frame rate and subjective balance, sound quality and animation feel
   still need desktop playtesting. Breathing is now a sourced CC0 recording.
-- Cross-network voice needs testing on unrestricted browsers; strict NATs may
-  require a TURN server. The managed test-browser restriction was preserved.
+- Direct WebRTC and TURN still need unrestricted cross-network desktop testing;
+  the authenticated lobby fallback passed under the managed browser restriction.
 - The original hosted page cannot use multiplayer/microphone; use this source
   build on the Node server. Microphone access on non-localhost addresses normally
   requires HTTPS; a LAN address served over plain HTTP may play co-op without mic.

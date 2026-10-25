@@ -111,7 +111,7 @@ function startGame(room) {
 
 // Fixed-window rate limit per connection and message kind. Generous for real play
 // (inputs at 20 Hz, ICE candidate bursts), but stops one client from flooding a lobby.
-const LIMITS = { in: [80, 1000], act: [30, 1000], chat: [6, 5000], sig: [300, 10000], voice_state: [10, 10000], bin: [4, 10000], lobby: [20, 10000] };
+const LIMITS = { in: [80, 1000], act: [30, 1000], chat: [6, 5000], sig: [300, 10000], voice_state: [10, 10000], bin: [4, 10000], voice_bin: [100, 10000], lobby: [20, 10000] };
 function allow(member, kind) {
   const [max, per] = LIMITS[kind] || [60, 1000], now = Date.now();
   const b = member.rate[kind] || (member.rate[kind] = { n: 0, t: now });
@@ -123,14 +123,37 @@ function allow(member, kind) {
 // to that same player in the last 15 s, once per event. Without this, a modified
 // client could make every teammate's game play arbitrary audio.
 const MIMIC_RELAY_MAX = 320000;   // 8 s of 16 kHz int16 plus header
+function audioHeader(data) {
+  if (!data || data.length < 8) return null;
+  const hl = data.readUInt32LE(0);
+  if (hl < 2 || hl > 2048 || 4 + hl > data.length) return null;
+  try { return { head: JSON.parse(data.subarray(4, 4 + hl).toString('utf8')), hl }; } catch (e) { return null; }
+}
 function mimicRelayAllowed(room, member, data) {
   if (!room || !room.mimicOk || data.length < 8 || data.length > MIMIC_RELAY_MAX) return false;
-  const hl = data.readUInt32LE(0);
-  if (hl < 2 || hl > 2048 || 4 + hl > data.length) return false;
-  let head; try { head = JSON.parse(data.subarray(4, 4 + hl).toString('utf8')); } catch (e) { return false; }
+  const parsed = audioHeader(data); if (!parsed) return false;
+  const { head } = parsed;
   const ok = head && head.k === 'mimic' && room.mimicOk.get(head.mid);
   if (!ok || ok.owner !== member.id || Date.now() - ok.t > 15000) return false;
   room.mimicOk.delete(head.mid);
+  return true;
+}
+
+// Direct WebRTC is preferred. If it cannot cross a restrictive NAT/firewall,
+// relay short 16 kHz microphone frames through the lobby WebSocket. The server
+// replaces identity fields and applies strict destination, size and rate bounds.
+function relayVoiceFrame(room, member, data, parsed) {
+  if (!room || !member.voiceOn || !parsed || data.length > 7000) return false;
+  const { head, hl } = parsed;
+  if (!head || head.k !== 'voice' || head.sr !== 16000 || !Array.isArray(head.to) || head.to.length > 5) return false;
+  const payload = data.subarray(4 + hl);
+  if (payload.length < 320 || payload.length > 6000 || payload.length % 2) return false;
+  const targets = [...new Set(head.to)].map((id) => room.members.get(String(id))).filter((m) => m && m !== member);
+  if (!targets.length) return false;
+  const clean = Buffer.from(JSON.stringify({ k: 'voice', from: member.id, sr: 16000, seq: Number(head.seq) >>> 0 }));
+  const out = Buffer.allocUnsafe(4 + clean.length + payload.length);
+  out.writeUInt32LE(clean.length, 0); clean.copy(out, 4); payload.copy(out, 4 + clean.length);
+  for (const target of targets) target.conn.send(out);
   return true;
 }
 
@@ -156,12 +179,17 @@ function leave(member) {
 }
 
 attachWebSocket(server, '/ws', (conn, req) => {
-  const member = { id: 'p' + (nextId++), name: 'Visitor', conn, room: null, ready: false, alive: true, rate: {} };
+  const member = { id: 'p' + (nextId++), name: 'Visitor', conn, room: null, ready: false, alive: true, voiceOn: false, rate: {} };
   send(conn, { t: 'welcome', id: member.id, version: VERSION, maxPlayers: CONFIG.NET.MAX_PLAYERS, iceServers: ICE_SERVERS });
   conn.on('message', (data, binary) => {
     if (binary) {
-      // mimicry audio relay: [u32 header length][json header][pcm payload]
       const room = member.room;
+      const parsed = audioHeader(data);
+      if (parsed?.head?.k === 'voice') {
+        if (allow(member, 'voice_bin')) relayVoiceFrame(room, member, data, parsed);
+        return;
+      }
+      // mimicry audio relay: [u32 header length][json header][pcm payload]
       if (!allow(member, 'bin') || !mimicRelayAllowed(room, member, data)) return;
       for (const m of room.members.values()) if (m !== member) m.conn.send(data);
       return;
@@ -200,7 +228,7 @@ attachWebSocket(server, '/ws', (conn, req) => {
       case 'chat': if (room) broadcast(room, { t: 'chat', from: member.id, name: member.name, text: String(m.text || '').slice(0, 140) }); break;
       case 'sig': if (room) { const to = room.members.get(m.to); if (to) send(to.conn, { t: 'sig', from: member.id, data: m.data }); } break;
       case 'debug': if (TEST_MODE && room && room.sim) debugCmd(room, member, m); break;
-      case 'voice_state': if (room) broadcast(room, { t: 'voice_state', id: member.id, mic: !!m.mic }, member); break;
+      case 'voice_state': member.voiceOn = !!m.mic; if (room) broadcast(room, { t: 'voice_state', id: member.id, mic: member.voiceOn }, member); break;
       default: break;
     }
   });
