@@ -108,3 +108,17 @@ decision 1). Median first on-screen sighting 1:22 → 3:57; he's never seen in
 9/16 sessions; earliest 1:51. Threat events per 5-min window 9 / 13 / 11.
 Losses 0 → 3. Three sightings still fall inside the 210 s dread period (seed
 1002 reproduces); see `docs/handoffs/CLAUDE_REVIEW_CODEX_A_D.md`.
+
+## Update: October 25 morning (Claude), after the overnight fixes
+
+Same 16 scripted sessions (`tests/pacing.test.mjs`). Threat events are counted
+per 5-minute window and summed over all 16 sessions.
+
+| build | 0–5 | 5–10 | 10–15 | chases | Helium Voice hits | sessions lost | sessions with no chase |
+|---|---|---|---|---|---|---|---|
+| `30c172a` (before the hunt rules) | 12 | 48 | 27 | 35 | 21 | 5 | 3 |
+| `c197073` (+ hunt rules, #20 nav fixes) | 13 | 71 | 43 | 35 | 31 | 8 | 2 |
+| `e5a7928` (+ unseen relocation) | 15 | 67 | **56** | 35 | **34** | 7 | **0** |
+
+The late window now escalates (27 → 56) and no session goes without a hunt.
+The opening dread is unchanged: all intro and dread invariants still pass.
