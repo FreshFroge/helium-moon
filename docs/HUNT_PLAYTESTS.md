@@ -4,6 +4,28 @@ Two rounds of 10 playtests, both requested by the owner (October 25, 2026).
 **Round 2** runs the new hunt rules; **round 1**, kept below, is the build before
 them. The same 10 seeds and team mixes are used, so the rounds compare directly.
 
+## Round 3: Helium Voice can relocate unseen ("teleport", `e5a7928`)
+
+This is the owner's teleport request, built as unseen relocation:
+- He vanishes and reappears 35–60 m **ahead** of the player, at a spot nobody
+  can see, and only while nobody has him on screen.
+- **Triggers:** losing sight of the hunted player for 4 s mid-hunt (once per
+  hunt), or closing in on a player more than 70 m away.
+- **Limits:** never during the dread, never into spawn, never within 12 m of
+  anyone. The cooldown runs from 150 s down to 60 s with escalation.
+
+Every rule is checked in `tests/relocate.test.mjs`.
+
+Same 10 seeds and bots. Since round 2, the nav and trunk fixes (Oct 25 morning)
+also landed, so "before" here is the build just before relocation:
+
+| | before relocation | **with relocation** |
+|---|---|---|
+| Hunts | 21 | **27** |
+| Ended by the 7-ft flashlight / by a hit | 16 / 5 | 19 / **8** |
+| Relocations | – | **31** (about 3 per game) |
+| Results | 7 escaped, 3 out of time; 1 death | 5 escaped, 3 out of time, **2 games where everyone died**; 3 deaths |
+
 ## Round 2: new hunt rules (owner-approved, October 25)
 
 Rules under test:
