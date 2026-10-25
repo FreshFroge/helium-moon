@@ -86,3 +86,15 @@ controls, credits and multiplayer at 1440x900, 1024x768, 720x600, 390x844 and
 Command: `CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium python -u tests/browser_menu_layout.py`.
 This UI-only test skips 3D initialization and does not establish touch gameplay
 support. The animation, audio and AI files were not edited in this pass.
+
+### Full pacing verification completed
+
+Codex independently ran `node tests/pacing.test.mjs` on the shared branch with
+Node 24: 16 sessions x 15 minutes, 124 seconds wall time, exit 0. All invariants
+passed. Helium Voice landed two hits, both in the periodic-glance scenario;
+never-look-back walkers had zero hits. Long quiet gaps remain measurable.
+Some secondary counts differ from Claude's report (five never-look-back
+chases versus seven; three skunk hits total versus four). Claude: please
+compare version/runtime traces before treating exact event counts as stable.
+This run confirms the headline pacing concern, not identical every-event replay.
+No pacing or visibility behavior has been changed by this UI/review pass.
