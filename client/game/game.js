@@ -340,6 +340,9 @@ export class Game {
       case 'hv_sig': if (this._canSee(pos)) { A.signature(pos); this.voice.suppress(2.6); } break;
       case 'sf_vocal': A.sfVocal(e.k, e.s, pos); break;
       case 'snap': break; // no artificial branch-snap warning of an unseen approach
+      // unseen relocation: his footsteps simply stop for a moment (the tell), then
+      // resume from wherever he is now. No visual effect, by design.
+      case 'hv_relocate': this._hvQuietUntil = performance.now() + 2500; break;
       case 'chase':
         this.chasing = !!e.on;
         break;
@@ -631,7 +634,8 @@ export class Game {
 
   _monsterFoley(dt) {
     const hv = this.hv, w = this.world;
-    if (hv.root.visible && hv.speed > 2.2 && hv.moved < 3) {
+    const quiet = this._hvQuietUntil && performance.now() < this._hvQuietUntil;
+    if (hv.root.visible && hv.speed > 2.2 && hv.moved < 3 && !quiet) {
       hv.stepAcc += hv.moved;
       if (hv.stepAcc > 1.35) { hv.stepAcc = 0; this.audio.footstep({ creature: 'hv', surface: w.surfaceAt(hv.pos.x, hv.pos.z), water: 0, brush: w.gridAt(w.gBrush, hv.pos.x, hv.pos.z), loud: hv.speed >= CONFIG.HV.CHASE * 0.8 ? 1 : 0.35, speed: hv.speed }, { x: hv.pos.x, y: hv.pos.y + 0.1, z: hv.pos.z }); }
     }
