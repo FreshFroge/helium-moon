@@ -13,6 +13,10 @@ skunk and objective props all animate from the playtest data. The local player
 is parked at spawn with the light off. A chase camera rides behind Helium
 Voice's shoulder, framing him and the hunted player. Frames are read straight
 off the WebGL canvas (no HUD) and encoded with ffmpeg. No audio.
+
+Rendering happens in chunks of --chunk frames, each in a fresh browser, and is
+resumable with --frames-dir, because software (SwiftShader) rendering can be
+killed for memory on small machines. Run it with nothing else heavy alongside it.
 """
 import argparse, asyncio, base64, json, os, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -46,13 +50,13 @@ SETUP = r"""async ({frames, target, exposure, height, treeFar}) => {
     const side = new THREE_V(dir.z, 0, -dir.x);
     // over-the-shoulder; step in closer when a trunk would block the view of him
     let want = null;
-    for (const back of [3.2, 2.6, 2.0, 1.4]) {
+    for (const back of [2.4, 1.9, 1.4]) {   // close: little room for undergrowth/trunks between camera and him
       const c = hp.clone().addScaledVector(dir, -back).addScaledVector(side, 0.3 * back);
       c.y = Math.max(hp.y + R.height, w.heightAt(c.x, c.z) + 1.2);   // above the undergrowth, below most crowns
       want = c;
       if (w.lineOfSight(c.x, c.y, c.z, hp.x, hp.y + 1.2, hp.z, { brushK: 0.1 }) > 0.7) break;
     }
-    const look = hp.clone().addScaledVector(dir, Math.min(dist * 0.45, 9)); look.y = hp.y + 0.9;
+    const look = hp.clone().addScaledVector(dir, Math.min(dist * 0.6, 7)); look.y = hp.y + 1.0;
     if (!R.cam) { R.cam = want.clone(); R.look = look.clone(); }
     const k = 1 - Math.exp(-dt * 2.6);
     R.cam.lerp(want, k); R.look.lerp(look, 1 - Math.exp(-dt * 4));
@@ -78,40 +82,60 @@ STEP = r"""({T, dt, grab}) => {
 }"""
 
 
-async def main(a):
-    clip = json.load(open(a.clip))
-    frames = clip['frames']
-    t0 = frames[0]['t']
-    start = a.start if a.start is not None else t0 + 1.5
-    end = a.end if a.end is not None else frames[-1]['t']
+async def render_chunk(pw, a, frames, t0, start, dt, k0, k1, out_dir):
+    """Render frames k0..k1-1 (frame k is game time start + (k+1)*dt) in a fresh browser."""
     w, h = map(int, a.size.split('x'))
-    out_dir = Path(tempfile.mkdtemp(prefix='hunt_frames_'))
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
+    browser = await pw.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
+    try:
         page = await browser.new_page(viewport={'width': w, 'height': h})
         page.on('pageerror', lambda e: print('PAGE ERROR', e, file=sys.stderr))
         await page.goto(f'{a.url}/?manual=1&q={a.quality}&msaa=0')
         await page.wait_for_function('window.READY || window.LOAD_ERROR', timeout=600000)
-        info = await page.evaluate(SETUP, {'frames': frames, 'target': a.target, 'exposure': a.exposure, 'height': a.height, 'treeFar': a.tree_far})
-        print('replay', info, flush=True)
-        dt = 1 / a.fps
-        # warm up from the first recorded snapshot (interpolation buffer, camera smoothing, fade-in)
+        await page.evaluate(SETUP, {'frames': frames, 'target': a.target, 'exposure': a.exposure, 'height': a.height, 'treeFar': a.tree_far})
+        first = start + (k0 + 1) * dt
+        # warm up from the recording start (cheap, no rendering); the last 3 s settle the camera
         T = t0
-        while T < start:
+        while T < first - dt:
             T += dt
             await page.evaluate(STEP, {'T': T, 'dt': dt, 'grab': False})
-        n = 0; t_start = time.time()
-        while T < end:
-            T += dt
+        t_start = time.time()
+        for k in range(k0, k1):
+            T = start + (k + 1) * dt
             data = await page.evaluate(STEP, {'T': T, 'dt': dt, 'grab': True})
-            (out_dir / f'f{n:05d}.jpg').write_bytes(base64.b64decode(data.split(',', 1)[1]))
-            n += 1
-            if n % 20 == 0: print(f'  frame {n} (game time {T:.1f} s), {(time.time() - t_start) / n:.2f} s/frame', flush=True)
-            if a.max_frames and n >= a.max_frames: break
+            (out_dir / f'f{k:05d}.jpg').write_bytes(base64.b64decode(data.split(',', 1)[1]))
+        print(f'  frames {k0}-{k1 - 1} done, {(time.time() - t_start) / max(1, k1 - k0):.1f} s/frame', flush=True)
+    finally:
         await browser.close()
+
+
+async def main(a):
+    clip = json.load(open(a.clip))
+    frames = clip['frames']
+    t0 = frames[0]['t']
+    start = a.start if a.start is not None else t0 + 3
+    end = a.end if a.end is not None else frames[-1]['t']
+    dt = 1 / a.fps
+    total = int((end - start) / dt)
+    if a.max_frames: total = min(total, a.max_frames)
+    out_dir = Path(a.frames_dir) if a.frames_dir else Path(tempfile.mkdtemp(prefix='hunt_frames_'))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f'replay {total} frames from game time {start:.1f} to {end:.1f}, frames in {out_dir}', flush=True)
+    async with async_playwright() as pw:
+        k = 0; failures = 0
+        while k < total:
+            while k < total and (out_dir / f'f{k:05d}.jpg').exists(): k += 1   # resume
+            if k >= total: break
+            k1 = min(total, k + a.chunk)
+            try:
+                await render_chunk(pw, a, frames, t0, start, dt, k, k1, out_dir); failures = 0
+            except Exception as e:   # software rendering can be OOM-killed; retry from the first missing frame
+                failures += 1
+                print(f'  chunk from frame {k} failed ({str(e).splitlines()[0][:80]}); retry {failures}', flush=True)
+                if failures > 3: raise
     subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-framerate', str(a.fps), '-i', str(out_dir / 'f%05d.jpg'),
-                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', a.out], check=True)
-    print(f'wrote {a.out}: {n} frames, frames in {out_dir}')
+                    '-frames:v', str(total), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart', a.out], check=True)
+    print(f'wrote {a.out}: {total} frames')
 
 
 if __name__ == '__main__':
@@ -122,10 +146,12 @@ if __name__ == '__main__':
     ap.add_argument('--size', default='854x480')
     ap.add_argument('--quality', default='medium')
     ap.add_argument('--exposure', type=float, default=1.0, help='camera exposure (1 = the game\'s unlit default)')
-    ap.add_argument('--height', type=float, default=2.6, help='camera height above him (m)')
+    ap.add_argument('--height', type=float, default=2.1, help='camera height above his feet (m); he is ~1.9 m tall')
     ap.add_argument('--tree-far', type=float, default=0, help='override tree draw distance (0 = preset)')
     ap.add_argument('--start', type=float, default=None, help='game time to start capturing')
     ap.add_argument('--end', type=float, default=None)
     ap.add_argument('--max-frames', type=int, default=0)
+    ap.add_argument('--frames-dir', default='', help='keep frames here; rerunning resumes from the first missing frame')
+    ap.add_argument('--chunk', type=int, default=40, help='frames per browser session (bounds software-render memory)')
     ap.add_argument('--url', default='http://127.0.0.1:8093')
     asyncio.run(main(ap.parse_args()))
