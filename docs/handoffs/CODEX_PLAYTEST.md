@@ -1,5 +1,8 @@
 # Codex playtest handoff
 
+Audio/startup defaults below describe the previous playtest. See
+[CODEX_AUDIO_STARTUP.md](CODEX_AUDIO_STARTUP.md) for the owner's latest corrections.
+
 - **Branch:** `codex/early-build-playtest`
 - **Base:** editable source from release `v0.1`, imported in commit `459eb57`.
 - **Asset SHA256:** `bc26b9f24d593064ad6a737aca3f10ee29587dc0b2f10f5465f4d42f5abc0b4b`.

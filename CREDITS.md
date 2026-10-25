@@ -8,4 +8,9 @@
 - Helium Voice's face and signature line — supplied by the game's creator
 - Trail layout traced from aerial imagery of Stinchcomb Wildlife Refuge supplied by the creator
 
-All other sound is synthesised procedurally in the browser at load time.
+- **Player breathing:** “breath.wav” by **UncleSigmund**, Freesound ID 30709,
+  **CC0 1.0**. Includes an earlier looping edit from Jordan Magnuson's public
+  source archive. Source, license evidence, transformations and reproducible
+  import are recorded in [PLAYER_BREATH_LICENSE.md](assets/audio/PLAYER_BREATH_LICENSE.md).
+
+Other environmental and creature sound is synthesised procedurally in the browser.

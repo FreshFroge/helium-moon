@@ -10,9 +10,12 @@ import { attachWebSocket } from './ws.js';
 import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
 import { CONFIG } from '../shared/config.js';
+import { listenOptions, listenWithFallback } from './listen.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = +(process.env.PORT || 8080);
+let listenConfig;
+try { listenConfig = listenOptions(process.argv.slice(2)); }
+catch (error) { console.error(error.message); process.exit(1); }
 const TICK = 1 / 20;
 const SNAP_EVERY = 1;   // snapshot every tick (20 Hz) - small payloads
 const VERSION = 1;
@@ -154,9 +157,18 @@ attachWebSocket(server, '/ws', (conn, req) => {
   conn.on('close', () => { member.alive = false; leave(member); });
 });
 
-setInterval(() => { for (const r of rooms.values()) for (const m of r.members.values()) m.conn.ping(); }, 15000);
+const heartbeatTimer = setInterval(() => { for (const r of rooms.values()) for (const m of r.members.values()) m.conn.ping(); }, 15000);
 
-server.listen(PORT, () => {
-  log(`HELIUM MOON server running at http://localhost:${PORT}/`);
+try {
+  const port = await listenWithFallback(server, { ...listenConfig,
+    onRetry: (busy, next) => log(`Port ${busy} is already in use. Trying ${next}...`),
+  });
+  log(`HELIUM MOON server running at http://localhost:${port}/`);
   log('Share your LAN address (or a tunnel / port-forward) with friends so they can join your lobby code.');
-});
+} catch (error) {
+  clearInterval(heartbeatTimer);
+  console.error(error.code === 'EADDRINUSE'
+    ? `That port is already in use. Leave the other program running and choose another port:\n  node server/server.js --port 8090`
+    : `Could not start the game server: ${error.message}`);
+  process.exitCode = 1;
+}

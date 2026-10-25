@@ -1,71 +1,62 @@
-// Render the actual player breath signals and exercise their playback mix.
-// node tests/breathing.test.mjs
+// Test the shipped recording and actual phrase/mix helpers used in the browser.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { breath, playerBreath, playerBreathMix, PLAYER_BREATH_VARIANTS, SR } from '../client/audio/synth.js';
-import { filter } from '../client/audio/dsp.js';
+import fs from 'node:fs';
+import { playerBreathMix, playerHeartbeatMix, PLAYER_BREATH_VARIANTS } from '../client/audio/synth.js';
+import { PLAYER_BREATH_BOUNDARIES, recordedBreathPhrase } from '../client/audio/playerBreath.js';
 
-const rms = (signal) => Math.sqrt(signal.reduce((sum, x) => sum + x * x, 0) / signal.length);
-const peak = (signal) => signal.reduce((max, x) => Math.max(max, Math.abs(x)), 0);
+const wav = fs.readFileSync(new URL('../assets/audio/player_breathing.wav', import.meta.url));
+assert.equal(wav.toString('ascii',0,4),'RIFF');
+let rate,channels,bits,data;
+for(let i=12;i+8<=wav.length;) {
+  const tag=wav.toString('ascii',i,i+4), size=wav.readUInt32LE(i+4), start=i+8;
+  if(tag==='fmt ') { assert.equal(wav.readUInt16LE(start),1);channels=wav.readUInt16LE(start+2);rate=wav.readUInt32LE(start+4);bits=wav.readUInt16LE(start+14); }
+  if(tag==='data') data=wav.subarray(start,start+size);
+  i=start+size+(size%2);
+}
+assert.equal(channels,1);assert.equal(bits,16);
+const pcm=Float32Array.from({length:data.length/2},(_,i)=>data.readInt16LE(i*2)/32768);
+const rms = signal => Math.sqrt(signal.reduce((sum,x)=>sum+x*x,0)/signal.length);
 
-test('player breaths are finite, quietly peaked, and fade gently at both ends', () => {
-  for (let seed = 200; seed < 200 + PLAYER_BREATH_VARIANTS; seed++) {
-    for (const inhale of [false, true]) for (const heavy of [false, true]) {
-      const signal = playerBreath(seed, inhale, heavy);
-      assert.ok(signal.every(Number.isFinite));
-      assert.ok(rms(signal) > 0.02 && rms(signal) < 0.12, 'real airflow without a loud normalized hiss');
-      assert.ok(peak(signal) <= (heavy ? 0.401 : 0.271));
-      const edge = Math.floor(SR * 0.02), fullRms = rms(signal);
-      assert.ok(rms(signal.slice(0, edge)) < fullRms * 0.1, 'soft onset');
-      assert.ok(rms(signal.slice(-edge)) < fullRms * 0.1, 'soft release');
-      assert.equal(Math.abs(signal[0]), 0);
-      assert.equal(Math.abs(signal.at(-1)), 0);
-    }
+test('the shipped recording contains ten distinct usable breath phrases', () => {
+  assert.ok(pcm.length/rate>15.3 && pcm.length/rate<15.6);
+  assert.equal(PLAYER_BREATH_BOUNDARIES.length-1,PLAYER_BREATH_VARIANTS*2);
+  const lengths=new Set();
+  for(let i=0;i<PLAYER_BREATH_VARIANTS*2;i++) {
+    const clip=recordedBreathPhrase(pcm,rate,i);
+    assert.ok(clip.every(Number.isFinite));
+    assert.ok(clip.length/rate>1.3 && clip.length/rate<1.8);
+    assert.ok(rms(clip)>0.01 && rms(clip)<0.15);
+    assert.equal(Math.abs(clip[0]),0);assert.equal(Math.abs(clip.at(-1)),0);
+    lengths.add(clip.length);
   }
+  assert.ok(lengths.size>=3);
+  assert.throws(()=>recordedBreathPhrase(pcm.slice(0,100),rate,0),/Incomplete/);
 });
 
-test('player airflow has little high-frequency hiss and less energy than the former breath', () => {
-  for (const inhale of [true, false]) {
-    const signal = playerBreath(200, inhale, false);
-    const high = filter(signal.slice(), 'hp', 3500, 0.7, SR);
-    assert.ok(rms(high) ** 2 / rms(signal) ** 2 < 0.04, 'energy above 3.5 kHz stays low');
-    assert.ok(rms(signal) < rms(breath(200, inhale, false)) * 0.6);
+test('breathing is very quiet and independent of fear/proximity', () => {
+  for(const exert of [0,0.3,0.7,1]) for(const downed of [0,1]) {
+    const quiet=playerBreathMix(exert,0,downed);
+    assert.deepEqual(playerBreathMix(exert,1,downed),quiet);
+    assert.ok(quiet.gain<=0.0181);
   }
+  assert.ok(playerBreathMix(0,0).gain<=0.003);
+  assert.ok(playerBreathMix(1,0).gain>playerBreathMix(0,0).gain);
+  assert.ok(rms(pcm)*playerBreathMix(1,0).gain<0.002);
 });
 
-test('inhale/exhale duration and airflow vary instead of repeating an identical mechanical pulse', () => {
-  const lengths = new Set();
-  for (let seed = 200; seed < 200 + PLAYER_BREATH_VARIANTS; seed++) {
-    const inhale = playerBreath(seed, true, false), exhale = playerBreath(seed, false, false);
-    lengths.add(inhale.length);
-    assert.ok(exhale.length > inhale.length, 'exhaling takes longer than inhaling');
-    assert.ok(playerBreath(seed, true, true).length < inhale.length, 'exertion shortens the breath naturally');
-    assert.ok(rms(inhale.slice(0, inhale.length / 2)) > rms(inhale.slice(inhale.length / 2)), 'asymmetric airflow swell');
+test('heartbeat stays subdued and follows only exertion or injury', () => {
+  for(const exert of [0,0.5,1]) {
+    const mix=playerHeartbeatMix(exert,0);
+    assert.ok(mix.gain>0 && mix.gain<=0.0201);
+    assert.ok(mix.bpm>=60 && mix.bpm<=100);
   }
-  assert.ok(lengths.size >= 4);
+  assert.ok(playerHeartbeatMix(1,1).gain<0.03);
+  assert.ok(playerHeartbeatMix(0,0).gain<0.01);
 });
 
-test('resting and fear-only breathing remain quiet; fatigue still produces audible exertion', () => {
-  const rest = playerBreathMix(0, 0), afraid = playerBreathMix(0, 1), tired = playerBreathMix(1, 0.5);
-  assert.ok(afraid.gain < 0.025 && afraid.gain < rest.gain * 2);
-  assert.equal(afraid.heavy, false, 'nearby danger alone does not produce heavy panting');
-  assert.ok(tired.gain > rest.gain * 8 && tired.gain < 0.22);
-  assert.equal(tired.heavy, true);
-  const restingOutput = rms(playerBreath(200, true, false)) * rest.gain;
-  const exertedOutput = rms(playerBreath(200, true, true)) * tired.gain;
-  assert.ok(restingOutput < 0.0015);
-  assert.ok(exertedOutput > restingOutput * 8 && exertedOutput < 0.025);
-});
-
-test('recovering breathing settles smoothly without changing the cold exhale strength', () => {
-  let lastGain = 1;
-  for (let exert = 1; exert >= 0; exert -= 0.05) {
-    const mix = playerBreathMix(exert, 0);
-    assert.ok(mix.gain <= lastGain);
-    lastGain = mix.gain;
-  }
-  assert.equal(playerBreathMix(0.3, 0).gain, playerBreathMix(0, 0).gain, 'ordinary walking stays quiet');
-  const scared = playerBreathMix(0, 1);
-  assert.ok(scared.visualStrength > scared.gain * 10, 'visual condensation is independent of audible gain');
-  assert.equal(playerBreathMix(1, 1, 1).visualStrength, 1);
+test('condensation strength stays separate from quiet playback gain', () => {
+  assert.equal(playerBreathMix(0,0).visualStrength,0);
+  assert.ok(playerBreathMix(1,0).visualStrength>0.5);
+  assert.equal(playerBreathMix(1,1,1).visualStrength,playerBreathMix(1,0,1).visualStrength);
 });

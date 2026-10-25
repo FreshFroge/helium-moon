@@ -335,13 +335,12 @@ export class Game {
     const A = this.audio, pos = e.x !== undefined ? { x: e.x, y: e.y ?? (this.world.heightAt(e.x, e.z) + 1), z: e.z } : null;
     switch (e.type) {
       case 'begin': this._objectivesDirty = true; break;
-      case 'hv_vocal': A.hvVocal(e.k, e.s, pos); if (this._near(pos, 45)) this.voice.suppress(2); break;
-      case 'hv_sig': A.signature(pos); this.voice.suppress(2.6); this.fearKick = Math.max(this.fearKick || 0, this._near(pos, 60) ? 0.5 : 0.2); break;
+      case 'hv_vocal': if (this._near(pos, CONFIG.HV.FOOTSTEP_MAX_DISTANCE) && this._canSee(pos)) { A.hvVocal(e.k, e.s, pos); this.voice.suppress(2); } break;
+      case 'hv_sig': if (this._canSee(pos)) { A.signature(pos); this.voice.suppress(2.6); } break;
       case 'sf_vocal': A.sfVocal(e.k, e.s, pos); break;
-      case 'snap': A.at('snap' + ((e.seq || 0) % 3), { x: e.x, y: e.y + 0.2, z: e.z }, { gain: 1.2, ref: 6 }); break;
+      case 'snap': break; // no artificial branch-snap warning of an unseen approach
       case 'chase':
         this.chasing = !!e.on;
-        if (e.on && (e.pid === this.myId || this.hvDist < 70)) { A.stinger('chase', 0.9); this.fearKick = 1; }
         break;
       case 'hit':
         if (e.pid === this.myId) { this.damage = 1; this.player.shake = 1.2; A.ui('hurt', 0.9); this.player.injured = 1; }
@@ -391,6 +390,18 @@ export class Game {
 
   _near(p, d) { return p && Math.hypot(p.x - this.player.pos.x, p.z - this.player.pos.z) < d; }
 
+  _canSee(p) {
+    if (!p) return false;
+    const to = new THREE.Vector3(p.x, p.y, p.z).sub(this.camera.position);
+    const distance = to.length();
+    if (distance > 45) return false;
+    const facing = to.normalize().dot(this.camera.getWorldDirection(new THREE.Vector3()));
+    if (facing < Math.cos(THREE.MathUtils.degToRad(this.camera.fov / 2))) return false;
+    if (distance > 14 && (!this.flashlight.on || facing < 0.9)) return false;
+    const eye = this.camera.position;
+    return this.world.lineOfSight(eye.x, eye.y, eye.z, p.x, p.y, p.z, { brushK: 0.3 }) > 0.3;
+  }
+
   _end(r) {
     if (this.ended) return;
     this.ended = true; this.result = r;
@@ -429,7 +440,7 @@ export class Game {
     if (this.net && this.net.tick && !(this.paused && !this.net.networked)) this.net.tick(dt);
     if (this.mode === 'playing' || this.mode === 'ended') this._updatePlaying(gameplayDt);
     else this._menuCamera(dt);
-    this.env.update(gameplayDt, this.camera, this.terror);
+    this.env.update(gameplayDt, this.camera, 0);
     this.audio.setListener(this.camera);
     this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
     const meP = this.player.pos;
@@ -631,28 +642,12 @@ export class Game {
     const cues = horrorCues(tr);
     this.cold = cues.cold;                                       // outer ring: subtle cold before stronger cues
     this.temp = lerp(T.BASE_TEMP_C, T.MIN_TEMP_C, smoothstep(0, 0.9, tr));
-    this.critical = smoothstep(0.9, 1, tr);
-    // did I just see him?
-    this.sightCool -= dt;
-    let seen = 0;
-    if (hs && this.hv.root.visible && d < 60) {
-      const h = this.hv.headPos(this._v3 || (this._v3 = new THREE.Vector3()));
-      const to = h.clone().sub(this.camera.position); const dl = to.length(); to.divideScalar(dl);
-      const f = this.camera.getWorldDirection(this._v4 || (this._v4 = new THREE.Vector3()));
-      if (to.dot(f) > Math.cos(THREE.MathUtils.degToRad(this.camera.fov * 0.55))) {
-        const los = this.world.lineOfSight(this.camera.position.x, this.camera.position.y, this.camera.position.z, h.x, h.y - 0.4, h.z, { brushK: 0.3 });
-        const lit = this.flashlight.on && to.dot(this.flashlight.dir) > 0.9 && dl < 45;
-        seen = los * (lit || dl < 14 ? 1 : clamp(1 - dl / 40, 0, 1) * 0.6);
-      }
-    }
-    if (seen > 0.35 && d < T.SIGHT_STINGER_DISTANCE && this.sightCool <= 0) { this.audio.stinger('snap', lerp(0.35, 0.65, clamp(1 - d / T.SIGHT_STINGER_DISTANCE, 0, 1))); this.sightCool = T.SIGHT_STINGER_COOLDOWN; this.fearKick = Math.max(this.fearKick || 0, 0.55); }
-    this.fearKick = Math.max(0, (this.fearKick || 0) - dt * 0.12);
-    const want = Math.max(smoothstep(0.5, 1, tr) * 0.5, this.chasing && d < T.INNER ? 0.95 : 0, this.fearKick || 0, this.damage * 0.8, this.myState === 'downed' ? 0.8 : 0, seen * 0.8);
-    this.fear = lerp(this.fear, want, 1 - Math.exp(-dt * (want > this.fear ? 2.5 : 0.25)));
-    pl.tremor = cues.tremor * 0.25 + this.critical * 0.15;
+    this.critical = 0;
+    this.fear = 0;
+    pl.tremor = 0;
     const stam = 1 - pl.stamina / CONFIG.PLAYER.STAMINA_MAX;
-    this.exert = clamp(Math.max(stam * 1.1, pl.sprinting ? 0.6 : 0, smoothstep(0.7, 1, tr) * 0.4), 0, 1);
-    G.uTerror.value = tr; G.uCold.value = this.cold;
+    this.exert = clamp(Math.max(stam * 1.1, pl.sprinting ? 0.6 : 0), 0, 1);
+    G.uTerror.value = 0; G.uCold.value = this.cold;
   }
 
   // distance along the flashlight beam to the first thing it lights (terrain, trunks, thick brush, bodies)
@@ -818,8 +813,8 @@ export class Game {
       u.uFlashRange.value = fl.light.distance;
       const playing = this.mode === 'playing' || this.mode === 'ended';
       u.uExposure.value = playing ? this.exposure : 1;
-      u.uTerrorFx.value = this.terror; u.uCold.value = this.cold; u.uFear.value = playing ? this.fear : 0;
-      u.uHeart.value = this.heartPulse * this.fear;
+      u.uTerrorFx.value = 0; u.uCold.value = this.cold; u.uFear.value = 0;
+      u.uHeart.value = 0;
       u.uDamage.value = this.damage; u.uDowned.value = playing ? this.player.downed : 0;
       u.uGasFx.value = this.gasFx;
       u.uFade.value = playing ? clamp(this.fade, 0, 1) : 0;

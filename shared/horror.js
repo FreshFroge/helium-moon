@@ -13,19 +13,13 @@ export function terrorAtDistance(distance, rings = CONFIG.TERROR) {
 }
 
 export function horrorCues(terror) {
-  const tr = clamp(terror, 0, 1), T = CONFIG.TERROR;
+  const tr = clamp(terror, 0, 1);
   return {
     cold: smoothstep(0.0, 0.6, tr) * 0.6,
-    // Keep a little natural sound even when close; a perfectly silent outer
-    // forest was acting as a precise proximity alarm.
-    insects: 1 - 0.85 * smoothstep(0.45, 0.9, tr),
-    quietWildlife: tr > 0.75,
-    drone: smoothstep(T.STRONG_CUE_START, 1, tr),
-    highTone: smoothstep(0.86, 1, tr),
-    heartbeat: smoothstep(0.7, 1, tr),
-    tremor: smoothstep(0.78, 1, tr),
-    flicker: smoothstep(T.FLICKER_START, 1, tr),
-    anomaly: tr >= T.ANOMALY_START,
+    // The freezing aura is the sole proximity warning. Actual close-range
+    // footsteps and direct encounters still make their own physical sounds.
+    insects: 1, quietWildlife: false,
+    drone: 0, highTone: 0, heartbeat: 0, tremor: 0, flicker: 0, anomaly: false,
   };
 }
 

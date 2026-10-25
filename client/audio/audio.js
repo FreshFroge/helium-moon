@@ -1,9 +1,9 @@
 // Audio engine: Web Audio graph, HRTF-positional emitters with occlusion and a
-// forest reverb, a living night ambience that dies away near Helium Voice, the
-// fear layer (heartbeat, breathing, cold wind, drone, tinnitus), footsteps and
-// all creature vocals. Every sound is synthesised at load (client/audio/synth.js)
-// except the player-supplied Helium Voice recording.
+// forest reverb, natural night ambience, subdued player physiology, footsteps
+// and creature vocals. Player breathing and Helium Voice's signature are sourced
+// recordings; other effects are synthesized at load. Cold is the proximity cue.
 import * as S from './synth.js';
+import { PLAYER_BREATH_FILE, recordedBreathPhrase } from './playerBreath.js';
 import { impulse, rngFor } from './dsp.js';
 import { assetUrl } from '../render/textures.js';
 import { clamp, lerp, smoothstep } from '../../shared/math.js';
@@ -55,7 +55,6 @@ export class AudioEngine {
     for (let i = 0; i < 3; i++) { add('owl' + i, () => S.owl(20 + i)); add('creak' + i, () => S.creak(30 + i)); add('snap' + i, () => S.twigSnap(40 + i)); add('frog' + i, () => S.frog(50 + i)); }
     add('coyote0', () => S.coyotes(60)); add('coyote1', () => S.coyotes(61)); add('train', () => S.trainHorn(62)); add('dog0', () => S.dogBark(63));
     for (const k of ['litter', 'dirt', 'mud', 'grass', 'silt', 'water', 'gravel', 'wood', 'asphalt', 'brush']) for (let i = 0; i < 4; i++) add(`fs_${k}${i}`, () => S.footstep(k, 100 + i * 7 + k.length));
-    for (let i = 0; i < S.PLAYER_BREATH_VARIANTS; i++) { add('in' + i, () => S.playerBreath(200 + i, true, false)); add('out' + i, () => S.playerBreath(210 + i, false, false)); add('inH' + i, () => S.playerBreath(220 + i, true, true)); add('outH' + i, () => S.playerBreath(230 + i, false, true)); }
     add('heart', () => S.heartbeat()); add('clickOn', () => S.click(1, true)); add('clickOff', () => S.click(2, false)); add('paper', () => S.paper(3)); add('clink', () => S.clink(4));
     for (const k of ['gen', 'relay', 'mast']) add('work_' + k, () => S.work(k, 5));
     add('genLoop', () => S.generatorLoop(6)); add('hum', () => S.humLoop()); add('siren', () => S.sirenLoop()); add('radio', () => S.radioCall(7));
@@ -69,8 +68,23 @@ export class AudioEngine {
     }
     this.sigPCM = null;
     try { await this.loadSignature(); } catch (e) { console.warn('signature clip unavailable', e); }
+    await this.loadPlayerBreathing();
     this._buildLoops();
     this.ready = true;
+  }
+
+  async loadPlayerBreathing() {
+    const response = await fetch(assetUrl(PLAYER_BREATH_FILE));
+    if (!response.ok) throw new Error('Player breathing recording is missing');
+    const recording = await this.ctx.decodeAudioData(await response.arrayBuffer());
+    const pcm = recording.getChannelData(0);
+    for (let i = 0; i < S.PLAYER_BREATH_VARIANTS; i++) for (let half = 0; half < 2; half++) {
+      const clip = this.toBuffer(recordedBreathPhrase(pcm, recording.sampleRate, i * 2 + half), recording.sampleRate);
+      const phase = half ? 'out' : 'in';
+      this.lib[phase + i] = clip;
+      this.lib[phase + 'H' + i] = clip;
+    }
+    this.playerBreathSource = 'recorded';
   }
 
   async loadSignature() {
@@ -256,20 +270,20 @@ export class AudioEngine {
     this.setLoopGain(this.loops.crickets, 0.55 * insects, 0.6);
     this.setLoopGain(this.loops.katydids, 0.32 * insects * (0.7 + 0.3 * Math.sin(t * 0.05)), 0.6);
     const rd = w ? w.riverDistAt(L.x, L.z) : 100;
-    this.setLoopGain(this.loops.river, 0.55 * Math.pow(clamp(1 - rd / 75, 0, 1), 2) * (1 - 0.6 * terr), 0.5);
-    this.setLoopGain(this.loops.wind, (0.28 + 0.12 * Math.sin(t * 0.13)) * (1 - 0.35 * smoothstep(0.7, 1, terr)) + 0.06 * (st.cold || 0), 0.8);
+    this.setLoopGain(this.loops.river, 0.55 * Math.pow(clamp(1 - rd / 75, 0, 1), 2), 0.5);
+    this.setLoopGain(this.loops.wind, 0.28 + 0.12 * Math.sin(t * 0.13), 0.8);
     const hw = w?.poi?.highway;
     const hd = hw ? Math.hypot(L.x - hw.x, L.z - hw.z) : 800;
-    this.setLoopGain(this.loops.traffic, (0.1 + 0.4 * clamp(1 - hd / 500, 0, 1)) * (1 - smoothstep(0.55, 0.9, terr)), 1);
+    this.setLoopGain(this.loops.traffic, 0.1 + 0.4 * clamp(1 - hd / 500, 0, 1), 1);
     // fear layer
     const cold = st.cold || 0;
-    this.cold.g.gain.setTargetAtTime(0.04 * cold * cold, t, 0.5);
+    this.cold.g.gain.setTargetAtTime(0, t, 0.5);
     this.cold.bp.frequency.setTargetAtTime(1500 + 700 * Math.sin(t * 0.37) + 300 * Math.sin(t * 1.1), t, 0.3);
     this.cold.bp2.frequency.setTargetAtTime(2500 + 600 * Math.sin(t * 0.23 + 1), t, 0.3);
     this.drone.g.gain.setTargetAtTime(0.065 * cues.drone, t, 0.8);
     this.drone.lp.frequency.setTargetAtTime(120 + 260 * terr, t, 0.5);
     this.drone.high.gain.setTargetAtTime(0.004 * cues.highTone, t, 1.2);
-    this.drone.tin.gain.setTargetAtTime(0.003 * (st.critical || 0) + 0.006 * (st.gas || 0), t, 0.6);
+    this.drone.tin.gain.setTargetAtTime(0.006 * (st.gas || 0), t, 0.6);
     const muffle = Math.max(st.gas || 0, (st.downed || 0) * 0.6);
     this.hear.frequency.setTargetAtTime(lerp(20000, 650, muffle), t, 0.3);
     if (!st.inGame) return;
@@ -288,13 +302,12 @@ export class AudioEngine {
       this.breathIn = !this.breathIn;
     }
     // heartbeat
-    const heart = Math.max(cues.heartbeat * 0.7, smoothstep(0.8, 1, fear), st.downed ? 0.8 : 0);
-    if (heart > 0.02) {
+    const heart = S.playerHeartbeatMix(exert, st.downed || 0);
+    if (heart.gain > 0) {
       this.heartT -= dt;
       if (this.heartT <= 0) {
-        const bpm = 68 + 95 * fear;
-        this.heartT = 60 / bpm;
-        this.play(this.lib.heart, { bus: 'sfx', gain: 0.55 * heart, rate: 1 + fear * 0.1 });
+        this.heartT = 60 / heart.bpm;
+        this.play(this.lib.heart, { bus: 'sfx', gain: heart.gain, rate: heart.rate });
         if (this.onBeat) this.onBeat();
       }
     }
@@ -346,7 +359,7 @@ export class AudioEngine {
     const key = `hv_${kind}_${seed % 5}`;
     if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal(HV_KINDS.includes(kind) ? kind : 'giggle', seed % 5 + 1, this.sigPCM));
     const loud = { scream: 2.2, call: 1.6, cry: 1.2, laugh: 1.2, whisper: 0.55, breath: 0.6, inhale: 0.7, hum: 0.8, giggle: 1, fragment: 1.2 }[kind] || 1;
-    return this.play(this.var[key], { pos, bus: 'mon', gain: loud, ref: kind === 'scream' || kind === 'call' ? 10 : 3.5, reverb: 0.45 });
+    return this.play(this.var[key], { pos, bus: 'mon', gain: loud, ref: 1.5, reverb: 0.1, range: creatureFootstepCue('hv', 0) });
   }
 
   signature(pos) { return this.play(this.lib.signature, { pos, bus: 'mon', gain: 1.35, ref: 7, reverb: 0.4 }); }

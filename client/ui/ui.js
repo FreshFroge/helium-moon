@@ -77,8 +77,9 @@ export class UI {
         <li>Tree generator approach inspired by <b>EZ-Tree</b> — MIT</li>
         <li>Fonts: Cormorant Garamond, Inter, IBM Plex Mono — SIL Open Font License</li>
         <li>Helium Voice signature line: recorded by the game's creator</li>
+        <li>Player breathing: “breath.wav” by UncleSigmund — CC0</li>
       </ul>
-      <p class="dim">Every other sound in the game is synthesised in your browser when it loads.</p>`);
+      <p class="dim">Other environmental and creature sounds are synthesised in your browser.</p>`);
   }
 
   openControls(el) {
@@ -99,7 +100,7 @@ export class UI {
       </table>
       <h3>Surviving</h3>
       <ul class="tips">
-        <li>Unexplained cold can mean he is within about ${CONFIG.TERROR.OUTER} m. Stronger warnings build when he is closer.</li>
+        <li>Unexplained cold is the approach warning within about ${CONFIG.TERROR.OUTER} m. His footsteps are only audible within about 8 feet.</li>
         <li>He does not like being watched or lit. Keep your light on him — but don't count on it.</li>
         <li>Sprinting, working on loud machinery and talking carry far. Silence makes him curious instead of certain.</li>
         <li>Stay away from low brush near water. If the air smells like a struck match, back off.</li>

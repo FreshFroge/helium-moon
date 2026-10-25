@@ -7,10 +7,13 @@ This is a **work-in-progress build**: the full game loop is playable in single p
 ## Updated playtest build
 
 This revision starts from the editable source in the original `v0.1` release.
-It brings the terror rings in to **80 / 50 / 25 / 10 metres**, limits Helium
-Voice's footsteps to **22 m** and the skunk's to **12 m**, and reduces stacked
-warning effects. The skunk is **40% smaller**. Player breathing is much quieter
-and uses softer, varied airflow rather than the old vocal-like loop.
+It keeps the terror rings at **80 / 50 / 25 / 10 metres**, with **freezing as the
+only automatic approach warning**. Both creatures' footsteps fade between
+**1.8–2.4 m (about 6–8 feet)** and are silent beyond that. No proximity heartbeat,
+panting, insect silence, drone, stinger, tremor or flashlight glitch reveals him.
+The skunk remains **40% smaller**. Player breathing now uses an attributed CC0
+recording instead of synthesis; breathing and heartbeat are much quieter and
+follow exertion/injury, never creature distance.
 
 Helium Voice has revised foot placement, heel/toe roll, weight shifts and
 head/torso turns. The wood bridge now spans a wet channel with supported ramps.
@@ -33,6 +36,20 @@ node server/server.js          # Node 18+; no npm install needed
 ```
 
 Open `http://localhost:8080` (friends on your network use `http://<your-LAN-IP>:8080`). One player chooses *Multiplayer → Create lobby* and shares the 5-letter code; others *Join*. The host starts the game. Over the internet you need a port-forward or a tunnel to port 8080 (and for voice chat, players behind strict NATs may need a TURN server; only public STUN is configured).
+
+**Windows:** double-click `start-game.cmd`, keep its window open, and open the
+address it prints. If 8080 is busy, an unconfigured start tries 8081 through 8089.
+Use the printed address and its port for all players and any port-forward.
+No existing program is stopped or replaced. To choose a port explicitly:
+
+```sh
+node server/server.js --port 8081
+```
+
+In an older build without `--port`, Command Prompt also supports
+`set PORT=8081&& node server/server.js`. Stop a game server with Ctrl+C in its own
+terminal before launching another copy. An explicitly selected busy port exits
+with instructions rather than silently moving to another port.
 
 Headphones strongly recommended. Chrome, Edge or Firefox with hardware acceleration; WebGL 2 required.
 
@@ -90,7 +107,7 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium python3 tests/browser_playthrough.py
 Remaining limitations:
 
 - Real-GPU frame rate and subjective balance, sound quality and animation feel
-  still need desktop playtesting. Breathing remains procedurally synthesized.
+  still need desktop playtesting. Breathing is now a sourced CC0 recording.
 - Cross-network voice needs testing on unrestricted browsers; strict NATs may
   require a TURN server. The managed test-browser restriction was preserved.
 - The original hosted page cannot use multiplayer/microphone; use this source

@@ -292,46 +292,29 @@ export function breath(seed, inhale, heavy) {
 }
 
 // The creature's formant-based breath above is part of Helium Voice's identity.
-// Player breaths use softer airflow with no pitched/formant voice generator.
-export const PLAYER_BREATH_VARIANTS = 6;
-
-export function playerBreath(seed, inhale, heavy) {
-  const r = rngFor(seed);
-  const d = (inhale ? r.range(1.0, 1.4) : r.range(1.3, 1.8)) * (heavy ? 0.7 : 1);
-  const n = N(d), cutoff = (inhale ? 1500 : 1100) * (heavy ? 1.15 : 1);
-  const air = filter(filter(noise(n, r), 'hp', 100, 0.65, SR), 'lp', cutoff, 0.6, SR);
-  // A second gentle lowpass removes the sharp hiss of the former whispered
-  // vowel; a broad lower band keeps airflow from sounding like a pure filter.
-  filter(air, 'lp', cutoff * 1.2, 0.65, SR);
-  const body = filter(noise(n, r), 'bp', inhale ? 550 : 380, 0.55, SR);
-  const knots = Array.from({ length: 9 }, () => r.range(0.75, 1.0));
-  const attack = r.range(0.65, 1.0), release = r.range(1.3, 1.9);
-  for (let i = 0; i < n; i++) {
-    const x = i / (n - 1), at = x * (knots.length - 1), j = Math.min(knots.length - 2, Math.floor(at));
-    const u = at - j, blend = u * u * (3 - 2 * u);
-    const irregular = knots[j] + (knots[j + 1] - knots[j]) * blend;
-    const flow = Math.pow(x, attack) * Math.pow(1 - x, release);
-    air[i] = (air[i] * 0.85 + body[i] * 0.15) * flow * irregular;
-  }
-  // Deliberately lower peaks as well as lower playback gain. Normalizing every
-  // human breath to a loud whispered vowel made the old loop dominate ambience.
-  return fade(normalize(air, (heavy ? 0.4 : 0.27) * r.range(0.9, 1)), SR, 0.08, 0.16);
-}
+// Player breath audio is loaded from the attributed recording in playerBreath.js.
+export const PLAYER_BREATH_VARIANTS = 5;
 
 // Playback and visual strengths are separate: cold breath still condenses when
 // the player's resting breathing is almost inaudible.
-export function playerBreathMix(exert = 0, fear = 0, downed = 0) {
+export function playerBreathMix(exert = 0, _fear = 0, downed = 0) {
   const bounded = (v) => Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
-  exert = bounded(exert); fear = bounded(fear); downed = bounded(downed);
+  exert = bounded(exert); downed = bounded(downed);
   const u = bounded((exert - 0.45) / 0.55), effort = u * u * (3 - 2 * u);
   return {
-    gain: 0.012 + 0.17 * effort + 0.008 * fear + 0.035 * downed,
+    gain: 0.003 + 0.012 * effort + 0.003 * downed,
     heavy: exert > 0.7,
     rate: 0.95 + 0.08 * effort,
     inhaleGap: 0.18 - 0.06 * effort,
     exhaleGap: 0.65 - 0.4 * effort,
-    visualStrength: bounded(exert * 0.55 + fear * 0.45 + downed * 0.4),
+    visualStrength: bounded(exert * 0.55 + downed * 0.4),
   };
+}
+
+// Physiology follows exertion/injury, never an unseen creature's distance.
+export function playerHeartbeatMix(exert = 0, downed = 0) {
+  const effort = Math.max(0, Math.min(1, exert || 0));
+  return { gain: 0.006 + effort * 0.014 + (downed ? 0.007 : 0), bpm: 62 + effort * 35, rate: 0.95 + effort * 0.05 };
 }
 
 export function heartbeat() {

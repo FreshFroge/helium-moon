@@ -36,6 +36,7 @@ async def play(port):
             await page.goto(f'http://localhost:{port}/?manual=1&q=low')
             await page.wait_for_function('window.READY || window.LOAD_ERROR', timeout=300000)
             assert not await page.evaluate('window.LOAD_ERROR'), 'client must load'
+            assert await page.evaluate("game.audio.playerBreathSource === 'recorded'"), 'recorded breathing must load'
             await page.locator('#loading').wait_for(state='hidden')
 
             async def advance(seconds):
@@ -126,7 +127,7 @@ async def play(port):
                 const step = creature => ({creature, surface:game.player.surface, water:0, brush:0, loud:0.35, speed:2.3});
                 const position = distance => ({x:original.x + distance, y:original.y, z:original.z});
                 const before = new Set(audio.active);
-                audio.footstep(step('hv'), position(4));
+                audio.footstep(step('hv'), position(1));
                 const handle = [...audio.active].find(h => !before.has(h) && h.range);
                 const near = !!handle && handle.e.out.gain.value > 0;
                 camera.position.x += 40;
@@ -137,8 +138,8 @@ async def play(port):
                 const muted = !!handle && handle.e.out.gain.value === 0;
                 camera.position.copy(original); audio.setListener(camera);
                 const count = audio.active.size;
-                audio.footstep(step('hv'), position(23));
-                audio.footstep(step('sf'), position(13));
+                audio.footstep(step('hv'), position(2.5));
+                audio.footstep(step('sf'), position(2.5));
                 const distantStepsSilent = audio.active.size === count;
                 const routineSilent = audio.sfVocal('rumble', 1, position(30)) === null;
                 const warning = audio.sfVocal('warn', 1, position(20));
@@ -159,6 +160,36 @@ async def play(port):
             assert all(audio_check[key] for key in ['near', 'muted', 'distantStepsSilent', 'routineSilent', 'warning']), audio_check
             assert audio_check['exhales'] == 1 and audio_check['condensation'], 'quieter breathing still drives condensation'
             print('  ok  real Web Audio distance cutoffs, retained close danger warning, and cold exhale callback')
+
+            proximity = await page.evaluate('''async () => {
+                const audio = game.audio, play = audio.play;
+                const breaths = new Set(Object.entries(audio.lib).filter(([key]) => /^(in|out)(H)?[0-9]+$/.test(key)).map(([,value]) => value));
+                const runs = [];
+                audio.play = (buffer, options = {}) => {
+                    if (buffer === audio.lib.heart) runs[runs.length - 1].heart = options;
+                    if (breaths.has(buffer)) runs[runs.length - 1].breath = options;
+                    return null;
+                };
+                try {
+                    for (const distance of [100, 1]) {
+                        const p = game.player.pos;
+                        game.terror = 0;
+                        game._terror(10, [p.x+distance,p.y,p.z,0,0,0,0,0,0,0,0]);
+                        runs.push({exert:game.exert,tremor:game.player.tremor,cold:game.cold});
+                        audio.breathT = audio.heartT = 0;
+                        audio.update(1/30,{terror:game.terror,fear:game.fear,cold:game.cold,exert:game.exert,inGame:true});
+                        await new Promise(resolve => setTimeout(resolve,80));
+                        runs[runs.length-1].layers = [audio.cold.g.gain.value,audio.drone.g.gain.value,audio.drone.high.gain.value];
+                    }
+                } finally { audio.play = play; }
+                return runs;
+            }''')
+            assert proximity[0]['exert'] == proximity[1]['exert'], proximity
+            assert proximity[0]['breath'] == proximity[1]['breath'], proximity
+            assert proximity[0]['heart'] == proximity[1]['heart'], proximity
+            assert proximity[1]['cold'] > proximity[0]['cold'], proximity
+            assert all(run['tremor'] == 0 and all(abs(gain) < 0.000001 for gain in run['layers']) for run in proximity), proximity
+            print('  ok  near/far Helium Voice changes cold only; real breath/heartbeat playback remains identical')
 
             # Position fixtures isolate interactions from navigation and attacks.
             await page.evaluate('''() => {

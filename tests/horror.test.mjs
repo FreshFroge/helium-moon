@@ -27,15 +27,15 @@ test('outer-range proximity suggests cold without a stack of precise alarms', ()
   assert.equal(c.anomaly, false);
 });
 
-test('strong cues remain absent at 30 m and are available when danger is close', () => {
-  const middle = cueAt(30), close = cueAt(5);
-  for (const key of ['drone', 'highTone', 'heartbeat', 'tremor', 'flicker']) {
-    assert.equal(middle[key], 0, key + ' should not track a distant creature');
-    assert.ok(close[key] > 0, key + ' should still work at close range');
+test('freezing remains the sole proximity warning at every distance', () => {
+  for (const d of [65, 30, 15, 5, 0]) {
+    const cues = cueAt(d);
+    assert.ok(cues.cold > 0);
+    assert.equal(cues.insects, 1);
+    assert.equal(cues.quietWildlife, false);
+    for (const key of ['drone','highTone','heartbeat','tremor','flicker']) assert.equal(cues[key], 0);
+    assert.equal(cues.anomaly, false);
   }
-  assert.equal(middle.anomaly, false);
-  assert.equal(close.anomaly, true);
-  assert.ok(close.insects >= 0.15 && close.insects < middle.insects);
 });
 
 test('terror rises continuously across every configurable ring boundary', () => {
@@ -56,19 +56,19 @@ test('terror rises continuously across every configurable ring boundary', () => 
 
 test('Helium Voice steps fade smoothly, stalking is quieter, and distance truly mutes', () => {
   const stalk = CONFIG.HV.STALK, chase = CONFIG.HV.CHASE;
-  assert.ok(footstepAt('hv', 3, chase) > footstepAt('hv', 3, stalk));
-  const gains = [3, 9, 15, 21, 22, 35, 120].map((d) => footstepAt('hv', d, chase));
+  assert.ok(footstepAt('hv', 1, chase) > footstepAt('hv', 1, stalk));
+  const gains = [1, 1.9, 2.1, 2.39, 2.4, 3, 120].map((d) => footstepAt('hv', d, chase));
   assert.ok(gains[0] > gains[1] && gains[1] > gains[2] && gains[2] > gains[3]);
   assert.deepEqual(gains.slice(4), [0, 0, 0]);
-  assert.ok(footstepAt('hv', 21.99, stalk) < 1e-5, 'no abrupt gain jump at the cutoff');
+  assert.ok(footstepAt('hv', 2.39999, stalk) < 1e-5, 'no abrupt gain jump at the cutoff');
 });
 
-test('skunk footsteps remain local to the undergrowth instead of broadcasting position', () => {
-  assert.ok(footstepAt('sf', 2, 2) > footstepAt('sf', 8, 2));
-  assert.ok(footstepAt('sf', 8, 2) > 0);
-  assert.equal(footstepAt('sf', 12, 2), 0);
-  assert.equal(footstepAt('sf', 20, 2), 0);
-  assert.ok(footstepAt('hv', 20, CONFIG.HV.CHASE) > 0, 'creatures have independent ranges');
+test('both creatures footsteps stop at eight feet with a gentle fade after six feet', () => {
+  for (const creature of ['hv','sf']) {
+    assert.ok(footstepAt(creature, 1.8, 5) > footstepAt(creature, 2.1, 5));
+    assert.ok(footstepAt(creature, 2.1, 5) > 0);
+    for (const d of [2.4, 2.4384, 3, 8, 20]) assert.equal(footstepAt(creature, d, 5), 0);
+  }
 });
 
 test('quiet skunk cues are shorter-range while imminent gas/attack warnings stay readable', () => {
@@ -88,7 +88,7 @@ test('quiet skunk cues are shorter-range while imminent gas/attack warnings stay
 
 test('moving listener gain reaches actual zero independently of the panner distance model', () => {
   const cue = creatureFootstepCue('hv', CONFIG.HV.CHASE);
-  const gains = [10, 18, 22, 30, 10].map((distance) => distanceGain(distance, cue) * cue.gain);
+  const gains = [1, 2, 2.4, 3, 1].map((distance) => distanceGain(distance, cue) * cue.gain);
   assert.ok(gains[0] > gains[1]);
   assert.deepEqual(gains.slice(2, 4), [0, 0]);
   assert.equal(gains[4], gains[0]);
