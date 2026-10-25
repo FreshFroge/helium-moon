@@ -24,6 +24,16 @@ measure authoritative pacing, attacks, outcomes, visibility, and movement, but
 cannot judge rendered animation, audio quality, voice chat, or human fear. Kimi
 has a separate rendered-browser assignment for those questions.
 
+## Follow-up verification: downed-target hunts fixed
+
+The report's P0 stale-focus defect was fixed immediately after this matrix. A
+third run with the same 50 seeds and 25-minute cap recorded **0** one-step
+downed-target hunts, down from 50. Helium still landed 108 hit/down outcomes
+(113 before), while mean objective completion rose from 1.52 to 1.58. The
+current post-fix comparison is recorded in
+`docs/handoffs/CODEX_50_PLAYTESTS.md`; use that baseline for future balance
+work rather than treating the old 388 raw-hunt count as intended pressure.
+
 ## Aggregate result
 
 | Measure | Result |

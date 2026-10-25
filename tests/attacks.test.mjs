@@ -74,6 +74,16 @@ test('losing a chase target clears the director chase flag',()=>{
   assert.equal(actor.state,'retreat');assert.equal(sim.director.chasing,false);
 });
 
+test('a stale downed focus cannot start a Helium Voice hunt',()=>{
+  const {sim,p,actor}=encounter('hv');
+  p.state='downed'; sim.director.focus=p.id;
+  assert.equal(sim.director.focusPlayer(),null,'director drops an inactive focus');
+  assert.equal(sim.director.allowChase(p),false,'director rejects an inactive chase target');
+  assert.equal(actor.startChase(p),false,'Helium Voice also rejects a stale direct hunt request');
+  assert.notEqual(actor.state,'chase');
+  assert.equal(sim.director.chasing,false);
+});
+
 test('a player who leaves during the skunk windup can avoid its bite',()=>{
   const {sim,p,actor}=encounter('sf');
   sim.step(.05);assert.equal(actor.state,'ambush');

@@ -49,7 +49,10 @@ export class Director {
   }
 
   // the player the monsters should pay most attention to: the isolated, the quiet, the one in front
-  focusPlayer() { return this.focus ? this.sim.players.get(this.focus) : null; }
+  focusPlayer() {
+    const p = this.focus ? this.sim.players.get(this.focus) : null;
+    return playerActive(p) ? p : null;
+  }
 
   wantsPresence() {
     const safe = this._esc(this.D.PRESENCE_SAFE) / (1 + this.glimpsePressure * 0.25);
@@ -58,7 +61,7 @@ export class Director {
 
   allowChase(p) {
     const t = this.sim.time;
-    if (this.phase === 'relax' || this.sim.state === 'intro' || this.inDread()) return false;
+    if (!playerActive(p) || this.phase === 'relax' || this.sim.state === 'intro' || this.inDread()) return false;
     const baseGap = this._esc(this.D.CHASE_COOLDOWN) * this.chaseGapMul;
     const chaseGap = this.extraction ? Math.min(30, baseGap) : baseGap;
     if (t - this.lastChase < chaseGap || t - this.lastAttack < this._esc(this.D.ATTACK_COOLDOWN)) return false;

@@ -62,3 +62,24 @@ Full validation at rebased tip: `npm test` passed all Node suites on Node
 24.19.0, including the simulation, relocation, server, audio, animation,
 bridge, spawn, objectives, ice, and zone checks.
 
+## Follow-up: stale downed-target hunt fix
+
+Codex fixed the exact P0 cause in `shared/sim/director.js` and
+`shared/sim/heliumVoice.js`: a director focus now resolves only to an active
+player, and both the director and Helium Voice reject inactive targets at their
+chase boundaries. `tests/attacks.test.mjs` now proves a downed stale focus
+cannot start a hunt.
+
+A third deterministic 50-seed / 25-minute pass completed in 78 seconds:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| One-step fake downed-target hunts | 50 | 0 |
+| Recorded hunts | 388 | 327 |
+| Helium hit/down outcomes | 113 | 108 |
+| Mean objectives | 1.52 | 1.58 |
+
+The reduced raw count is the removal of the fake starts; valid pressure remains.
+Claude and Kimi should use this post-fix baseline for subsequent rendered and
+balance work.
+

@@ -808,7 +808,7 @@ export class HeliumVoiceAI {
   }
 
   startChase(p) {
-    if (!this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
+    if (!playerActive(p) || !this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
     // Hunts start close (owner, Oct 25): farther out, mark the player and close in
     // unseen first (stalk handles the approach and commits inside the range).
     if (this.dist(p) > C.HUNT_START_RANGE) {
