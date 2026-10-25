@@ -19,6 +19,7 @@ possible without waiting on each other:
 
 | # | Issue / improvement | Area / likely files | Claimed |
 |---|---|---|---|
+| 14 | Server relays any binary blob to all teammates (they play it as mimic audio) and has no rate limits on chat/sig: a modified client can blast audio or flood a lobby. Gate mimic relays to server-issued mimic events (owner + mid, once, recent) and rate-limit chat/sig/binary | `server/server.js`, `tests/server.test.mjs` (relay fixture), new `tests/server_abuse.test.mjs` | Claude |
 | 3 | Run every existing browser suite (`browser_playthrough.py`, `browser_encounters.py`, `browser_ground_contacts.py`, `browser_menu_layout.py`, `browser_multiplayer.py`, `browser_sessions.py`) on a second machine and log failures/flakes here | tests only | Claude |
 | 5 | Performance budget per quality preset: draw calls/triangles/programs at fixed views, recorded as a regression test so changes can't silently double the cost | new `tests/browser_perf_budget.py` + `docs/PERFORMANCE.md` | Claude |
 | 6 | Visibility vs rendered silhouette: AI concealment uses sampled LOS; check against what the player actually sees (leaf gaps) | AI files (Codex) | — |
