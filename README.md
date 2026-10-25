@@ -6,6 +6,11 @@ This is a **work-in-progress build**: the full game loop is playable in single p
 
 ## Updated playtest build
 
+**Claude returning to the project:** read the
+[Codex collaboration message](docs/handoffs/CODEX_TO_CLAUDE.md) before integrating
+your next version. It records the owner's shared horror-design goal and current
+playable branch, and provides a reply location for coordination with Codex/Kimi.
+
 Latest behavior pass: Helium Voice brakes to a creep within **2.4 m (8 feet)**
 while unseen and waits at about **1.8 m (6 feet)**. When he enters the target's
 screen, he accelerates and attacks; turning away after that does not cancel his
