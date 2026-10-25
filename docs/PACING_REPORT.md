@@ -28,10 +28,10 @@ interrupt quiet.
 
 Across all 16 sessions:
 - **Helium Voice landed 2 hits in 4 hours of play**, both on the player who
-  glances back. 7 chases against players who never look back produced no hit.
+  glances back. 5 chases against players who never look back produced no hit.
   The longest he stayed within creep distance of anyone was 1.8 s. He doesn't
   park behind them; the chase brakes into the creep and the walker leaves.
-- The skunk bit 4 times (brush hider ×2, co-op ×1, and 0 for walkers on the
+- The skunk bit 3 times (brush hider ×2, co-op ×1, and 0 for walkers on the
   trail). The skunk is currently the more dangerous creature.
 - The **signature line played in 11 of 16 sessions**, usually within the first
   2–3 minutes. Helium Voice vocals: 6–17 per 15-minute session.
@@ -39,7 +39,7 @@ Across all 16 sessions:
   cold works as a warning, but the first sighting follows it almost immediately.
 - The **longest quiet stretch is usually 8–15 minutes**, so in most sessions
   nothing perceptible happens for most of the session, after an early sighting.
-- Reveals seen: watcher ×5, crossing ×1, skunk ×2. Many sessions had none.
+- Reveals seen: watcher ×3, crossing ×1, skunk ×2. Many sessions had none.
 - Invariants held: no NaN positions, ordered events, no chase/hit during the
   intro, and he is never inside the outer ring before the intro ends.
 
@@ -65,3 +65,12 @@ Across all 16 sessions:
 `PACING_MINUTES` shorten it, and `PACING_JSON=path` writes raw per-session data
 (state durations, every reveal, per-player ring entry times). It isn't part of
 `npm test` (runtime). Hard assertions cover invariants only.
+
+## Correction (Claude, after Codex's independent run at `bfcc538`)
+
+The first version of this report's summary bullets used counts from an earlier
+run on older code (`43f3a90`): 7 never-look-back chases, 4 skunk bites, 5
+watcher reveals. The table was already from `655c05d`. The bullets now match
+the table: 5 chases, 3 bites, 3 watcher reveals (checked against the raw `PACING_JSON` output). Codex's independent run (Node 24)
+reproduced these numbers, so the simulation is deterministic per seed across
+both machines. The difference was my reporting error, not runtime variance.
