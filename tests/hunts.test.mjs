@@ -72,7 +72,7 @@ test('hunts sample bounded changes in pursuit pace and unseen cutoff timing', ()
 });
 
 test('a hunt gives a hiding window, then does not circle within twelve to fifteen feet before attacking',()=>{
-  const {sim,p,hv}=fixture(4.2,31);p.flash=false;
+  const {sim,p,hv}=fixture(4.2,31);p.flash=true;
   hv.startChase(p);
   const opening=hv.huntHideUntil-sim.time;
   for(let t=0;t<opening-.1;t+=.05)sim.step(.05);
@@ -121,7 +121,7 @@ test('running away is not an escape: a sprinting player (9 s stamina) still gets
   }
 });
 
-test('hugging a big tree trunk is not an escape: the final lunge reaches the player', () => {
+test('a dark, still player behind a big tree trunk can end a hunt', () => {
   // spots a real player body can occupy (pushed out of colliders) inside a 2 m nav cell
   // that the trunk blocks for the creature
   const spots = [];
@@ -138,11 +138,12 @@ test('hugging a big tree trunk is not an escape: the final lunge reaches the pla
   assert.ok(spots.length >= 3, `fixture: found ${spots.length} trunk-hugging spots`);
   for (const sp of spots) {
     const { sim, p, hv } = fixture(20, 3);
-    // light on: hugging a trunk in the dark, still and quiet, is hiding - and hiding does end a hunt (owner, Puppet)
-    Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: true });
+    Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: false, crouch: true, noise: 0, sprint: false, moveSpeed: 0 });
     const at = pointAtDistance(world.trail, world.trailCum, sp.a - 20); hv.place(at.x, at.z);
     hv.startChase(p);
-    for (let t = 0; t < 120 && p.health === MAXH; t += 0.05) sim.step(0.05);
-    assert.ok(p.health < MAXH, `trail ${sp.a}: he reaches a player pressed against the trunk (state ${hv.state}, d ${hv.dist(p).toFixed(2)}, prowl ${(hv.huntProwlT||0).toFixed(1)}/${(hv.huntProwlFor||0).toFixed(1)})`);
+    let lost = false;
+    for (let t = 0; t < 20 && !lost; t += 0.05) { sim.step(0.05); if (sim.drainEvents().some((e) => e.type === 'hv_lost' && e.pid === p.id)) lost = true; }
+    assert.ok(lost, `trail ${sp.a}: the trunk breaks line of sight and lets the player hide`);
+    assert.equal(p.health, MAXH, `trail ${sp.a}: hiding behind the trunk causes no damage`);
   }
 });

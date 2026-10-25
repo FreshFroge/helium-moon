@@ -597,6 +597,25 @@ export class HeliumVoiceAI {
         if ((this.hide?.t || 0) > 0) lookP = null; else this.lookAtPoint(tp.x, tp.y + 1.5, tp.z);   // hiding: he doesn't know where to look
         const d = this.dist(tp);
         const openingSearch = sim.time < (this.huntHideUntil ?? -1);
+        // The opening is a stalking window, not a disabled attack while he continues to run
+        // through the player.  He holds a concealed position 9–24 m away, giving the player
+        // a real chance to cut the lighter and settle into cover.
+        if (openingSearch) {
+          // The deliberate stalk is not a navigation failure; do not carry its distance
+          // changes into the post-window stuck-hunt fail-safe.
+          this.huntStall = null;
+          this.replanT = (this.replanT || 0) - dt;
+          if (!this.path || this.replanT <= 0 || d < 8) {
+            const spot = d < 8 ? this.coverAway(tp, 12, 24) : this.observationSpot(tp, 'behind', 10, 24);
+            if (spot) this.planTo(spot[0], spot[1], 'cover');
+            else if (d < 8) this.path = null;
+            this.replanT = 1.2;
+          }
+          if (d >= 8 || this.path) this.followPath(dt, C.STALK * 0.9);
+          else this.stop(dt);
+          anim.run = 0;
+          break;
+        }
         // Looking back at him (owner): each fresh look freezes him for a beat, then he comes on
         // upright with dead arms. Unwatched he runs low, on all fours (operated).
         const seenByTarget = this.observers.some((o) => o.p.id === tp.id);
@@ -900,8 +919,26 @@ export class HeliumVoiceAI {
     if (!tp.flash && (tp.moveSpeed || 0) < C.HIDE_STILL && !tp.sprint && noiseRadius(tp, C) <= C.HIDE_NOISE) {
       // A deployed blanket removes the need for hard cover, but only while the player is
       // crouched, motionless, dark and quiet; moving or leaving the light on exposes them.
-      return (tp.covered || sightOf(this.world, this, EYE, this.lookYaw, tp, C) < 0.02)
+      return (tp.covered || this.trunkShield(tp) || sightOf(this.world, this, EYE, this.lookYaw, tp, C) < 0.02)
         && !this.observers.some((o) => o.p.id === tp.id && o.ob?.lit);
+    }
+    return false;
+  }
+
+  // Collision keeps a player just outside a trunk, which can leave a grazing visual ray.
+  // Treat that trunk as hard cover when it is physically between Helium and a crouched player.
+  trunkShield(tp) {
+    const dx = this.x - tp.x, dz = this.z - tp.z, d = Math.hypot(dx, dz);
+    if (d < 1 || !this.world.queryColliders) return false;
+    const refs = this.world.queryColliders(tp.x, tp.z, 1.5, this._shieldRefs || (this._shieldRefs = []));
+    for (const ref of refs) {
+      if (ref >= 100000) continue;
+      const c = this.world.circles[ref]; if (!c || c[2] < 0.1) continue;
+      const tx = c[0] - tp.x, tz = c[1] - tp.z;
+      const along = (tx * dx + tz * dz) / d;
+      if (along <= 0 || along > Math.min(1.6, d - 0.1)) continue;
+      const side = Math.abs(tx * dz - tz * dx) / d;
+      if (side < c[2] + 0.14) return true;
     }
     return false;
   }

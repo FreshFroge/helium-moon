@@ -89,6 +89,7 @@ test('no hunt opens on a downed player; after hiding there is a breather',()=>{
 test('losing sight or time no longer ends a hunt',()=>{
   const {sim,p,hv}=encounter(25);
   hv.startChase(p);assert.equal(sim.director.chasing,true);
+  hv.huntHideUntil=sim.time; // exercise the committed-pursuit behavior after the opening stalk
   hv.lastSeenChase={x:p.x+30,z:p.z+30,t:sim.time-20};hv.stateT=90;
   tick(sim,.5);
   assert.equal(hv.state,'chase');assert.equal(sim.director.chasing,true);
