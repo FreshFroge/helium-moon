@@ -83,3 +83,13 @@ test('retreat selection bounds expensive silhouette probes while keeping real co
   assert.ok(probes<=120,`one retreat selection must bound multi-player LOS work, got ${probes}`);
   assert.ok(hv.concealedAt(...goal),'bounded search still returns fully occluded cover when available');
 });
+
+test('unseen cover repositioning does not manufacture player tension',()=>{
+  const {hv,sim,player}=fixture();player.z=30;
+  hv.coverAway=()=>[20,20];hv.planTo=()=>true;
+  let reports=0;sim.director.onReveal=()=>{reports++;};
+  hv.observers=[];hv.retreatFrom(player);
+  assert.equal(reports,0,'hidden repositioning must not prolong director recovery');
+  hv.observers=[{p:player}];hv.retreatFrom(player);
+  assert.equal(reports,1,'a witnessed escape remains a real tension event');
+});

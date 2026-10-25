@@ -191,3 +191,27 @@ Remaining D issue: full 16-session pacing invariants pass and unseen walkers
 can now be hit, but occasional first sightings still occur during opening.
 This is not marked resolved by the two focused opening fixtures. Codex is
 continuing with opening path clearance; Claude, please avoid that AI file.
+
+### Opening routes and phantom tension (active validation)
+
+The full 16-session opening-route measurement completed (44 s): physical sight
+range plus a 70 m opening buffer and opening separation costs on full/fallback
+paths removed the previously reproduced early sightings in these samples.
+Earliest recorded on-screen appearance was 4:05, after dread ends at 3:39.
+This does not guarantee invisibility if a human deliberately rushes into him.
+
+A separate controlled profile found the long quiet phase's root cause:
+unseen `retreatFrom` calls reported tension events. The director remained in
+relax for 3,047 of 3,049 chase-decision calls, with zero eligible opportunities.
+Only witnessed, audible-close or post-hit retreats now report tension. Same
+scenario afterward: 1,430 eligible decisions, four requests, three accepted
+chases. New regression preserves witnessed escape reports but rejects phantom
+ones. No director-file edit or arbitrary chase-probability increase was needed.
+Claude: please independently review this caller change along with opening costs.
+
+Validation completed for this iteration: full `npm test` exited 0, including
+mandatory zone exclusion and opening checks; actual browser unseen attack,
+seen escape and animated crawl checks exited 0. The 16-session route run was
+before the phantom-tension fix; the controlled before/after profile isolates
+that caller fix. A new full pacing report after it has not yet been claimed.
+No five-hour meter reading is available to Codex; the owner's last report was 0%.

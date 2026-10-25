@@ -69,7 +69,7 @@ export class HeliumVoiceAI {
     const d = this.sim.director?.minDistance?.() || 0;
     // Stay beyond the simulation's lit visibility range, while still entering
     // the outer cold ring. This does not hide the rendered character.
-    return d > 0 ? Math.max(d, CONFIG.FLASHLIGHT.RANGE + 10) : 0;
+    return d > 0 ? Math.max(d, CONFIG.FLASHLIGHT.RANGE + 18) : 0;
   }
   openingClear(x, z) {
     const distance = this.openingDistance();
@@ -139,7 +139,7 @@ export class HeliumVoiceAI {
 
   // ---------------------------------------------------------------- movement
   planTo(x, z, mode = 'cover') {
-    if (!this.outsideSpawn(x,z)) { this.path=null;this.finalGoal=null;return false; }
+    if (!this.openingClear(x,z)) { this.path=null;this.finalGoal=null;return false; }
     const w = this.world, sim = this.sim, R = CONFIG.GRID_RES, gw = w.gw, x0 = w.minX, z0 = w.minZ;
     // long trips are planned in legs of <=110 m (bounded A* cost per tick; re-planned on arrival)
     const D = Math.hypot(x - this.x, z - this.z);
@@ -164,11 +164,22 @@ export class HeliumVoiceAI {
         return c;
       };
     }
-    const coverCost = costFn;
-    costFn = i => { const cx=x0+(i%gw)*R,cz=z0+((i/gw)|0)*R; return spawnZoneCost(w,cx,cz)+(coverCost?coverCost(i):0); };
+    const coverCost = costFn, opening = this.openingDistance();
+    const openingPlayers = opening ? sim.playerList.filter(playerActive).map(p => [p.x,p.z]) : [];
+    const safetyCost = i => {
+      const cx=x0+(i%gw)*R,cz=z0+((i/gw)|0)*R;
+      let cost=spawnZoneCost(w,cx,cz);
+      for(const [px,pz] of openingPlayers){
+        const distance=Math.hypot(cx-px,cz-pz);
+        if(distance<opening)return cost+1e5;
+        if(distance<opening+8)cost+=8*Math.pow(1-(distance-opening)/8,2);
+      }
+      return cost;
+    };
+    costFn = i => safetyCost(i)+(coverCost?coverCost(i):0);
     this.path = w.findPath(this.x, this.z, gx, gz, { costFn, maxExpand: mode === 'direct' ? 9000 : 14000 });
     // leg target unreachable (e.g. across the river): try a short plain leg instead of an unbounded search
-    if (!this.path && this.finalGoal) { const k = 45 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: i => spawnZoneCost(w,...w.cellPos(i)), maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
+    if (!this.path && this.finalGoal) { const k = 45 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: safetyCost, maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
     this.pathI = 1; this.goal = [x, z];
     return !!this.path;
   }
@@ -530,7 +541,10 @@ export class HeliumVoiceAI {
     this.setState('retreat');
     if (away) this.planTo(away[0], away[1], 'cover');
     if (this.path?.length > 1) this.yaw = Math.atan2(this.path[1][0] - this.x, this.path[1][1] - this.z) + Math.PI;
-    this.sim.director.onReveal('retreat');
+    // Only perceived escapes add tension. Unseen repositioning must not
+    // keep the director in permanent recovery while the player hears nothing.
+    if (this.observers?.length || this.dist(p) <= C.FOOTSTEP_MAX_DISTANCE || this.sim.time-this.attackT < .2)
+      this.sim.director.onReveal('retreat');
   }
 
   startChase(p) {
