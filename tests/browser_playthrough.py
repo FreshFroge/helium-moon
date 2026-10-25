@@ -249,6 +249,36 @@ async def play(port):
             assert await page.evaluate("game.myState === 'alive' && game.health === 2")
             print('  ok  lethal damage reaches game over and restart restores health')
 
+            # Exercise actual AI attacks and their client health snapshots.
+            # Position fixtures establish a close encounter; neither test calls
+            # damagePlayer or directly puts the enemy in its damaging state.
+            for creature in ['hv', 'sf']:
+                attack = await page.evaluate('''async creature => {
+                    const {pointAtDistance} = await import('/shared/math.js');
+                    const at = pointAtDistance(game.world.trail,game.world.trailCum,500);
+                    const target = pointAtDistance(game.world.trail,game.world.trailCum,506);
+                    game.tp(target.x,target.z,at.x,at.z);
+                    const sim = game.sim, player = sim.players.get(game.myId);
+                    sim.state = 'play'; sim.time = 100; sim.director.enter('build');
+                    sim[creature === 'hv' ? 'sf' : 'hv'].update = () => {};
+                    game.flashlight.on = player.flash = creature === 'hv';
+                    const actor = sim[creature];
+                    Object.assign(actor,{x:at.x,z:at.z,y:game.world.heightAt(at.x,at.z)});
+                    actor.yaw = actor.lookYaw = Math.atan2(player.x-at.x,player.z-at.z);
+                    if(creature === 'hv') {
+                        actor.target = game.myId;
+                        actor.awareness.set(game.myId,1.5); actor.spotted.add(game.myId);
+                        actor.setState('watch');
+                    } else actor.setState('lurk');
+                    for(let i=0;i<240 && player.health===2;i++) game.advance(1,1/30,false);
+                    game.advance(6,1/30,false);
+                    return {server:player.health,client:game.health,state:actor.state};
+                }''', creature)
+                assert attack['server'] < 2 and attack['client'] == attack['server'], attack
+                await page.evaluate('game.restart()')
+                await advance(0.2)
+            print('  ok  both real enemy AI attacks damage the player and update browser health')
+
             # Real AI stays enabled after restart. Follow the trail with actual
             # controller input for six simulated minutes, stopping on death.
             encounter = await page.evaluate('''async () => {

@@ -142,11 +142,13 @@ export class SkunkAI {
         if (!p || !playerAlive(p)) { this.setState('retreat'); break; }
         a.fast = 1;
         const d = this.dist(p);
-        if (this.stateT < 0.05) { this.vocal('growl', true); sim.director.onSkunk(); }
-        if (d > 3.2 && this.stateT < 3.5) {
+        if (this.stateT - dt <= 1e-6) { this.vocal('growl', true); sim.director.onSkunk(); }
+        if (this.stateT < 0.35) { a.rear = 1; this.speed = 0; break; } // visible pre-lunge warning
+        const contact = C.BITE_RANGE * 0.85;
+        if (d > contact && this.stateT < 3.5) {
           this.speed = lerp(this.speed, C.DART, dt * 8);
           const dx = p.x - this.x, dz = p.z - this.z;
-          const step = Math.min(d - 3, this.speed * dt);
+          const step = Math.min(d - contact, this.speed * dt);
           const r = moveCharacter(this.world, this, dx / d * step, dz / d * step, 0.25, { nav: true, slope: false });
           this.x = r.x; this.z = r.z; this.y = groundAt(this.world, this.x, this.z);
           this.yaw += angleDiff(this.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 12);
@@ -162,7 +164,8 @@ export class SkunkAI {
           this.gasT = sim.time;
           sim.addGas(this.x, this.y, this.z);
         }
-        if (p && this.dist(p) < C.BITE_RANGE && sim.time - this.biteT > 6) { this.biteT = sim.time; sim.damagePlayer(p, 'sf', this); }
+        if (p && this.stateT >= 0.45 && this.dist(p) < C.BITE_RANGE && Math.abs(this.y - p.y) < 0.8 && sim.time - this.biteT > 6
+            && this.world.lineOfSight(this.x, this.y + 0.4 * C.MODEL_SCALE, this.z, p.x, p.y + 0.5, p.z, { brushK: 0 }) > 0.2) { this.biteT = sim.time; sim.damagePlayer(p, 'sf', this); }
         if (this.stateT > 2.4) this.flee(p || this);
         break;
       }

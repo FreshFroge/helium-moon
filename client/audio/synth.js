@@ -161,22 +161,6 @@ export function coyotes(seed) {
   return fade(normalize(filter(out, 'lp', 2600, 0.7, SR), 0.8), SR, 0.02, 0.4);
 }
 
-export function trainHorn(seed) {
-  const r = rngFor(seed), out = new Float32Array(N(9));
-  const tones = [311, 370, 466];
-  const blasts = [[0, 2.0], [2.5, 2.0], [5.0, 0.8], [6.2, 2.4]];
-  for (const [t0, d] of blasts) {
-    const s0 = N(t0), len = N(d);
-    for (let i = 0; i < len; i++) {
-      const t = i / SR, e = Math.min(1, t / 0.15) * Math.min(1, (d - t) / 0.3);
-      let v = 0;
-      for (const f of tones) for (let h = 1; h <= 4; h++) v += Math.sin(TAU * f * h * t + h) / (h * h);
-      out[s0 + i] += v * e;
-    }
-  }
-  return fade(normalize(filter(filter(out, 'lp', 900, 0.7, SR), 'lp', 1200, 0.7, SR), 0.7), SR, 0.01, 0.5);
-}
-
 export function creak(seed) {
   const r = rngFor(seed), d = r.range(0.8, 1.6), n = N(d), src = new Float32Array(n);
   let ph = 0;

@@ -20,7 +20,7 @@ export class AudioEngine {
     this.settings = settings;
     this.ready = false; this.lib = {}; this.var = {};
     this.world = null; this.listener = { x: 0, y: 0, z: 0, fx: 0, fz: -1 };
-    this.timers = { owl: 30, coyote: 100, train: 200, creak: 10, snap: 30, frog: 8, dog: 150 };
+    this.timers = { owl: 30, coyote: 100, creak: 10, snap: 30, frog: 8, dog: 150 };
     this.breathT = 0; this.breathIn = true; this.heartT = 0; this.onExhale = null;
     this.state = { terror: 0, fear: 0, cold: 0, exert: 0, gas: 0, downed: 0, inGame: false, critical: 0 };
     this.loops = {};
@@ -53,7 +53,7 @@ export class AudioEngine {
     const add = (key, fn) => jobs.push([key, fn]);
     add('crickets', () => S.crickets(11)); add('katydids', () => S.katydids(12)); add('wind', () => S.wind(13)); add('river', () => S.river(14)); add('traffic', () => S.traffic(15));
     for (let i = 0; i < 3; i++) { add('owl' + i, () => S.owl(20 + i)); add('creak' + i, () => S.creak(30 + i)); add('snap' + i, () => S.twigSnap(40 + i)); add('frog' + i, () => S.frog(50 + i)); }
-    add('coyote0', () => S.coyotes(60)); add('coyote1', () => S.coyotes(61)); add('train', () => S.trainHorn(62)); add('dog0', () => S.dogBark(63));
+    add('coyote0', () => S.coyotes(60)); add('coyote1', () => S.coyotes(61)); add('dog0', () => S.dogBark(63));
     for (const k of ['litter', 'dirt', 'mud', 'grass', 'silt', 'water', 'gravel', 'wood', 'asphalt', 'brush']) for (let i = 0; i < 4; i++) add(`fs_${k}${i}`, () => S.footstep(k, 100 + i * 7 + k.length));
     add('heart', () => S.heartbeat()); add('clickOn', () => S.click(1, true)); add('clickOff', () => S.click(2, false)); add('paper', () => S.paper(3)); add('clink', () => S.clink(4));
     for (const k of ['gen', 'relay', 'mast']) add('work_' + k, () => S.work(k, 5));
@@ -271,7 +271,7 @@ export class AudioEngine {
     this.setLoopGain(this.loops.katydids, 0.32 * insects * (0.7 + 0.3 * Math.sin(t * 0.05)), 0.6);
     const rd = w ? w.riverDistAt(L.x, L.z) : 100;
     this.setLoopGain(this.loops.river, 0.55 * Math.pow(clamp(1 - rd / 75, 0, 1), 2), 0.5);
-    this.setLoopGain(this.loops.wind, 0.28 + 0.12 * Math.sin(t * 0.13), 0.8);
+    this.setLoopGain(this.loops.wind, 0.36 + 0.14 * Math.sin(t * 0.13), 0.8);
     const hw = w?.poi?.highway;
     const hd = hw ? Math.hypot(L.x - hw.x, L.z - hw.z) : 800;
     this.setLoopGain(this.loops.traffic, 0.1 + 0.4 * clamp(1 - hd / 500, 0, 1), 1);
@@ -327,7 +327,6 @@ export class AudioEngine {
     if (quiet) return;
     if (T.owl <= 0) { T.owl = 25 + Math.random() * 55; this.play(this.pick('owl', 3, (Math.random() * 9) | 0), { pos: this._randPos(50, 140, 9), gain: 0.55, ref: 12, reverb: 0.5, occlude: false }); }
     if (T.coyote <= 0) { T.coyote = 100 + Math.random() * 140; this.play(this.pick('coyote', 2, (Math.random() * 9) | 0), { pos: this._randPos(220, 420, 2), gain: 0.9, ref: 40, reverb: 0.8, occlude: false }); }
-    if (T.train <= 0) { T.train = 260 + Math.random() * 200; this.play(this.lib.train, { pos: this._randPos(900, 1300, 5), gain: 1.2, ref: 300, rolloff: 1, max: 3000, reverb: 0.6, occlude: false }); }
     if (T.creak <= 0) { T.creak = 7 + Math.random() * 16; this.play(this.pick('creak', 3, (Math.random() * 9) | 0), { pos: this._randPos(10, 40, 5), gain: 0.35, ref: 5, reverb: 0.35 }); }
     if (T.snap <= 0) { T.snap = 25 + Math.random() * 45; this.play(this.pick('snap', 3, (Math.random() * 9) | 0), { pos: this._randPos(25, 70, 0.3), gain: 0.4, ref: 6, reverb: 0.4 }); }
     if (T.frog <= 0) {

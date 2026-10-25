@@ -964,6 +964,19 @@ export class World {
     cells.reverse();
     // string-pull: keep only waypoints needed for straight walkable segments
     const pts = cells.map((i) => this.cellPos(i));
+    // Cost-aware routes deliberately avoid exposed ground/player sightlines.
+    // Geometric string-pulling would discard those costs and undo the cover
+    // detour. Only remove collinear waypoints for weighted paths.
+    if (extra) {
+      const route = [pts[0]];
+      for (let i = 1; i < pts.length - 1; i++) {
+        const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+        if ((b[0] - a[0]) * (c[1] - b[1]) !== (b[1] - a[1]) * (c[0] - b[0])) route.push(b);
+      }
+      route.push(pts[pts.length - 1]);
+      if (best === t) route[route.length - 1] = [tx, tz];
+      return route;
+    }
     const out = [pts[0]];
     let anchor = 0;
     for (let i = 2; i < pts.length; i++) {

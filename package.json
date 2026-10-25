@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "start": "node server/server.js",
-    "test": "node tests/startup.test.mjs && node tests/events.test.mjs && node tests/horror.test.mjs && node tests/breathing.test.mjs && node tests/animation.test.mjs && node tests/bridge.test.mjs && node tests/spawn.test.mjs && node tests/objectives.test.mjs && node tests/sim.test.mjs && node tests/server.test.mjs"
+    "test": "node tests/hiding.test.mjs && node tests/attacks.test.mjs && node tests/startup.test.mjs && node tests/events.test.mjs && node tests/horror.test.mjs && node tests/breathing.test.mjs && node tests/animation.test.mjs && node tests/bridge.test.mjs && node tests/spawn.test.mjs && node tests/objectives.test.mjs && node tests/sim.test.mjs && node tests/server.test.mjs"
   },
   "engines": {
     "node": ">=18"

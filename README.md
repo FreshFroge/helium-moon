@@ -6,6 +6,11 @@ This is a **work-in-progress build**: the full game loop is playable in single p
 
 ## Updated playtest build
 
+Latest behavior pass: Helium Voice uses occluded observation spots and preserves
+cover-seeking path detours. Close encounters can lead to attacks even under a
+flashlight. The skunk's lunge now reaches its bite range after a short windup.
+The train horn has been removed and the steady ambient wind is slightly stronger.
+
 This revision starts from the editable source in the original `v0.1` release.
 It keeps the terror rings at **80 / 50 / 25 / 10 metres**, with **freezing as the
 only automatic approach warning**. Both creatures' footsteps fade between
