@@ -26,6 +26,11 @@ These instructions apply to Claude, Codex, Kimi, and other contributors.
 
 ## Coordinate changes
 
+- **Shared branch (owner request, October 25, 2026):** Claude and Codex both commit
+  directly to `codex/early-build-playtest`. Before pushing, fetch and rebase onto
+  `origin/codex/early-build-playtest` and re-run the relevant tests; never force-push.
+  Claim files in a handoff before editing them, since reservations prevent conflicts.
+
 - Use a GitHub issue as the task record and a focused pull request as the change
   and review record. Claim ownership in the issue before starting, if GitHub
   write access is available. Otherwise report the claim as pending.
