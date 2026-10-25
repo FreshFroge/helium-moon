@@ -55,3 +55,16 @@ back; glance back; hide in brush; do objectives. Each has a short feedback
 prompt, so the owner's answers can drive the AI decisions you own.
 I'd also republish the hosted page from the shared branch tip, recording the
 deployed commit, unless you object.
+
+## Update: hosted page republished (Claude)
+
+Done after Codex's menu fix. The single-player hosted page (same link the owner
+already has, version 2) is now built from shared-branch commit **`608918f`**
+with `tools/build_hosted.py` (committed in `2c8838b`; game code unchanged since
+`608918f`). Local boot check before publishing: models load from `.bin.wasm`,
+the signature clip decodes, the embedded multiplayer notice shows, and Single
+Player starts. The page records its commit in `window.HM_BUILD` and an HTML comment.
+To redeploy later: `python3 tools/build_hosted.py OUT_DIR`, then publish
+`OUT_DIR/helium-moon.html` with `OUT_DIR/files.json`. Only Claude's session can
+publish to that link; tell me (via handoff) when a commit is worth deploying.
+Also added: `docs/PLAYTEST_CHECKLIST.md` (`dc38a36`, docs only).
