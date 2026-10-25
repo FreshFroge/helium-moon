@@ -21,6 +21,9 @@
 //   node tests/hunt_playtests.mjs                       (10 sessions, up to 30 min)
 //   HUNT_JSON=/tmp/hunts.json node tests/hunt_playtests.mjs
 //   HUNT_SESSIONS=3 HUNT_MINUTES=12 node tests/hunt_playtests.mjs   (quicker)
+//   HUNT_ONLY=7 HUNT_RECORD=/tmp/clip.json HUNT_WINDOW=366,392 node tests/hunt_playtests.mjs
+//     (one playtest; saves every server snapshot + event in the window, for video replays:
+//      tools/render_hunt_replay.py)
 import fs from 'node:fs';
 import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
@@ -42,7 +45,9 @@ const PLAN = [
   { team: 2, seed: 2005 }, { team: 2, seed: 2006 }, { team: 2, seed: 2007 },
   { team: 3, seed: 2008 }, { team: 3, seed: 2009 },
   { team: 4, seed: 2010 },
-].slice(0, +(process.env.HUNT_SESSIONS || 10));
+].slice(0, +(process.env.HUNT_SESSIONS || 10)).map((cfg, i) => ({ ...cfg, n: i + 1 }))
+  .filter((cfg) => !process.env.HUNT_ONLY || cfg.n === +process.env.HUNT_ONLY);
+const REC = process.env.HUNT_RECORD ? { path: process.env.HUNT_RECORD, win: (process.env.HUNT_WINDOW || '0,99999').split(',').map(Number), frames: [] } : null;
 
 const PERSONAS = {
   // travel: 'walk' never sprints between objectives (quiet, keeps stamina to flee);
@@ -267,6 +272,7 @@ function playtest(n, { team, seed }) {
     const hv = sim.hv;
     const evs = sim.drainEvents();
     pending = evs;
+    if (REC && sim.time >= REC.win[0] && sim.time <= REC.win[1]) REC.frames.push({ t: +sim.time.toFixed(2), snap: sim.snapshot(), ev: evs, hvState: hv.state });
     for (const e of evs) {
       const tgtBot = (pid) => bots.find((b) => b.id === pid);
       if (e.type === 'chase' && e.on) {
@@ -350,8 +356,8 @@ function playtest(n, { team, seed }) {
 
 // ------------------------------------------------------------------ run
 const t0 = Date.now();
-const results = PLAN.map((cfg, i) => {
-  const r = playtest(i + 1, cfg);
+const results = PLAN.map((cfg) => {
+  const r = playtest(cfg.n, cfg);
   console.log(`\n### Playtest ${r.n}: ${r.team === 1 ? 'solo' : r.team + ' players'} (seed ${r.seed}): ${r.outcome} at ${mmss(r.minutes * 60)}, ${r.objectives}/3 objectives, ${r.hunts.length} hunts`);
   console.log(`players: ${r.personas.join('; ')}`);
   console.log('# | start | end | length | target | he was | start dist | target doing | where | player reacted | ended | closest | on target screen');
@@ -362,3 +368,4 @@ const results = PLAN.map((cfg, i) => {
 });
 console.log(`\n${results.length} playtests, ${((Date.now() - t0) / 1000).toFixed(0)} s wall time`);
 if (process.env.HUNT_JSON) fs.writeFileSync(process.env.HUNT_JSON, JSON.stringify(results, null, 1));
+if (REC) { fs.writeFileSync(REC.path, JSON.stringify({ window: REC.win, frames: REC.frames })); console.log(`recorded ${REC.frames.length} snapshots to ${REC.path}`); }
