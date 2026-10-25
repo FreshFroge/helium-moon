@@ -12,7 +12,9 @@ import { CONFIG } from '../../shared/config.js';
 
 // ------------------------------------------------------------------ interpolation
 export class SnapBuffer {
-  constructor(angles = [], discrete = []) { this.buf = []; this.angles = new Set(angles); this.discrete = new Set(discrete); this.out = []; }
+  // jump: if x/z (indices 0, 2) move farther than this between two snapshots, it's a
+  // relocation (e.g. Helium Voice's unseen reposition), not motion: hold, then snap.
+  constructor(angles = [], discrete = [], jump = Infinity) { this.buf = []; this.angles = new Set(angles); this.discrete = new Set(discrete); this.jump = jump; this.out = []; }
   push(t, a) {
     if (!a) return;
     const b = this.buf;
@@ -30,6 +32,7 @@ export class SnapBuffer {
     if (rt >= b[i].t) return b[i].a;   // no extrapolation: hold the last state
     while (i > 0 && b[i - 1].t > rt) i--;
     const A = b[i - 1], B = b[i], k = (rt - A.t) / Math.max(1e-6, B.t - A.t);
+    if (this.jump < Infinity) { const dx = B.a[0] - A.a[0], dz = B.a[2] - A.a[2]; if (dx * dx + dz * dz > this.jump * this.jump) return k < 1 ? A.a : B.a; }
     const o = this.out; o.length = A.a.length;
     for (let j = 0; j < A.a.length; j++) {
       const x = A.a[j], y = B.a[j];
