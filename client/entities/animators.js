@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../../shared/math.js';
 
-const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q2 = new THREE.Quaternion();
+const _e = new THREE.Euler(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q2 = new THREE.Quaternion();
 const _chain = [], _wpQ = new THREE.Quaternion(), _wpV = new THREE.Vector3();   // scratch for wq()/wp() (not re-entrant)
 
 class Rig {
@@ -166,27 +166,27 @@ export class HeliumAnimator {
       const low = Math.min(this._ground(p, 0.2, 0), this._ground(p, -0.2, 0), this._ground(p, 0, -0.4));
       b.root.position.y += clamp(low, -0.25, 0.12);
     }
-    b.root.quaternion.setFromEuler(new THREE.Euler(0, 0, bank + weight * 0.55));
+    b.root.quaternion.setFromEuler(_e.set(0, 0, bank + weight * 0.55, 'XYZ'));
     // The torso follows a glance later and less far than the head. The residual
     // look angle stays in the neck, so turning the chest cannot double the gaze.
     this.torsoYaw = lerp(this.torsoYaw, clamp((p.lookYaw || 0) * 0.22, -0.3, 0.3) * creature,
       1 - Math.exp(-dt * (p.still ? 0.7 : 1.7)));
     const gaitYaw = Math.sin(cycle) * 0.035 * moving * free;
     for (const n of ['spine05', 'spine04', 'spine03', 'spine02']) {
-      b[n].quaternion.setFromEuler(new THREE.Euler(lean / 4 + breathe * 0.3,
+      b[n].quaternion.setFromEuler(_e.set(lean / 4 + breathe * 0.3,
         this.torsoYaw / 5 + gaitYaw,
-        -bank * 0.18));
+        -bank * 0.18, 'XYZ'));
     }
-    b.spine01.quaternion.setFromEuler(new THREE.Euler(breathe, this.torsoYaw / 5, -weight * 0.3));
+    b.spine01.quaternion.setFromEuler(_e.set(breathe, this.torsoYaw / 5, -weight * 0.3, 'XYZ'));
     this.headYaw = lerp(this.headYaw, clamp((p.lookYaw || 0) - this.torsoYaw - gaitYaw * 4 * creature, -1.95, 1.95),
       1 - Math.exp(-dt * (p.snap ? 12 : creature ? 3.4 : 2.2)));
     this.headPitch = lerp(this.headPitch, clamp((p.lookPitch || 0) - lean * 0.7, -0.7, 0.6), 1 - Math.exp(-dt * 3));
     this.tilt = lerp(this.tilt, p.tilt || 0, 1 - Math.exp(-dt * 1.6));
     this.jaw = lerp(this.jaw, p.jaw || 0, 1 - Math.exp(-dt * 14));
     const ny = this.headYaw / 4, np = this.headPitch / 4;
-    for (const n of ['neck01', 'neck02', 'neck03']) b[n].quaternion.setFromEuler(new THREE.Euler(np, ny, this.tilt * 0.2, 'YXZ'));
-    b.head.quaternion.setFromEuler(new THREE.Euler(np, ny, this.tilt * 0.6, 'YXZ'));
-    if (b.jaw) b.jaw.quaternion.setFromEuler(new THREE.Euler(this.jaw * 0.45, 0, 0));
+    for (const n of ['neck01', 'neck02', 'neck03']) b[n].quaternion.setFromEuler(_e.set(np, ny, this.tilt * 0.2, 'YXZ'));
+    b.head.quaternion.setFromEuler(_e.set(np, ny, this.tilt * 0.6, 'YXZ'));
+    if (b.jaw) b.jaw.quaternion.setFromEuler(_e.set(this.jaw * 0.45, 0, 0, 'XYZ'));
     for (const s of ['L', 'R']) {
       const L = this.l[s], foot = this.feet[s], sign = s === 'L' ? 1 : -1;
       // A small stance-time mismatch makes the stalk deliberate and uncomfortable
@@ -248,15 +248,15 @@ export class HeliumAnimator {
     // Hips high, chest low, head craned back toward the player. The body faces
     // opposite authoritative travel; planted limbs sweep forward in local space.
     b.root.position.y = lerp(b.root.position.y, 0.78 + Math.sin(cycle * 2) * 0.025, blend);
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(1.95, 0, Math.sin(cycle) * 0.045));
+    const q = new THREE.Quaternion().setFromEuler(_e.set(1.95, 0, Math.sin(cycle) * 0.045, 'XYZ'));
     if (p.ground) q.premultiply(this._groundTilt(p));
     b.root.quaternion.slerp(q, blend);
     for (const n of ['spine05', 'spine04', 'spine03', 'spine02', 'spine01']) {
-      q.setFromEuler(new THREE.Euler(-0.015, Math.sin(cycle + 0.7) * 0.015, 0));
+      q.setFromEuler(_e.set(-0.015, Math.sin(cycle + 0.7) * 0.015, 0, 'XYZ'));
       b[n].quaternion.slerp(q, blend);
     }
     for (const n of ['neck01', 'neck02', 'neck03', 'head']) {
-      q.setFromEuler(new THREE.Euler(n === 'head' ? -0.65 : -0.39, this.headYaw * 0.18, this.tilt * 0.15));
+      q.setFromEuler(_e.set(n === 'head' ? -0.65 : -0.39, this.headYaw * 0.18, this.tilt * 0.15, 'XYZ'));
       b[n].quaternion.slerp(q, blend);
     }
     const moving = clamp(speed / 0.5, 0, 1);
@@ -323,20 +323,20 @@ export class SkunkAnimator {
     if (sp > 0.02) this.phase = (this.phase + dt * sp / (stride * 2)) % 1;
     rig.reset();
     b.root.position.y = b.root.userData.restPos.y - 0.12 * B.low + Math.sin(this.phase * Math.PI * 4) * 0.02 * B.move + 0.35 * B.rear;
-    b.root.quaternion.setFromEuler(new THREE.Euler(-1.05 * B.rear, 0, Math.sin(this.phase * Math.PI * 2) * 0.05 * B.move));
+    b.root.quaternion.setFromEuler(_e.set(-1.05 * B.rear, 0, Math.sin(this.phase * Math.PI * 2) * 0.05 * B.move, 'XYZ'));
     const und = Math.sin(this.phase * Math.PI * 2 + 1.2) * 0.08 * B.move;
-    b.spine1.quaternion.setFromEuler(new THREE.Euler(0.05 * B.low, und, 0));
-    b.spine2.quaternion.setFromEuler(new THREE.Euler(0.08 * B.low - 0.15 * B.gas, und, 0));
+    b.spine1.quaternion.setFromEuler(_e.set(0.05 * B.low, und, 0, 'XYZ'));
+    b.spine2.quaternion.setFromEuler(_e.set(0.08 * B.low - 0.15 * B.gas, und, 0, 'XYZ'));
     const twitch = (Math.sin(this.t * 13.1) > 0.97 ? 0.4 : 0) * (1 - B.move);
     this.headYaw = lerp(this.headYaw, clamp((p.lookYaw || 0) + twitch, -1.4, 1.4), 1 - Math.exp(-dt * 9));
-    b.neck.quaternion.setFromEuler(new THREE.Euler(0.15 * B.low + 0.5 * B.rear, this.headYaw * 0.5, 0));
-    b.head.quaternion.setFromEuler(new THREE.Euler(-0.1 + 0.4 * B.rear + Math.sin(this.t * 6) * 0.03 * (1 - B.move), this.headYaw * 0.5, Math.sin(this.t * 0.7) * 0.15));
+    b.neck.quaternion.setFromEuler(_e.set(0.15 * B.low + 0.5 * B.rear, this.headYaw * 0.5, 0, 'XYZ'));
+    b.head.quaternion.setFromEuler(_e.set(-0.1 + 0.4 * B.rear + Math.sin(this.t * 6) * 0.03 * (1 - B.move), this.headYaw * 0.5, Math.sin(this.t * 0.7) * 0.15, 'XYZ'));
     this.jaw = lerp(this.jaw, p.jaw || 0, 1 - Math.exp(-dt * 16));
-    b.jaw.quaternion.setFromEuler(new THREE.Euler(this.jaw * 0.6, 0, 0));
+    b.jaw.quaternion.setFromEuler(_e.set(this.jaw * 0.6, 0, 0, 'XYZ'));
     const tq = Math.sin(this.t * 28) * 0.08 * B.gas;
-    b.tail1.quaternion.setFromEuler(new THREE.Euler(-0.4 * B.gas + 0.2 * B.low + Math.sin(this.t * 1.3) * 0.08, Math.sin(this.t * 0.9) * 0.15 + tq, 0));
-    b.tail2.quaternion.setFromEuler(new THREE.Euler(-0.3 * B.gas + Math.sin(this.t * 1.1 + 1) * 0.1, tq, 0));
-    b.tail3.quaternion.setFromEuler(new THREE.Euler(0.2 * B.gas, Math.sin(this.t * 1.7) * 0.2 + tq, 0));
+    b.tail1.quaternion.setFromEuler(_e.set(-0.4 * B.gas + 0.2 * B.low + Math.sin(this.t * 1.3) * 0.08, Math.sin(this.t * 0.9) * 0.15 + tq, 0, 'XYZ'));
+    b.tail2.quaternion.setFromEuler(_e.set(-0.3 * B.gas + Math.sin(this.t * 1.1 + 1) * 0.1, tq, 0, 'XYZ'));
+    b.tail3.quaternion.setFromEuler(_e.set(0.2 * B.gas, Math.sin(this.t * 1.7) * 0.2 + tq, 0, 'XYZ'));
     const offs = { fL: 0, bR: 0.1, fR: 0.5, bL: 0.6 };
     for (const [key, L] of Object.entries(this.legs)) {
       const ph = (this.phase + offs[key]) % 1;
