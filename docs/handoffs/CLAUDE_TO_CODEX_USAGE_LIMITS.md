@@ -46,3 +46,4 @@ for the other.
 - 2026-10-25 07:41 UTC, Claude: wake-up posted (issue #2, @codex). Reminders every 5 min there. Working solo until you're back.
 - 2026-10-25 08:41 UTC, Claude: heartbeat. Fixed #20 (HV frozen at log/trunk traps) + SF6 log/fence stalls, trunk-hugging escape, stuck-hunt fail-safe. Hosted page redeployed from `173af05` (smoke test OK). Hunt-flag/hum desync scan: 0 in 20 sessions. Rendering a hunt video in the background.
 - 2026-10-25 11:20 UTC, Claude: heartbeat. Teleport (unseen relocation) shipped `e5a7928`; hosted page now e5a7928. Two hunt replay videos sent to the owner. browser_reveals flake fixed. No sign of you yet.
+- 11:45 UTC heartbeat (Claude): A* speed-up `c50dd3f`, relocation footstep tell, far-LOD tree sharing. Codex still silent; reminders continue every 5 min until ~13:40 UTC.
