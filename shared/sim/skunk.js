@@ -83,9 +83,16 @@ export class SkunkAI {
     // avoided for NAV_BLOCK_TIME s so the replan goes around instead of back into them
     const blocks = (this.navBlocks || []).filter((b) => this.sim.time - b.t < CONFIG.HV.NAV_BLOCK_TIME); this.navBlocks = blocks;
     const logs = tallLogCells(w);
-    const costFn = (i) => (gB[i] < 0.2 ? 1.2 : 0) + (gT[i] < 2.5 ? 3 : 0) + spawnZoneCost(w,...w.cellPos(i)) + (blocks.some((b) => b.i === i) ? 80 : 0) + (logs.has(i) ? 40 : 0);
+    // same values as spawnZoneCost(w, ...w.cellPos(i)) without allocating per cell
+    const R = CONFIG.GRID_RES, gw = w.gw, spawnCost = (i) => spawnZoneCost(w, w.minX + (i % gw) * R, w.minZ + Math.floor(i / gw) * R);
+    const nb = blocks.length;
+    const costFn = (i) => {
+      let c = (gB[i] < 0.2 ? 1.2 : 0) + (gT[i] < 2.5 ? 3 : 0) + spawnCost(i);
+      if (nb) for (let k = 0; k < nb; k++) if (blocks[k].i === i) { c += 80; break; }
+      return c + (logs.has(i) ? 40 : 0);
+    };
     this.path = w.findPath(this.x, this.z, gx, gz, { costFn, maxExpand: 10000 });
-    if (!this.path && this.finalGoal) { const k = 40 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: i => spawnZoneCost(w,...w.cellPos(i)), maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
+    if (!this.path && this.finalGoal) { const k = 40 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: spawnCost, maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
     this.pathI = 1;
     return !!this.path;
   }
