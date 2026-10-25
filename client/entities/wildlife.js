@@ -8,6 +8,7 @@ import { patchMaterial } from '../render/shaderlib.js';
 import { clamp, lerp, makeRng } from '../../shared/math.js';
 
 const TAU = Math.PI * 2;
+const DEER_MIN_VIEW = 15;   // m
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // ---------------------------------------------------------------- geometry helpers
@@ -153,6 +154,9 @@ export class WildlifeSystem {
 
   // e: the server's 'wildlife' event
   spawn(e, viewer) {
+    // owner: the deer never appears close. The server places it 18-30 m from the player it
+    // was chosen for; a teammate who happens to be nearer than DEER_MIN_VIEW just hears it.
+    if (e.kind === 'deer' && Math.hypot(viewer.x - e.x, viewer.z - e.z) < DEER_MIN_VIEW) return;
     if (this.active) this.end();
     const rng = makeRng(e.s >>> 0);
     const a = { kind: e.kind, t: 0, x: e.x, y: e.y, z: e.z, fx: e.fx, fz: e.fz, rng, stepT: 0, said: {} };
@@ -191,6 +195,13 @@ export class WildlifeSystem {
     }
     const k = 0.02 + shine * 7;
     if (a.kind === 'deer') M.eyeMat.color.setRGB(k * 0.75, k * 0.95, k * 0.7); else M.eyeMat.color.setRGB(k * 0.9, k * 0.45, k * 0.12);
+  }
+
+  // [x, y(base), z, radius, height] of the active animal, for flashlight exposure/occlusion
+  body() {
+    const a = this.active; if (!a) return null;
+    if (a.kind === 'deer') { const p = this.deer.root.position; return { x: p.x, y: p.y, z: p.z, r: 0.45, h: 1.5 }; }
+    const p = this.owl.root.position; return { x: p.x, y: p.y, z: p.z, r: 0.25, h: 0.55 };
   }
 
   _ground(x, z) { return this.world.heightAt(x, z); }

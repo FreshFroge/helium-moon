@@ -714,6 +714,7 @@ export class Game {
     if (this.hv.root.visible) put(this.hv.pos.x, this.hv.pos.y, this.hv.pos.z, this.hv.flags & 16 ? 0.7 : 0.4, this.hv.flags & 16 ? 0.95 : 1.95);
     if (this.sf.root.visible) put(this.sf.pos.x, this.sf.pos.y, this.sf.pos.z, 0.55 * CONFIG.SF.MODEL_SCALE, CONFIG.SF.MODEL_SCALE);
     for (const a of this.avatars.values()) if (a.root.visible) put(a.pos.x, a.pos.y, a.pos.z, 0.35, 1.8);
+    const wb = this.wildlife && this.wildlife.body(); if (wb) put(wb.x, wb.y, wb.z, wb.r, wb.h);   // a deer or owl in the beam adapts the eye too
     for (let k = 1; k < 48; k++) {
       const t = k * 0.3, x = p.x + d.x * t, y = p.y + d.y * t, z = p.z + d.z * t;
       const g = w.heightAt(x, z);

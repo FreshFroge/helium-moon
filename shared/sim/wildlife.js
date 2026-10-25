@@ -15,7 +15,7 @@ export const WILDLIFE = {
   GAP: [300, 480],         // s between them (at most one per 5 min)
   RETRY: 20,               // s to wait when the moment isn't right
   HV_CLEAR: 45,            // m: never near Helium Voice (no confusion with a real threat)
-  DEER_DIST: [14, 26],
+  DEER_DIST: [18, 30],      // owner: never let the deer get close
   OWL_DIST: [8, 20],
 };
 
