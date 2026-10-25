@@ -240,6 +240,7 @@ export class Game {
   }
 
   _endSessionCleanup() {
+    this.ui.closeChat();
     this.voice && this.voice.endSession();
     this.audio && this.audio.stopAll();
     this.reading = null; this.ui.showNote(null);
@@ -405,6 +406,7 @@ export class Game {
   _end(r) {
     if (this.ended) return;
     this.ended = true; this.result = r;
+    this.ui.closeChat();
     this.voice.endSession();
     this.endDelay = r.result === 'won' ? 2.5 : 3.2;     // game-clock countdown to the end screen
     this.fadeTarget = r.result === 'won' ? 0.4 : 0.85;

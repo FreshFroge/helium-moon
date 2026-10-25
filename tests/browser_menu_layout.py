@@ -22,13 +22,25 @@ async def play(port):
                     result=await page.evaluate('''()=>{
                         const panel=document.querySelector('#panel'),p=panel.getBoundingClientRect();
                         const buttons=[...document.querySelectorAll('#menu-main button')];
-                        return {fits:p.left>=0&&p.top>=0&&p.right<=innerWidth&&p.bottom<=innerHeight,
+                        return {bounds:[p.left,p.top,p.right,p.bottom],fits:p.left>=0&&p.top>=0&&p.right<=innerWidth&&p.bottom<=innerHeight,
                             separate:buttons.every(b=>{const r=b.getBoundingClientRect();return r.right<=p.left||r.left>=p.right||r.bottom<=p.top||r.top>=p.bottom;}),
                             overflow:panel.scrollWidth>panel.clientWidth+1};
                     }''')
                     assert result['fits'] and result['separate'] and not result['overflow'],(width,height,action,result)
                     await page.locator('#panel').evaluate('(p)=>p.scrollTop=p.scrollHeight')
-                print(f'  ok  menu panels fit, scroll and leave navigation accessible at {width}x{height}',flush=True)
+                await page.evaluate("ui.showMenu(false);ui.showPause(true)")
+                for action in ['settings','controls']:
+                    await page.click(f'#pause nav [data-act={action}]')
+                    result=await page.evaluate('''()=>{
+                        const p=document.querySelector('#pause-panel').getBoundingClientRect();
+                        return {bounds:[p.left,p.top,p.right,p.bottom],fits:p.left>=0&&p.top>=0&&p.right<=innerWidth&&p.bottom<=innerHeight,
+                            separate:[...document.querySelectorAll('#pause nav button')].every(b=>{
+                                const r=b.getBoundingClientRect();return r.right<=p.left||r.left>=p.right||r.bottom<=p.top||r.top>=p.bottom;
+                            })};
+                    }''')
+                    assert result['fits'] and result['separate'],(width,height,'pause',action,result)
+                await page.evaluate("ui.showPause(false);ui.showMenu(true)")
+                print(f'  ok  main/pause panels fit and leave navigation accessible at {width}x{height}',flush=True)
             await page.screenshot(path='/tmp/helium-menu-compact.png')
         finally:
             await browser.close()

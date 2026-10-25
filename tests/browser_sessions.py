@@ -87,6 +87,32 @@ async def run(port):
             assert await page.locator("#lb-start").is_visible()
             print("  ok  retry creates a fresh lobby using the current connection's identity")
 
+            # Actual multiplayer chat must not leave text focus stuck on restart.
+            await page.click("#lb-start")
+            await page.wait_for_function("game.mode === 'playing' && game.net.networked")
+            await page.keyboard.press("Enter")
+            await page.evaluate("game.advance(3,1/30,false)")
+            assert await page.evaluate("ui.chatOpen && game.input.textFocus")
+            await page.fill("#chat-input", "unsent old-session text")
+            await page.evaluate("window.previousInfo=game.info;game.restart()")
+            await page.wait_for_function("game.info !== previousInfo")
+            assert await page.evaluate("!ui.chatOpen && !game.input.textFocus && document.querySelector('#chat-input').classList.contains('hidden')"), "restart must cancel old chat focus"
+            start=await page.evaluate("game.player.pos.toArray()")
+            await page.keyboard.down("w")
+            await page.evaluate("game.advance(30,1/30,false)")
+            await page.keyboard.up("w")
+            end=await page.evaluate("game.player.pos.toArray()")
+            assert sum((end[i]-start[i])**2 for i in (0,2))>.2, "movement resumes after chat cancellation"
+            await page.keyboard.press("Enter")
+            await page.evaluate("game.advance(3,1/30,false)")
+            assert await page.evaluate("ui.chatOpen")
+            await page.evaluate("game.quitToMenu(true)")
+            assert await page.evaluate("!ui.chatOpen && !game.input.textFocus && !document.querySelector('#chat-input').value")
+            print("  ok  restart and quit cancel unsent chat and release movement focus")
+
+            await page.click("#menu-main [data-act=multi]")
+            await page.click("#mp-create")
+            await page.wait_for_function("game.lobby && game.lobby.code")
             await page.click("#lb-leave")
             await page.wait_for_function("game.net === null && game.lobby === null")
             await observer.evaluate("peer.close()")

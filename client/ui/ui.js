@@ -394,15 +394,22 @@ export class UI {
   }
 
   openChat(send) {
+    this.closeChat();
     const inp = this.el.chatInput, g = this.game;
     this.chatOpen = true; g.input.textFocus = true; g.input.keys.clear();
     inp.classList.remove('hidden'); inp.value = ''; inp.focus();
     const done = (text) => {
-      inp.onkeydown = null; inp.blur(); inp.classList.add('hidden');
-      g.input.textFocus = false; this.chatOpen = false;
+      this.closeChat();
       if (text) send(text.slice(0, 140));
     };
     inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') done(inp.value.trim()); else if (e.key === 'Escape') done(''); };
+  }
+
+  closeChat() {
+    const inp = this.el.chatInput;
+    inp.onkeydown = null; inp.blur(); inp.classList.add('hidden'); inp.value = '';
+    this.chatOpen = false;
+    if (this.game?.input) this.game.input.textFocus = false;
   }
 
   toggleDebug() { this.debugOn = !this.debugOn; this.el.debug.classList.toggle('hidden', !this.debugOn && !this.s.showFps); }

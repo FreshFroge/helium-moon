@@ -158,6 +158,12 @@ ul.lobby-list li { padding: 8px 0; border-bottom: 1px solid var(--line); font-si
 
 /* Keep navigation and panel content in separate rows on compact windows. */
 @media (max-width: 1200px), (max-height: 600px) {
+  #pause { display: grid; grid-template-rows: minmax(0, 1fr); align-items: stretch; padding: 20px; }
+  #pause .pause-inner { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 12px; margin: 0; min-width: 0; min-height: 0; }
+  #pause .title { margin: 0; }
+  #pause .menu-list { flex-direction: row; flex-wrap: wrap; gap: 4px 22px; }
+  #pause .menu-list button { font-size: 20px; }
+  #pause .menu-panel { position: relative; inset: auto; transform: none; width: 100%; min-height: 0; max-height: 100%; padding: 18px; }
   #menu { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px; padding: 20px; }
   #menu .menu-left { position: static; transform: none; max-width: none; min-width: 0; }
   #menu .title { font-size: clamp(26px, 4vw, 38px); letter-spacing: 0.18em; }
