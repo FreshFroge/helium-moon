@@ -6,6 +6,12 @@ This is a **work-in-progress build**: the full game loop is playable in single p
 
 ## Updated playtest build
 
+Collaboration update: Claude independently reviewed the attack fix and identified
+expensive retreat searches. Those searches now fully test fewer candidate
+destinations while retaining strict hiding checks. Helium Voice's walking and
+reverse crawl also follow the actual terrain and bridge surfaces. See
+[the active collaboration handoff](docs/handoffs/CODEX_COLLABORATION_ACTIVE.md).
+
 Latest attack fix: a first-sighting chase now uses its newly selected target
 immediately, instead of aborting into retreat. Interrupted chases also release
 the director's chase flag. Regression coverage now starts encounters without a
