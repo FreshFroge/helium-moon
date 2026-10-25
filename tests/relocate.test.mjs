@@ -58,7 +58,8 @@ test('never during the opening dread', () => {
   for (const r of relocations) assert.ok(r.afterDread, JSON.stringify(r));
 });
 test('never into the spawn area, never right next to a player', () => {
-  for (const r of relocations) { assert.equal(r.inSpawn, false, JSON.stringify(r)); assert.ok(r.minDist >= C.RELOCATE_MIN_DIST, JSON.stringify(r)); }
+  // 'slip': pinned behind a trunk beside them, he is on their side of it - adjacent by design, still unseen
+  for (const r of relocations) { assert.equal(r.inSpawn, false, JSON.stringify(r)); if (r.reason !== 'slip') assert.ok(r.minDist >= C.RELOCATE_MIN_DIST, JSON.stringify(r)); }
 });
 test('never seen: neither the departure nor the arrival is on a player\'s screen', () => {
   for (const r of relocations) { assert.equal(r.departureSeen, false, JSON.stringify(r)); assert.equal(r.arrivalSeen, false, JSON.stringify(r)); }

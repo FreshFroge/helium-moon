@@ -160,7 +160,7 @@ function relayVoiceFrame(room, member, data, parsed) {
 function debugCmd(room, member, m) {
   const sim = room.sim, p = sim.players.get(m.pid || member.id);
   if (m.cmd === 'freeze') { sim.hv.update = () => {}; sim.sf.update = () => {}; sim.mimic.update = () => {}; sim.director.update = () => {}; }
-  else if (m.cmd === 'down' && p) { sim.damagePlayer(p, 'hv', p); sim.damagePlayer(p, 'hv', p); }
+  else if (m.cmd === 'down' && p) { for (let k = 0; k < 8 && p.state === 'alive'; k++) sim.damagePlayer(p, 'hv', p); }
   else if (m.cmd === 'mimic') sim.mimic.force(m.listener || member.id, m.owner || member.id);
   else if (m.cmd === 'tp' && p) { p.x = +m.x; p.z = +m.z; p.lastX = p.x; p.lastZ = p.z; }
   log(`[debug] ${room.code} ${m.cmd}`);

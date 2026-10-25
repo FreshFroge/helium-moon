@@ -98,7 +98,7 @@ try {
   ok(!!err2, 'cannot join a game in progress');
   await sleep(500);
   ok(A.snap && A.snap.pl.length === 2, 'snapshots contain both players');
-  ok(A.snap && Array.isArray(A.snap.hv) && A.snap.hv.length === 11 && A.snap.sf.length === 9, 'snapshots carry both creatures');
+  ok(A.snap && Array.isArray(A.snap.hv) && A.snap.hv.length === 18 && A.snap.sf.length === 9, 'snapshots carry both creatures');
 
   // movement: client-owned positions, teleports rejected
   A.send({ t: 'debug', cmd: 'freeze' });

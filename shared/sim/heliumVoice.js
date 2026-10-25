@@ -876,18 +876,22 @@ export class HeliumVoiceAI {
       }
       tp.x = px; tp.z = pz; tp.y = groundAt(w, px, pz); tp.lastX = px; tp.lastZ = pz;
       tp.heldUntil = sim.time + g.dur;
-      // face to face, GRAB_STAND in front of them (moved with collision, never through a trunk)
+      // he pulls in face to face, GRAB_STAND in front of them (moved over the next ticks)
       const a = Math.atan2(this.x - px, this.z - pz);
-      const sx = px + Math.sin(a) * C.GRAB_STAND, sz = pz + Math.cos(a) * C.GRAB_STAND;
-      const r = moveCharacter(w, this, sx - this.x, sz - this.z, 0.32, { nav: true, slope: false, step: C.STEP_OVER });
-      if (!spawnStepBlocked(w, this.x, this.z, r.x, r.z)) { this.x = r.x; this.z = r.z; this.y = groundAt(w, r.x, r.z); }
-      this.yaw = this.lookYaw = Math.atan2(px - this.x, pz - this.z);
+      g.stand = [px + Math.sin(a) * C.GRAB_STAND, pz + Math.cos(a) * C.GRAB_STAND];
       sim.emit({ type: 'hv_attack', phase: 'grab', kind: g.kind, pid: tp.id, dur: g.dur,
         x: +this.x.toFixed(2), z: +this.z.toFixed(2), px: +px.toFixed(2), pz: +pz.toFixed(2) });
       this.say('hit', { force: true });
       return;
     }
     this.stop(dt);
+    if (g.stand) {
+      const dx = g.stand[0] - this.x, dz = g.stand[1] - this.z, dd = Math.hypot(dx, dz), k = Math.min(1, 5 * dt / (dd || 1));
+      if (dd > 0.03) {
+        const r = moveCharacter(w, this, dx * k, dz * k, 0.32, { nav: true, slope: false, step: C.STEP_OVER });
+        if (!spawnStepBlocked(w, this.x, this.z, r.x, r.z)) { this.x = r.x; this.z = r.z; this.y = groundAt(w, r.x, r.z); }
+      }
+    }
     if (sim.time - g.t >= g.dur) this.releaseGrab(tp, true);
   }
 
@@ -958,7 +962,9 @@ export class HeliumVoiceAI {
       const y = groundAt(w, x, z);
       if (this.sim.playerList.some((p) => playerActive(p) && onScreen(w, p, x, y, z, HEIGHT, 0.6))) continue;   // never pops into view
       if (this.place(x, z) === false) continue;
+      const fx = this.x, fz = this.z;
       this.yaw = this.lookYaw = Math.atan2(tp.x - x, tp.z - z); this.path = null; this.huntStall = null;
+      this.sim.emit({ type: 'hv_relocate', reason: 'slip', pid: tp.id, x: +x.toFixed(1), z: +z.toFixed(1), fx: +fx.toFixed(1), fz: +fz.toFixed(1) });
       return true;
     }
     return false;
