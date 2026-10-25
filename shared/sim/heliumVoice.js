@@ -176,7 +176,14 @@ export class HeliumVoiceAI {
       }
       return cost;
     };
-    costFn = i => safetyCost(i)+(coverCost?coverCost(i):0);
+    // Spots where he recently got physically stuck (gaps narrower than his body, which the
+    // 2 m nav grid can't see) are avoided for NAV_BLOCK_TIME s so the new plan goes around.
+    const blocks = (this.navBlocks || []).filter((b) => sim.time - b.t < C.NAV_BLOCK_TIME); this.navBlocks = blocks;
+    costFn = i => {
+      let c = safetyCost(i) + (coverCost ? coverCost(i) : 0);
+      if (blocks.length) for (const b of blocks) if (b.i === i) c += 80;
+      return c;
+    };
     this.path = w.findPath(this.x, this.z, gx, gz, { costFn, maxExpand: mode === 'direct' ? 9000 : 14000 });
     // leg target unreachable (e.g. across the river): try a short plain leg instead of an unbounded search
     if (!this.path && this.finalGoal) { const k = 45 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: safetyCost, maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
@@ -203,7 +210,7 @@ export class HeliumVoiceAI {
     this.speed = lerp(this.speed, speed, 1 - Math.exp(-dt * (this.state === 'retreat' ? 18 : speed > 3 ? 3 : 5)));
     const step = Math.min(d, this.speed * dt);
     const nx = dx / d, nz = dz / d;
-    const r = moveCharacter(this.world, this, nx * step, nz * step, 0.32, { nav: !this.freeLunge, slope: false, step: 0.6 });
+    const r = moveCharacter(this.world, this, nx * step, nz * step, 0.32, { nav: !this.freeLunge, slope: false, step: C.STEP_OVER });
     const minimum = this.openingDistance();
     if (minimum && this.sim.playerList.some(p => playerActive(p)
         && this.dist(p) >= minimum && Math.hypot(p.x-r.x,p.z-r.z) < minimum)) {
@@ -217,7 +224,7 @@ export class HeliumVoiceAI {
       // The nav grid can place a cylinder slightly inside a trunk. Discarding
       // every correction traps it forever. Recover only existing penetration
       // (zero requested movement), gradually and within this tick's speed cap.
-      const out=moveCharacter(this.world,this,0,0,.32,{nav:true,slope:false,step:.6});
+      const out=moveCharacter(this.world,this,0,0,.32,{nav:true,slope:false,step:C.STEP_OVER});
       const distance=Math.hypot(out.x-this.x,out.z-this.z);
       if(distance>1e-5) {
         const k=Math.min(step,distance)/distance;
@@ -233,7 +240,15 @@ export class HeliumVoiceAI {
     this.x = r.x; this.z = r.z; this.y = groundAt(this.world, this.x, this.z);
     const desired = Math.atan2(nx, nz) + (this.state === 'retreat' ? Math.PI : 0);
     this.yaw += angleDiff(this.yaw, desired) * Math.min(1, dt * (this.state === 'retreat' ? 22 : speed > 3 ? 8 : 4));
-    if (moved < step * 0.2) { this.stuckT = (this.stuckT || 0) + dt; if (this.stuckT > 1.2) { this.stuckT = 0; this.path = null; } } else this.stuckT = 0;
+    if (moved < step * 0.2) {
+      this.stuckT = (this.stuckT || 0) + dt;
+      if (this.stuckT > 1.2) {
+        this.stuckT = 0; this.path = null;
+        // remember the grid cell he couldn't get into so the replan routes around it (see planTo)
+        (this.navBlocks ||= []).push({ i: this.world.cellOf(tx, tz), t: this.sim.time });
+        if (this.navBlocks.length > 8) this.navBlocks.shift();
+      }
+    } else this.stuckT = 0;
     return false;
   }
 
