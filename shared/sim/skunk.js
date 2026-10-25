@@ -11,6 +11,26 @@ import { observedBy, noiseRadius, playerActive, playerAlive } from './perception
 const C = CONFIG.SF;
 export const SF_STATES = ['dormant', 'lurk', 'prowl', 'investigate', 'ambush', 'rear', 'retreat', 'emerge'];
 
+// Grid cells crossed by fallen logs and fences too tall for the skunk to step over (> its 0.5 m step).
+// The shared 2 m nav grid can't see logs; without this, plans ran straight into long logs and
+// it stalled at the same spots (scan: 11 frozen windows in 8 sessions). Cached per world.
+const LOG_STEP = 0.5, _tallLogs = new WeakMap();
+function tallLogCells(w) {
+  let set = _tallLogs.get(w);
+  if (set) return set;
+  set = new Set();
+  if (!w.cellOf || !w.heightAt) return set;        // minimal test worlds have no grid
+  for (const sg of w.segs || []) {
+    const [ax, az, bx, bz] = sg, len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(len / 0.5));
+    for (let k = 0; k <= n; k++) {
+      const x = ax + (bx - ax) * k / n, z = az + (bz - az) * k / n;
+      if (sg[5] - w.heightAt(x, z) > LOG_STEP) set.add(w.cellOf(x, z));
+    }
+  }
+  _tallLogs.set(w, set);
+  return set;
+}
+
 export class SkunkAI {
   constructor(sim) {
     this.sim = sim; this.world = sim.world; this.rng = sim.rng;
@@ -59,7 +79,11 @@ export class SkunkAI {
     let gx = x, gz = z; this.finalGoal = null;
     if (D > 90) { const k = 90 / D; gx = this.x + (x - this.x) * k; gz = this.z + (z - this.z) * k; this.finalGoal = [x, z]; }
     // avoid open trail and clearings, prefer brush
-    const costFn = (i) => (gB[i] < 0.2 ? 1.2 : 0) + (gT[i] < 2.5 ? 3 : 0) + spawnZoneCost(w,...w.cellPos(i));
+    // cells it recently couldn't physically enter (logs above its step, narrow gaps) are
+    // avoided for NAV_BLOCK_TIME s so the replan goes around instead of back into them
+    const blocks = (this.navBlocks || []).filter((b) => this.sim.time - b.t < CONFIG.HV.NAV_BLOCK_TIME); this.navBlocks = blocks;
+    const logs = tallLogCells(w);
+    const costFn = (i) => (gB[i] < 0.2 ? 1.2 : 0) + (gT[i] < 2.5 ? 3 : 0) + spawnZoneCost(w,...w.cellPos(i)) + (blocks.some((b) => b.i === i) ? 80 : 0) + (logs.has(i) ? 40 : 0);
     this.path = w.findPath(this.x, this.z, gx, gz, { costFn, maxExpand: 10000 });
     if (!this.path && this.finalGoal) { const k = 40 / D; this.path = w.findPath(this.x, this.z, this.x + (x - this.x) * k, this.z + (z - this.z) * k, { costFn: i => spawnZoneCost(w,...w.cellPos(i)), maxExpand: 5000 }); if (!this.path) this.finalGoal = null; }
     this.pathI = 1;
@@ -81,7 +105,10 @@ export class SkunkAI {
       progress=this.routeProgress={path:this.path,index:this.pathI,best:d,stalled:0};
     if(d<progress.best-.08){progress.best=d;progress.stalled=0;}
     else progress.stalled+=dt;
-    if(progress.stalled>1.5){this.path=null;this.finalGoal=null;this.speed=0;return false;}
+    if(progress.stalled>1.5){
+      if (this.world.cellOf) (this.navBlocks ||= []).push({ i: this.world.cellOf(tx, tz), t: this.sim.time }); if (this.navBlocks?.length > 8) this.navBlocks.shift();
+      this.path=null;this.finalGoal=null;this.speed=0;return false;
+    }
     this.speed = lerp(this.speed, speed, 1 - Math.exp(-dt * 6));
     const step = Math.min(d, this.speed * dt);
     let r = moveCharacter(this.world, this, dx / d * step, dz / d * step, 0.25, { nav: true, slope: false, step: 0.5 });
@@ -106,7 +133,7 @@ export class SkunkAI {
         if(found)break;
       }
       this.avoidT=(this.avoidT||0)+dt;
-      if(this.avoidT>6){this.path=null;this.finalGoal=null;this.avoidSign=-preferred;this.avoidHeading=null;this.avoidT=0;return false;}
+      if(this.avoidT>6){if (this.world.cellOf) (this.navBlocks ||= []).push({ i: this.world.cellOf(tx, tz), t: this.sim.time }); if (this.navBlocks?.length > 8) this.navBlocks.shift();this.path=null;this.finalGoal=null;this.avoidSign=-preferred;this.avoidHeading=null;this.avoidT=0;return false;}
     } else if(forward>step*.9) {this.avoidSign=0;this.avoidHeading=null;this.avoidT=0;}
     if(spawnStepBlocked(this.world,this.x,this.z,r.x,r.z)){this.path=null;this.speed=0;return false;}
     const facing=Math.hypot(r.x-this.x,r.z-this.z)>1e-5 ? Math.atan2(r.x-this.x,r.z-this.z) : this.yaw;

@@ -245,8 +245,8 @@ export class HeliumVoiceAI {
       if (this.stuckT > 1.2) {
         this.stuckT = 0; this.path = null;
         // remember the grid cell he couldn't get into so the replan routes around it (see planTo)
-        (this.navBlocks ||= []).push({ i: this.world.cellOf(tx, tz), t: this.sim.time });
-        if (this.navBlocks.length > 8) this.navBlocks.shift();
+        if (this.world.cellOf) (this.navBlocks ||= []).push({ i: this.world.cellOf(tx, tz), t: this.sim.time });
+        if (this.navBlocks?.length > 8) this.navBlocks.shift();
       }
     } else this.stuckT = 0;
     return false;
