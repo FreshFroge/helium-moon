@@ -50,6 +50,11 @@ export class HeliumView {
   static async create(scene, world) { const v = new HeliumView(); await v._load(scene); v.world = world; return v; }
   async _load(scene) {
     this.char = await loadCharacter('helium');
+    // The current Helium model must never expose legacy rig helpers/control strings.
+    // This also protects clients that receive a model revision containing those meshes.
+    this.char.root.traverse((node) => {
+      if (/string|puppet|control|crossbar/i.test(node.name || '')) node.visible = false;
+    });
     this.root = this.char.root; this.root.visible = false;
     scene.add(this.root);
     this.anim = new HeliumAnimator(this.char);

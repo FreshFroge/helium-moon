@@ -128,14 +128,6 @@ export class HeliumVoiceAI {
   onSpotted(p) {
     const sim = this.sim;
     if (this.state === 'chase' || this.state === 'reveal' || this.state === 'lie' || this.state === 'collapse') return;
-    // the user's recording: sometimes, when he first notices someone, he stops and speaks
-    // the first time in a session is much more likely, so most players hear it at least once
-    const prob = this.sigCount ? C.SIGNATURE_PROB : Math.max(C.SIGNATURE_PROB, C.SIGNATURE_FIRST_PROB ?? 0.75);
-    if (sim.time - this.sigT > C.SIGNATURE_COOLDOWN && this.rng() < prob) {
-      this.sigT = sim.time; this.sigCount = (this.sigCount || 0) + 1;
-      sim.emit({ type: 'hv_sig', x: this.x, y: this.y + EYE, z: this.z });
-      this.vocalT = sim.time;
-    }
     this.target = p.id;
     if (this.concealedAt(this.x, this.z)) this.setState('still', { stillFor: this.rng.range(2, 4.5) });
     else { this.setState('stalk'); this.replanT = 0; }
@@ -749,8 +741,11 @@ export class HeliumVoiceAI {
           sim.emit({ type: 'hv_rise', pid: lp.id, x: +this.x.toFixed(2), z: +this.z.toFixed(2) });
           break;
         }
-        // they went another way, or walked past: slip off unseen and go back to stalking
-        if (!watched && (this.stateT > C.LIE_TIMEOUT || (this.lieMin < 14 && d > this.lieMin + 10))) { this.target = lp.id; this.setState('stalk'); this.replanT = 0; }
+        // They went another way or passed him: break line of sight at speed.  Do not return
+        // to a close stalk here, which previously made him hover around 12 feet after a lie.
+        if (!watched && (this.stateT > C.LIE_TIMEOUT || (this.lieMin < 14 && d > this.lieMin + 10))) {
+          this.target = lp.id; this.retreatFrom(lp, false, true);
+        }
         break;
       }
       default: this.setState('roam');
@@ -935,7 +930,7 @@ export class HeliumVoiceAI {
     return false;
   }
 
-  // ---- flashlight inside 7 ft: strings cut
+  // ---- hiding ends a hunt: he falls limp, then disappears out of sight
   collapseFrom(p) {
     const sim = this.sim, dir = sim.director;
     if (this.state === 'chase' && dir.chasing) dir.onChaseEnd(false);

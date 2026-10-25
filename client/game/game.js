@@ -420,7 +420,7 @@ export class Game {
       }
       // closing in (the mark): far off, his joints crack - quiet, easy to miss
       case 'hv_pops': if (this._near(pos, 40)) A.at('pop' + ((e.seq || 0) % 4), { ...pos, y: pos.y + 1.2 }, { bus: 'mon', gain: 0.55, ref: 3, reverb: 0.35, range: { fadeStart: 12, maxDistance: 40 } }); break;
-      case 'hv_sig': if (this._canSee(pos)) { A.signature(pos); this.voice.suppress(2.6); } break;
+      case 'hv_sig': break; // legacy event: speech is permanently disabled
       case 'sf_vocal': A.sfVocal(e.k, e.s, pos); break;
       case 'snap': break; // no artificial branch-snap warning of an unseen approach
       // unseen relocation: his footsteps simply stop for a moment (the tell), then

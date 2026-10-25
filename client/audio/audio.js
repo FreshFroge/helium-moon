@@ -1,6 +1,6 @@
 // Audio engine: Web Audio graph, HRTF-positional emitters with occlusion and a
 // forest reverb, natural night ambience, subdued player physiology, footsteps
-// and creature vocals. Breathing, night crickets, foliage wind and the signature
+// and creature vocals. Breathing, night crickets and foliage wind
 // use recordings; other effects are synthesized at load. Cold is the proximity cue.
 import * as S from './synth.js';
 import { NIGHT_CRICKETS_FILE, TREE_LEAVES_FILE, nearbyCanopies } from './nightAmbience.js';
@@ -12,8 +12,9 @@ import { horrorCues, distanceGain, creatureFootstepCue, teammateFootstepCue, sku
 import { SURFACE } from '../../shared/world.js';
 
 const SURF_NAME = { [SURFACE.LITTER]: 'litter', [SURFACE.DIRT]: 'dirt', [SURFACE.MUD]: 'mud', [SURFACE.GRASS]: 'grass', [SURFACE.SILT]: 'silt', [SURFACE.WATER]: 'water', [SURFACE.GRAVEL]: 'gravel', [SURFACE.WOOD]: 'wood', [SURFACE.ASPHALT]: 'asphalt' };
-const HV_REAL_LINES = ['hv_you_know', 'hv_got_a_wire', 'hv_anyone_recording', 'hv_you_got_a_point', 'hv_dont_care', 'hv_no_you_cant', 'hv_okay_ace', 'hv_i_can_tell'];
-const HV_KINDS = ['whisper', 'breath', 'inhale', 'giggle', 'laugh', 'hum', 'call', 'cry', 'scream', 'fragment'];
+// Keep Helium Voice nonverbal.  The server only requests these three sounds, and
+// limiting the client here prevents an old event or cached replay from restoring dialogue.
+const HV_KINDS = ['breath', 'inhale', 'hum'];
 const SF_KINDS = ['rumble', 'chitter', 'breath', 'rustle', 'growl', 'warn', 'gas', 'bite'];
 const yieldUI = () => new Promise((r) => setTimeout(r, 0));
 
@@ -73,9 +74,6 @@ export class AudioEngine {
       this.lib[k] = this.toBuffer(fn());
       if (performance.now() - t0 > 40) { progress(i / jobs.length); await yieldUI(); t0 = performance.now(); }
     }
-    this.sigPCM = null;
-    try { await this.loadSignature(); } catch (e) { console.warn('signature clip unavailable', e); }
-    try { await this.loadRealVoice(); } catch (e) { console.warn('real voice lines unavailable', e); }
     await this.loadPlayerBreathing();
     for (const [key,file] of [['crickets',NIGHT_CRICKETS_FILE],['treeLeaves',TREE_LEAVES_FILE]]) {
       const response=await fetch(assetUrl(file));
@@ -84,49 +82,6 @@ export class AudioEngine {
     }
     this.ready = true;
     this._buildLoops();
-  }
-
-  // Helium Voice's real voice (assets/audio/hv_voice/HV_VOICE_LICENSE.md). Optional: if the
-  // folder is removed the synthesized vocals are used.
-  async loadRealVoice() {
-    this.hvLines = [];
-    await Promise.all(HV_REAL_LINES.map(async (name) => {
-      const r = await fetch(assetUrl(`assets/audio/hv_voice/${name}.ogg`));
-      if (!r.ok) return;
-      this.hvLines.push({ name, buf: await this.ctx.decodeAudioData(await r.arrayBuffer()) });
-    }));
-    this.hvLines.sort((a, b) => HV_REAL_LINES.indexOf(a.name) - HV_REAL_LINES.indexOf(b.name));
-    // spoken lines by id (server-chosen, shared/sim/voiceLines.js): rec_* are his recordings,
-    // gen_* are lines cloned from his voice (several takes each; lines.json lists them)
-    this.lineBufs = {};
-    for (const l of this.hvLines) this.lineBufs['rec_' + l.name.slice(3)] = [l.buf];
-    try {
-      const m = await (await fetch(assetUrl('assets/audio/hv_voice/lines.json'))).json();
-      await Promise.all(Object.entries(m.lines || {}).map(async ([id, files]) => {
-        const bufs = [];
-        for (const f of files) { const r = await fetch(assetUrl('assets/audio/hv_voice/' + f)); if (r.ok) bufs.push(await this.ctx.decodeAudioData(await r.arrayBuffer())); }
-        if (bufs.length) this.lineBufs[id] = bufs;
-      }));
-    } catch (e) { /* cloned lines optional */ }
-  }
-
-  // one of his spoken lines, positioned at him. Audible to ~45 m (an AI event chose it,
-  // never a distance threshold), so it carries to nearby players in co-op.
-  hvLine(id, pos, take = 0) {
-    const bufs = this.lineBufs && this.lineBufs[id];
-    if (!bufs || !bufs.length) return null;
-    const buf = bufs[take % bufs.length], L = this.listener;
-    const d = Math.hypot(pos.x - L.x, pos.y - L.y, pos.z - L.z);
-    // Codex's near treatment: inside 15 m most (not all) lines turn dry and intimate, with
-    // nonlinear roughness and one unstable double 18-35 ms behind. Texture, never louder, and
-    // some close lines stay clean so the processing never becomes a rangefinder.
-    if (d < 15 && take % 3 !== 0) {
-      const opts = { pos, bus: 'mon', gain: 1.0, rate: 0.97, ref: 3, reverb: 0.04, range: { fadeStart: 20, maxDistance: 45 } };
-      const h = this.play(buf, { ...opts, roughness: 0.18 + (take % 5) * 0.02 });
-      this.play(buf, { ...opts, gain: 0.28, rate: 0.955 + (take % 4) * 0.004, delay: 0.018 + (take % 7) * 0.0025 });
-      return h;
-    }
-    return this.play(buf, { pos, bus: 'mon', gain: 1.3, rate: 0.97, ref: 4, reverb: 0.3, range: { fadeStart: 20, maxDistance: 45 } });
   }
 
   async loadPlayerBreathing() {
@@ -141,24 +96,6 @@ export class AudioEngine {
       this.lib[phase + 'H' + i] = clip;
     }
     this.playerBreathSource = 'recorded';
-  }
-
-  async loadSignature() {
-    const ctx = this.ctx;
-    for (const f of ['assets/audio/helium_voice_signature.ogg', 'assets/audio/helium_voice_signature.mp4']) {
-      try {
-        const ab = await (await fetch(assetUrl(f))).arrayBuffer();
-        const buf = await new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); });
-        this.lib.signature = buf;
-        // mono copy at SR for vocal fragments
-        const d = buf.getChannelData(0), ratio = buf.sampleRate / S.SR, n = Math.floor(d.length / ratio), m = new Float32Array(n);
-        const d1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : d;
-        for (let i = 0; i < n; i++) { const k = Math.floor(i * ratio); m[i] = (d[k] + d1[k]) * 0.5; }
-        this.sigPCM = m;
-        return;
-      } catch (e) { /* try next format */ }
-    }
-    throw new Error('could not decode signature clip');
   }
 
   toBuffer(data, sr = S.SR) {
@@ -323,13 +260,13 @@ export class AudioEngine {
     // 0.11 Hz "breathing" swell; filtered sub rumble. Silent outside hunts.
     const hh = ctx.createGain(); hh.gain.value = 0;
     const hlp = ctx.createBiquadFilter(); hlp.type = 'lowpass'; hlp.frequency.value = 140; hlp.Q.value = 0.9;
-    const swell = ctx.createGain(); swell.gain.value = 0.75;
-    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.11; const lfoG = ctx.createGain(); lfoG.gain.value = 0.25;
+    const swell = ctx.createGain(); swell.gain.value = 0.95;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.11; const lfoG = ctx.createGain(); lfoG.gain.value = 0.32;
     lfo.connect(lfoG); lfoG.connect(swell.gain); lfo.start(); oscs.push(lfo);
-    for (const [f, a] of [[25, 0.72], [31, 0.65], [33, 0.65], [50, 0.22], [62, 0.36], [93.5, 0.16]]) { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f; const og = ctx.createGain(); og.gain.value = a; o.connect(og); og.connect(swell); o.start(); oscs.push(o); }
+    for (const [f, a] of [[23, 0.95], [31, 0.9], [33, 0.9], [46, 0.36], [62, 0.52], [93.5, 0.28]]) { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f; const og = ctx.createGain(); og.gain.value = a; o.connect(og); og.connect(swell); o.start(); oscs.push(o); }
     const rs = ctx.createBufferSource(); rs.buffer = nb; rs.loop = true; rs.playbackRate.value = 0.5;
     const rlp = ctx.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 55; rlp.Q.value = 0.7;
-    const rg = ctx.createGain(); rg.gain.value = 0.9; rs.connect(rlp); rlp.connect(rg); rg.connect(swell); rs.start();
+    const rg = ctx.createGain(); rg.gain.value = 1.25; rs.connect(rlp); rlp.connect(rg); rg.connect(swell); rs.start();
     swell.connect(hlp); hlp.connect(hh); hh.connect(this.bus.amb);
     this.huntHum = { g: hh, lp: hlp, level: 0 };
     // objective loops are created on demand
@@ -369,11 +306,11 @@ export class AudioEngine {
     this.drone.lp.frequency.setTargetAtTime(120 + 260 * terr, t, 0.5);
     this.drone.high.gain.setTargetAtTime(0.004 * cues.highTone, t, 1.2);
     this.drone.tin.gain.setTargetAtTime(0.006 * (st.gas || 0), t, 0.6);
-    // hunt hum: slow 3 s build when a hunt starts, abrupt 0.25 s cut when it ends (the
+    // hunt hum: a clearly audible bass pressure when a hunt starts, abrupt cut when it ends (the
     // silence after is part of the scare). Opens its filter as he closes in.
     const hunt = st.hunt ? 1 : 0, hm = this.huntHum;
-    if (hunt !== hm.level) { hm.level = hunt; hm.g.gain.cancelScheduledValues(t); hm.g.gain.setTargetAtTime(hunt ? 0.23 : 0, t, hunt ? 1.1 : 0.08); }
-    if (hunt) hm.lp.frequency.setTargetAtTime(110 + 120 * clamp(st.huntNear || 0, 0, 1), t, 0.6);
+    if (hunt !== hm.level) { hm.level = hunt; hm.g.gain.cancelScheduledValues(t); hm.g.gain.setTargetAtTime(hunt ? 0.42 : 0, t, hunt ? 0.35 : 0.08); }
+    if (hunt) hm.lp.frequency.setTargetAtTime(90 + 160 * clamp(st.huntNear || 0, 0, 1), t, 0.35);
     const muffle = Math.max(st.gas || 0, (st.downed || 0) * 0.6);
     this.hear.frequency.setTargetAtTime(lerp(20000, 650, muffle), t, 0.3);
     if (!st.inGame) return;
@@ -445,28 +382,18 @@ export class AudioEngine {
   }
 
   hvVocal(kind, seed, pos) {
-    // His real voice: spoken fragments and calls (and some whispers) use his own recorded
-    // lines, a little slowed and dulled, as if heard through the trees. Same seed -> same line
-    // on every client.
-    const lines = this.hvLines;
-    if (lines && lines.length && (kind === 'fragment' || kind === 'call' || (kind === 'whisper' && seed % 3 === 0))) {
-      const line = lines[seed % lines.length];
-      return this.play(line.buf, { pos, bus: 'mon', gain: kind === 'whisper' ? 0.6 : 1.1, rate: 0.9 + (seed % 7) * 0.012, ref: 1.5, reverb: 0.22, range: creatureFootstepCue('hv', 0) });
-    }
     const key = `hv_${kind}_${seed % 5}`;
-    if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal(HV_KINDS.includes(kind) ? kind : 'giggle', seed % 5 + 1, this.sigPCM));
-    const loud = { scream: 2.2, call: 1.6, cry: 1.2, laugh: 1.2, whisper: 0.55, breath: 0.6, inhale: 0.7, hum: 0.8, giggle: 1, fragment: 1.2 }[kind] || 1;
+    if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal(HV_KINDS.includes(kind) ? kind : 'hum', seed % 5 + 1));
+    const loud = { breath: 0.6, inhale: 0.7, hum: 0.8 }[kind] || 0.8;
     return this.play(this.var[key], { pos, bus: 'mon', gain: loud, ref: 1.5, reverb: 0.1, range: creatureFootstepCue('hv', 0) });
   }
 
   // his breath, close, in time with yours (Puppet search beat): audible to ~8 m
   hvBreath(pos, seed = 0) {
     const key = `hv_breath_${seed % 5}`;
-    if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal('breath', seed % 5 + 1, this.sigPCM));
+    if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal('breath', seed % 5 + 1));
     return this.play(this.var[key], { pos, bus: 'mon', gain: 0.75, ref: 1.5, reverb: 0.05, range: { fadeStart: 3, maxDistance: 8 } });
   }
-
-  signature(pos) { return this.play(this.lib.signature, { pos, bus: 'mon', gain: 1.35, ref: 7, reverb: 0.4 }); }
 
   sfVocal(kind, seed, pos) {
     const cue = skunkVocalCue(kind);

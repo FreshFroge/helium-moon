@@ -11,7 +11,6 @@ import { Director } from './director.js';
 import { Objectives } from './objectives.js';
 import { MimicDirector } from './mimic.js';
 import { Wildlife } from './wildlife.js';
-import { VoiceLines } from './voiceLines.js';
 
 const PSTATE = ['alive', 'downed', 'dead', 'escaped'];
 
@@ -29,7 +28,6 @@ export class GameSim {
     this.sf = new SkunkAI(this); this.sf.spawn();
     this.mimic = new MimicDirector(this);
     this.wildlife = new Wildlife(this);
-    this.voice = new VoiceLines(this);
     this.dev = null;   // Developer mode options (shared/sim/dev.js), set by a local client
     this.result = null;
   }
