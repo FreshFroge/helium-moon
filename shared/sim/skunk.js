@@ -101,7 +101,7 @@ export class SkunkAI {
     let lit = null;
     for (const p of sim.playerList) if (playerActive(p)) { const ob = observedBy(this.world, p, this.x, this.y, this.z, 0.7 * C.MODEL_SCALE); if (ob.lit && ob.d < 12 && ob.vis > 0.3) lit = p; }
     if (nearest && ['lurk','prowl','investigate'].includes(this.state)
-        && nd < (lit?.id === nearest.id ? 12 : C.AMBUSH_RADIUS) && dir.allowSkunkAmbush()
+        && nd < (lit ? 12 : C.AMBUSH_RADIUS) && dir.allowSkunkAmbush()
         && sim.time - this.gasT > C.GAS_COOLDOWN) {
       this.target = nearest.id; this.setState('ambush');
     }

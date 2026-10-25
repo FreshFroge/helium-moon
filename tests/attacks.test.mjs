@@ -104,3 +104,13 @@ for (const separation of [6,10]) for (const state of ['prowl','investigate']) te
   for(let t=0;t<8 && p.health===2;t+=.05)sim.step(.05);
   assert.ok(p.health<2,`a nearby flashlight must not suppress ${state} attack acquisition`);
 });
+
+test('a teammate flashlight cannot suppress the skunk attacking the nearest player',()=>{
+  const {sim,p,actor}=encounter('sf',10);p.flash=false;
+  const q=sim.addPlayer('lamp','Lamp'),at=pointAtDistance(world.trail,world.trailCum,511);
+  Object.assign(q,{x:at.x,z:at.z,y:world.heightAt(at.x,at.z),flash:true,
+    yaw:Math.atan2(-(actor.x-at.x),-(actor.z-at.z))});
+  actor.setState('prowl');
+  for(let t=0;t<8 && p.health===2;t+=.05)sim.step(.05);
+  assert.ok(p.health<2,'the farther flashlight must not grant immunity to its teammate');
+});

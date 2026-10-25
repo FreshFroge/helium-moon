@@ -89,3 +89,11 @@ opening protection, spawn zones and navigation regressions. Final simulation
 cost: mean 0.14 ms / p99 1.18 ms / worst 11.3 ms. Actual Chromium encounter
 harness verifies first acquisition, unseen damage, seen physical escape, crawl
 rendering and skunk prowl/investigate attacks with matching client health.
+
+Co-op follow-up: the ambush-vs-flashlight arbitration applies when **any** nearby
+teammate lights the skunk, not only when the final light observer in iteration
+order happens to be the nearest player. Added a two-player regression: unlit
+nearest player at 10 m, lit teammate farther away; nearest player takes real
+damage. All 15 attack checks pass. After rebasing Claude's Low-preset work,
+28 focused AI/opening/navigation tests and both actual-browser ambience and
+encounter harnesses pass. Hosted manifest includes all new audio/helper files.
