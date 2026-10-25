@@ -373,11 +373,15 @@ export class HeliumVoiceAI {
         && sim.time - this.attackT >= C.ATTACK_COOLDOWN
         && (dir.allowChase(tp) || close || this.dist(tp) < C.ATTACK_RANGE * 2)) this.startChase(tp);
 
-    if (this.state !== 'retreat' && this.observers.length) {
+    // Hunts (owner, Oct 25): once a hunt is on, the ONLY way to call it off is a
+    // flashlight on him from within 7 ft (HUNT_BREAK_LIT_DIST). Being seen at any other
+    // range is ignored for the rest of the hunt. litBy is the closest lit observer.
+    const flashedOff = this.state === 'chase' && this.litBy && this.litBy.ob.d <= C.HUNT_BREAK_LIT_DIST;
+    const huntHolds = this.state === 'chase' && !flashedOff;
+    if (this.state !== 'retreat' && this.observers.length && !huntHolds) {
       const observer = this.litBy || this.observers[0];
-      // Complete an already committed contact strike, then escape. At longer
-      // range immediately seek cover, including when a chase is spotted.
-      const contact = this.state === 'chase' && tp && this.dist(tp) < C.ATTACK_RANGE;
+      // Outside hunts: complete an already committed contact strike, then escape.
+      const contact = this.state === 'chase' && !flashedOff && tp && this.dist(tp) < C.ATTACK_RANGE;
       // Deliberate appearances need time to register. The global hiding
       // reaction previously cancelled them on their very first visible frame,
       // making the reveal's own show/cross logic effectively unreachable.
@@ -437,8 +441,27 @@ export class HeliumVoiceAI {
         if (!tp) { this.setState('roam'); break; }
         const aw = this.awareness.get(tp.id) || 0;
         const ls = this.lastSeen.get(tp.id);
-        if (aw < 0.25 && ls && sim.time - ls.t > 25) { this.setState('search', { searchAt: { x: ls.x, z: ls.z }, searchPts: [] }); break; }
         const d = this.dist(tp);
+        // Closing in for a hunt (owner, Oct 25): approach unseen through cover until
+        // within HUNT_START_RANGE, then commit if the director still allows a chase.
+        const closing = this.closingOn && this.closingOn.pid === tp.id && sim.time - this.closingOn.t < C.HUNT_CLOSE_TIMEOUT;
+        if (this.closingOn && !closing) this.closingOn = null;
+        if (closing) {
+          if (d <= C.HUNT_START_RANGE) {
+            if (dir.allowChase(tp)) { this.startChase(tp); break; }
+            this.closingOn = null;
+          } else {
+            this.closeReplanT = (this.closeReplanT || 0) - dt;
+            if (!this.path || this.closeReplanT <= 0) {
+              const spot = this.observationSpot(tp, 'behind', 12, 24);
+              this.planTo(spot ? spot[0] : tp.x, spot ? spot[1] : tp.z, 'cover');
+              this.closeReplanT = 2.5;
+            }
+            this.followPath(dt, (d > 60 ? C.RELOCATE : C.STALK * 1.3) * (1 + .15 * escalation));
+            break;
+          }
+        }
+        if (aw < 0.25 && ls && sim.time - ls.t > 25) { this.setState('search', { searchAt: { x: ls.x, z: ls.z }, searchPts: [] }); break; }
         if (!this.path || this.replanT <= 0) {
           const mode = this.falseRetreat ? 'ahead' : (this.rng() < 0.35 ? 'flank' : 'behind');
           const spot = this.observationSpot(tp, mode, lerp(C.OBSERVE_MIN,15,escalation), lerp(C.OBSERVE_MAX,35,escalation));
@@ -535,8 +558,12 @@ export class HeliumVoiceAI {
           this.retreatFrom(tp, false, true);
           break;
         }
-        if (sim.time - ls.t > C.LOSE_TIME * (1 + .4 * escalation)) { dir.onChaseEnd(false); this.setState('search', { searchAt: { x: ls.x, z: ls.z }, searchPts: [] }); }
-        else if (this.stateT > 32 + 12 * escalation) { dir.onChaseEnd(false); this.retreatFrom(tp, false); }
+        // A hunt no longer ends by losing sight or by time (owner, Oct 25): with no fresh
+        // sight or sound for LOSE_TIME, he re-acquires where the player really is every
+        // HUNT_TRACK_EVERY s (tracking them by scent/sound) and keeps coming.
+        if (sim.time - ls.t > C.LOSE_TIME && sim.time - (this.trackT || 0) >= C.HUNT_TRACK_EVERY) {
+          this.trackT = sim.time; this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time - C.LOSE_TIME * 0.5 }; this.replanT = 0;
+        }
         break;
       }
       case 'search': {
@@ -591,6 +618,15 @@ export class HeliumVoiceAI {
 
   startChase(p) {
     if (!this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
+    // Hunts start close (owner, Oct 25): farther out, mark the player and close in
+    // unseen first (stalk handles the approach and commits inside the range).
+    if (this.dist(p) > C.HUNT_START_RANGE) {
+      if (this.closingOn?.pid !== p.id) { this.closingOn = { pid: p.id, t: this.sim.time }; this.closeReplanT = 0; }
+      this.target = p.id;
+      if (this.state !== 'stalk') { this.setState('stalk'); this.replanT = 0; }
+      return false;
+    }
+    this.closingOn = null; this.trackT = 0;
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time };
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;

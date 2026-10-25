@@ -7,11 +7,11 @@ import { pointAtDistance } from '../shared/math.js';
 import { onScreen } from '../shared/sim/perception.js';
 
 const world = new World();
-function encounter() {
+function encounter(separation=2.3) {
   const sim = new GameSim(world, {seed:42});
   sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.director.update=()=>{};sim.director.enter('build');sim.sf.update=()=>{};sim.mimic.update=()=>{};
   const p=sim.addPlayer('one','One'), hv=sim.hv;
-  const at=pointAtDistance(world.trail,world.trailCum,500), to=pointAtDistance(world.trail,world.trailCum,502.3);
+  const at=pointAtDistance(world.trail,world.trailCum,500), to=pointAtDistance(world.trail,world.trailCum,500+separation);
   Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),flash:true,pitch:0,viewFov:75,viewAspect:16/9});
   hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);
   hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.setState('chase');hv.speed=CONFIG.HV.BURST;
@@ -27,13 +27,47 @@ test('a committed chase attacks a player who never looks back',()=>{
   assert.equal(sim.director.chasing,false,'the hit ends the chase');
 });
 
-test('spotting a chase outside contact range sends him physically toward cover',()=>{
-  const {sim,p,hv}=encounter();p.yaw+=Math.PI;
-  const start=[hv.x,hv.z];sim.step(.05);
-  assert.equal(hv.state,'retreat');assert.ok(hv.snapshot()[7]&16);
-  assert.equal(p.health,2);assert.equal(sim.director.chasing,false);
+// Hunts (owner, Oct 25 2026): once a hunt is on, the ONLY way to call it off is a
+// flashlight on him from within 7 ft (CONFIG.HV.HUNT_BREAK_LIT_DIST). Being seen at range,
+// losing sight and time no longer end it.
+test('a glimpse at range does not call off a hunt',()=>{
+  const {sim,p,hv}=encounter(10);p.yaw+=Math.PI;          // turns and looks, light on
+  tick(sim,.2);
+  assert.equal(hv.state,'chase','being seen at 10 m is ignored');
+  p.yaw+=Math.PI;                                         // looks away again
+  tick(sim,3);
+  assert.ok(p.health<2,'the hunt follows through to a hit');
+});
+
+test('holding the light on him as he charges: he breaks off only once within 7 ft',()=>{
+  const {sim,p,hv}=encounter(12);p.yaw+=Math.PI;          // faces him with the light the whole time
+  let brokeAt=null,start=null;
+  for(let t=0;t<4&&brokeAt==null;t+=.05){sim.step(.05);if(hv.state==='retreat'){brokeAt=hv.dist(p);start=[hv.x,hv.z];}}
+  assert.ok(brokeAt!=null,'the 7 ft flashlight calls the hunt off');
+  assert.ok(brokeAt<=CONFIG.HV.HUNT_BREAK_LIT_DIST+.05,`not before he is within 7 ft (broke off at ${brokeAt?.toFixed(2)} m)`);
+  assert.equal(p.health,2,'no hit when the light lands in time');
+  assert.ok(hv.snapshot()[7]&16);assert.equal(sim.director.chasing,false);
   tick(sim,.5);
   assert.ok(Math.hypot(hv.x-start[0],hv.z-start[1])>.5,'escape uses real movement');
+});
+
+test('a teammate can flash him off from within 7 ft',()=>{
+  const {sim,p,hv}=encounter(6);                         // target facing away
+  const q=sim.addPlayer('two','Two');
+  Object.assign(q,{x:hv.x+1.6,z:hv.z,y:world.heightAt(hv.x+1.6,hv.z),flash:true,pitch:0,viewFov:75,viewAspect:16/9});
+  q.yaw=Math.atan2(q.x-hv.x,q.z-hv.z);                    // teammate looks at him (camera faces -Z)
+  hv.target=p.id;
+  tick(sim,.1);
+  assert.equal(hv.state,'retreat');assert.equal(p.health,2);
+});
+
+test('losing sight or time no longer ends a hunt',()=>{
+  const {sim,p,hv}=encounter(25);
+  hv.startChase(p);assert.equal(sim.director.chasing,true);
+  hv.lastSeenChase={x:p.x+30,z:p.z+30,t:sim.time-20};hv.stateT=90;
+  tick(sim,.5);
+  assert.equal(hv.state,'chase');assert.equal(sim.director.chasing,true);
+  assert.ok(Math.hypot(hv.lastSeenChase.x-p.x,hv.lastSeenChase.z-p.z)<1,'he re-acquires where the player really is');
 });
 
 test('screen checks account for pitch, screen edges, aspect ratio and occlusion',()=>{

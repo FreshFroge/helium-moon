@@ -8,11 +8,12 @@
 //   memo at the kiosk → gas can → generator → fuse kit → relay box → repeater mast → extraction.
 // They walk the trail and use findPath for off-trail legs, glance around (per
 // personality) and look up from repairs. They sprint away (real 9 s stamina,
-// regen after 1.2 s) when they actually perceive Helium Voice, and revive downed
+// regen after 1.2 s) when they actually perceive Helium Voice (cautious players instead
+// stand their ground and hold the light on him once he's within 12 m), and revive downed
 // teammates. Perception matches the client: his vocals and footsteps are only
 // audible within 2.4 m (CONFIG.HV.FOOTSTEP_MAX_DISTANCE), so at range the only
-// tell is the hunt hum (audible ~1.5 s after a hunt starts, to everyone, with no
-// direction). On the hum, cautious/steady players sweep their view looking for
+// tell is the hunt hum (audible ~1.5 s after a hunt starts, to players within
+// HV.HUNT_HUM_RANGE of him, with no direction). On the hum, cautious/steady players sweep their view looking for
 // him and rushers just sprint; a bot flees once it SEES him (perception.onScreen,
 // within 45 m), hears him within 2.4 m, or is hit. Teams split into a
 // generator branch and a relay branch; extra players escort and watch.
@@ -47,9 +48,11 @@ const PERSONAS = {
   // travel: 'walk' never sprints between objectives (quiet, keeps stamina to flee);
   // 'bursts' jogs in sprint bursts on legs over 80 m when stamina is full;
   // 'max' sprints whenever stamina allows (fast, loud, often empty when hunted)
-  cautious: { glance: [9, 16], workLook: 5, fleeLook: true, travel: 'walk' },
-  steady: { glance: [18, 32], workLook: 9, fleeLook: true, travel: 'bursts' },
-  rusher: { glance: null, workLook: 0, fleeLook: false, travel: 'max' },
+  // standGround: during a hunt, once they SEE him within 12 m they stop, face him and hold
+  // the flashlight on him (the owner's 7-ft counter, Oct 25); others keep running.
+  cautious: { glance: [9, 16], workLook: 5, fleeLook: true, travel: 'walk', standGround: true },
+  steady: { glance: [18, 32], workLook: 9, fleeLook: true, travel: 'bursts', standGround: false },
+  rusher: { glance: null, workLook: 0, fleeLook: false, travel: 'max', standGround: false },
 };
 
 const mmss = (s) => (s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`);
@@ -160,7 +163,9 @@ class Bot {
       if (e.type === 'chase' && !e.on) this.humAt = null;
       if ((e.type === 'hit' || e.type === 'downed') && e.pid === this.id) notice = 'got hit';
     }
-    const humOn = this.humAt != null && t >= this.humAt && sim.director.chasing;
+    // the client plays the hum only within HV.HUNT_HUM_RANGE of this player (+10 m hysteresis)
+    this.humNear = hvd < CONFIG.HV.HUNT_HUM_RANGE + (this.humNear ? 10 : 0);
+    const humOn = this.humAt != null && t >= this.humAt && sim.director.chasing && this.humNear;
     if (humOn && !this.fleeing && this.sweepT == null && this.P.travel !== 'max') this.sweepT = 0;   // look all around
     if (!notice && hvd < 45 && onScreen(world, p, hv.x, hv.y, hv.z)) notice = 'saw him';
     if (!notice && hvd < CONFIG.HV.FOOTSTEP_MAX_DISTANCE) notice = 'heard him right behind';
@@ -199,6 +204,12 @@ class Bot {
       if (d < 0.45) this.route.shift();
     }
     if (!sprint) { this.sprintRest -= DT; if (this.sprintRest <= 0) this.stamina = Math.min(P.STAMINA_MAX, this.stamina + P.STAMINA_REGEN * DT); }
+    // stand ground: face him with the light while he charges (the 7-ft flashlight counter)
+    const huntOnMe = sim.director.chasing && hv.target === this.id;
+    if (this.P.standGround && this.fleeing && huntOnMe && hvd < 12 && (this.noticeHow === 'saw him' || onScreen(world, p, hv.x, hv.y, hv.z))) {
+      mvx = 0; mvz = 0; sprint = false; this.activity = 'standing ground with the flashlight';
+      this.standing = true;
+    } else this.standing = false;
     const nx = p.x + mvx, nz = p.z + mvz;
     // --- gaze
     let yaw = p.yaw;
@@ -215,7 +226,8 @@ class Bot {
         if (this.lookT < 0) { use = null; yaw += this.workYaw ??= rng.range(1.6, 3.1) * (rng() < 0.5 ? -1 : 1); } else this.workYaw = null;
       }
     }
-    if (this.fleeing && this.P.fleeLook) {        // look back over the shoulder while running
+    if (this.standing) yaw = faceYaw(p.x, p.z, hv.x, hv.z);
+    else if (this.fleeing && this.P.fleeLook) {        // look back over the shoulder while running
       this.fleeLookT -= DT;
       if (this.fleeLookT <= -0.6) this.fleeLookT = rng.range(2.5, 4);
       if (this.fleeLookT < 0) yaw += Math.PI;
@@ -244,7 +256,8 @@ function playtest(n, { team, seed }) {
   sim._bots = bots;
   const hunts = [], timeline = [];
   let open = null, prevHv = sim.hv.state, hvPrevNonChase = 'roam';
-  const ctx = { reveals: 0, sfHits: 0, hvHitsOutsideHunts: 0, vocals: 0, sig: 0 };
+  const ctx = { reveals: 0, sfHits: 0, hvHitsOutsideHunts: 0, vocals: 0, sig: 0, approaches: [] };
+  let approach = null;   // he is closing in on someone for a hunt (beyond HUNT_START_RANGE)
   const origReveal = sim.director.onReveal.bind(sim.director);
   sim.director.onReveal = (k) => { if (k !== 'retreat') { ctx.reveals++; timeline.push({ t: +sim.time.toFixed(1), what: `planned glimpse (${k})` }); } return origReveal(k); };
   let pending = [];
@@ -297,7 +310,9 @@ function playtest(n, { team, seed }) {
         delete open._closing;
         const tpState = tp?.state;
         const hit = open.hits.find((h) => h.pid === open.pid);
-        if (hit) open.endReason = hit.type === 'dead' ? 'caught: killed' : hit.type === 'downed' ? 'caught: downed' : 'caught: hit (wounded)';
+        const flasher = hv.litBy && hv.litBy.ob.d <= CONFIG.HV.HUNT_BREAK_LIT_DIST + 0.05 ? hv.litBy : null;
+        if (flasher && !hit) open.endReason = `flashed off at ${flasher.ob.d.toFixed(1)} m by ${flasher.p.id === open.pid ? 'the target' : 'teammate ' + flasher.p.id}`;
+        else if (hit) open.endReason = hit.type === 'dead' ? 'caught: killed' : hit.type === 'downed' ? 'caught: downed' : 'caught: hit (wounded)';
         else if (tpState === 'dead' || tpState === 'downed') open.endReason = `target ${tpState} (other cause)`;
         else if (tp && inSpawnZone(world, tp.x, tp.z, 8)) open.endReason = 'target reached the spawn area (he can\'t follow)';
         else if (hv.state === 'search') open.endReason = 'lost sight: he searches where he last saw them';
@@ -310,6 +325,16 @@ function playtest(n, { team, seed }) {
         open.minDist = +open.minDist.toFixed(1); open.seenSec = +open.seenSec.toFixed(1);
         delete open.lastSeenT; delete open.otherSeenT;
         hunts.push(open); open = null;
+      }
+    }
+    // closing-in attempts and what became of them
+    const co = hv.closingOn;
+    if (co && (!approach || approach.ref !== co)) { if (approach) ctx.approaches.push({ ...approach, ref: undefined, result: 'retargeted' }); approach = { ref: co, t: +sim.time.toFixed(1), pid: co.pid, spotted: false }; }
+    if (approach) {
+      if (hv.state === 'retreat') approach.spotted = true;
+      if (!co) {
+        const result = hv.state === 'chase' ? 'became a hunt' : approach.spotted ? 'seen while closing in, gave up' : 'gave up (time limit or director said not now)';
+        ctx.approaches.push({ t: approach.t, pid: approach.pid, end: +sim.time.toFixed(1), result, spotted: approach.spotted }); approach = null;
       }
     }
     if (hv.state !== 'chase') hvPrevNonChase = hv.state;
@@ -331,6 +356,7 @@ const results = PLAN.map((cfg, i) => {
   console.log(`players: ${r.personas.join('; ')}`);
   console.log('# | start | end | length | target | he was | start dist | target doing | where | player reacted | ended | closest | on target screen');
   for (const h of r.hunts) console.log([h.n, mmss(h.start), mmss(h.end), `${(h.end - h.start).toFixed(0)} s`, h.pid, h.before, `${h.startDist} m`, h.activity, h.where, h.noticed == null ? 'never noticed' : `${h.noticeHow} +${h.noticed} s`, h.endReason, `${h.minDist} m`, `${h.seenSec} s`].join(' | '));
+  const ap = r.approaches; console.log(`closing-in attempts: ${ap.length} (${['became a hunt', 'seen while closing in, gave up', 'gave up (time limit or director said not now)', 'retargeted'].map((k) => `${ap.filter((a) => a.result === k).length} ${k}`).join(', ')}; ${ap.filter((a) => a.spotted).length} were spotted at least once while closing)`);
   console.log('timeline: ' + r.timeline.map((e) => `${mmss(e.t)} ${e.what}`).join(' · '));
   return r;
 });

@@ -389,6 +389,15 @@ export class Game {
     }
   }
 
+  // The hunt hum plays only while a hunt is on AND he is actually close to this player
+  // (owner, Oct 25: no far-off false alarms). 10 m hysteresis so it doesn't flicker.
+  _huntHum() {
+    if (!this.chasing || this.mode !== 'playing' || !this.hv) { this._humOn = false; return false; }
+    const R = CONFIG.HV.HUNT_HUM_RANGE, d = this.hv.pos.distanceTo(this.player.pos);
+    this._humOn = d < (this._humOn ? R + 10 : R);
+    return this._humOn;
+  }
+
   _near(p, d) { return p && Math.hypot(p.x - this.player.pos.x, p.z - this.player.pos.z) < d; }
 
   _canSee(p) {
@@ -444,7 +453,7 @@ export class Game {
     else this._menuCamera(dt);
     this.env.update(gameplayDt, this.camera, 0);
     this.audio.setListener(this.camera);
-    this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, hunt: this.chasing && this.mode === 'playing', huntNear: this.hv ? clamp(1 - this.hv.pos.distanceTo(this.player.pos) / 40, 0, 1) : 0, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
+    this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, hunt: this._huntHum(), huntNear: this.hv ? clamp(1 - this.hv.pos.distanceTo(this.player.pos) / 40, 0, 1) : 0, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
     const meP = this.player.pos;
     this.voice.update(dt, {
       ptt: this.mode === 'playing' && !this.input.textFocus && this.input.down('talk'), inGame: this.mode === 'playing',

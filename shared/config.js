@@ -66,6 +66,17 @@ export const CONFIG = {
     SIGNATURE_PROB: 0.4, SIGNATURE_FIRST_PROB: 0.75, SIGNATURE_COOLDOWN: 95, // uploaded .ogg on first sighting
     FOOTSTEP_FADE_START: 1.8, FOOTSTEP_MAX_DISTANCE: 2.4, // roughly 6-8 feet
     FOOTSTEP_STALK_GAIN: 0.45, FOOTSTEP_CHASE_GAIN: 0.8,
+    // Hunts (owner, Oct 25 2026, docs/HUNT_PLAYTESTS.md). A hunt starts only within
+    // HUNT_START_RANGE; farther out he first closes in unseen (HUNT_CLOSE_TIMEOUT s max).
+    // Once a hunt starts, the ONLY way to call it off is a flashlight on him while he is
+    // within HUNT_BREAK_LIT_DIST (7 ft) of whoever shines it. Being seen at range, losing
+    // sight of the player and time do not end it: when he loses sight he re-acquires the
+    // player's position every HUNT_TRACK_EVERY s. A hunt still ends when he lands a hit,
+    // the target is downed/dead, or the target reaches the spawn area (he can't enter).
+    // The client's hunt hum plays only within HUNT_HUM_RANGE of him.
+    HUNT_START_RANGE: 35, HUNT_CLOSE_TIMEOUT: 45,
+    HUNT_BREAK_LIT_DIST: 2.13, HUNT_TRACK_EVERY: 2.5,
+    HUNT_HUM_RANGE: 50,
   },
   SF: {
     MODEL_SCALE: 0.6,               // keep the creature low and partially concealed in undergrowth
