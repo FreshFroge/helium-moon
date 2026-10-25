@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { patchMaterial } from './shaderlib.js';
 import { CONFIG } from '../../shared/config.js';
 
-const CHUNK = 64;
+const CHUNK = 128;   // m; 64 m chunks cost ~230 draw calls for ~0.1 M triangles (see docs/PERFORMANCE.md)
 const LOD_STEPS = [1, 2, 4, 8];
 
 export class Terrain {
