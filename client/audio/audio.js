@@ -12,6 +12,7 @@ import { horrorCues, distanceGain, creatureFootstepCue, skunkVocalCue } from '..
 import { SURFACE } from '../../shared/world.js';
 
 const SURF_NAME = { [SURFACE.LITTER]: 'litter', [SURFACE.DIRT]: 'dirt', [SURFACE.MUD]: 'mud', [SURFACE.GRASS]: 'grass', [SURFACE.SILT]: 'silt', [SURFACE.WATER]: 'water', [SURFACE.GRAVEL]: 'gravel', [SURFACE.WOOD]: 'wood', [SURFACE.ASPHALT]: 'asphalt' };
+const HV_REAL_LINES = ['hv_you_know', 'hv_got_a_wire', 'hv_anyone_recording', 'hv_you_got_a_point', 'hv_dont_care', 'hv_no_you_cant', 'hv_okay_ace', 'hv_i_can_tell'];
 const HV_KINDS = ['whisper', 'breath', 'inhale', 'giggle', 'laugh', 'hum', 'call', 'cry', 'scream', 'fragment'];
 const SF_KINDS = ['rumble', 'chitter', 'breath', 'rustle', 'growl', 'warn', 'gas', 'bite'];
 const yieldUI = () => new Promise((r) => setTimeout(r, 0));
@@ -59,6 +60,8 @@ export class AudioEngine {
     add('genLoop', () => S.generatorLoop(6)); add('hum', () => S.humLoop()); add('siren', () => S.sirenLoop()); add('radio', () => S.radioCall(7));
     for (const k of ['reveal', 'snap', 'chase']) add('st_' + k, () => S.stinger(k, 8));
     add('hurt', () => S.hurt(9, false)); add('down', () => S.hurt(10, true));
+    // real-animal false alarms (wildlife.js)
+    for (let i = 0; i < 3; i++) { add('deerBlow' + i, () => S.deerBlow(40 + i)); add('owlHoot' + i, () => S.owl(50 + i)); add('wings' + i, () => S.wingFlap(60 + i)); }
     let t0 = performance.now();
     for (let i = 0; i < jobs.length; i++) {
       const [k, fn] = jobs[i];
@@ -67,6 +70,7 @@ export class AudioEngine {
     }
     this.sigPCM = null;
     try { await this.loadSignature(); } catch (e) { console.warn('signature clip unavailable', e); }
+    try { await this.loadRealVoice(); } catch (e) { console.warn('real voice lines unavailable', e); }
     await this.loadPlayerBreathing();
     for (const [key,file] of [['crickets',NIGHT_CRICKETS_FILE],['treeLeaves',TREE_LEAVES_FILE]]) {
       const response=await fetch(assetUrl(file));
@@ -75,6 +79,18 @@ export class AudioEngine {
     }
     this.ready = true;
     this._buildLoops();
+  }
+
+  // Helium Voice's real voice (assets/audio/hv_voice/HV_VOICE_LICENSE.md). Optional: if the
+  // folder is removed the synthesized vocals are used.
+  async loadRealVoice() {
+    this.hvLines = [];
+    await Promise.all(HV_REAL_LINES.map(async (name) => {
+      const r = await fetch(assetUrl(`assets/audio/hv_voice/${name}.ogg`));
+      if (!r.ok) return;
+      this.hvLines.push({ name, buf: await this.ctx.decodeAudioData(await r.arrayBuffer()) });
+    }));
+    this.hvLines.sort((a, b) => HV_REAL_LINES.indexOf(a.name) - HV_REAL_LINES.indexOf(b.name));
   }
 
   async loadPlayerBreathing() {
@@ -384,6 +400,14 @@ export class AudioEngine {
   }
 
   hvVocal(kind, seed, pos) {
+    // His real voice: spoken fragments and calls (and some whispers) use his own recorded
+    // lines, a little slowed and dulled, as if heard through the trees. Same seed -> same line
+    // on every client.
+    const lines = this.hvLines;
+    if (lines && lines.length && (kind === 'fragment' || kind === 'call' || (kind === 'whisper' && seed % 3 === 0))) {
+      const line = lines[seed % lines.length];
+      return this.play(line.buf, { pos, bus: 'mon', gain: kind === 'whisper' ? 0.6 : 1.1, rate: 0.9 + (seed % 7) * 0.012, ref: 1.5, reverb: 0.22, range: creatureFootstepCue('hv', 0) });
+    }
     const key = `hv_${kind}_${seed % 5}`;
     if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal(HV_KINDS.includes(kind) ? kind : 'giggle', seed % 5 + 1, this.sigPCM));
     const loud = { scream: 2.2, call: 1.6, cry: 1.2, laugh: 1.2, whisper: 0.55, breath: 0.6, inhale: 0.7, hum: 0.8, giggle: 1, fragment: 1.2 }[kind] || 1;

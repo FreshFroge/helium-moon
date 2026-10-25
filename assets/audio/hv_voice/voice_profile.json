@@ -1,0 +1,62 @@
+{
+ "speaker": "Helium Voice (real voice; owner confirmed the speaker agreed)",
+ "source": "owner-provided clip, Oct 25 2026; only neutral lines kept",
+ "f0_hz": {
+  "median": 142.9,
+  "p10": 105.3,
+  "p90": 231.9
+ },
+ "speaking_rate_wps": 2.68,
+ "clips": {
+  "anyone_recording": {
+   "text": "Okay, anyone who's recording?",
+   "dur": 2.04,
+   "f0_median": 217.7,
+   "centroid_hz": 532
+  },
+  "dont_care": {
+   "text": "I don't care y'all, we record on your phones.",
+   "dur": 2.69,
+   "f0_median": 142.9,
+   "centroid_hz": 546
+  },
+  "got_a_wire": {
+   "text": "Okay, I feel like when you got a wire or something dude",
+   "dur": 3.16,
+   "f0_median": 222.2,
+   "centroid_hz": 667
+  },
+  "i_can_tell": {
+   "text": "Bryson, I can so tell you recorded Anderson.",
+   "dur": 4.6,
+   "f0_median": 150.9,
+   "centroid_hz": 609
+  },
+  "no_you_cant": {
+   "text": "No, Bryce, you can't.",
+   "dur": 1.85,
+   "f0_median": 107.7,
+   "centroid_hz": 724
+  },
+  "okay_ace": {
+   "text": "Okay, Ace, you gotta believe you with this one.",
+   "dur": 3.38,
+   "f0_median": 132.2,
+   "centroid_hz": 581
+  },
+  "you_got_a_point": {
+   "text": "You got a point.",
+   "dur": 0.93,
+   "f0_median": 112.7,
+   "centroid_hz": 537
+  },
+  "you_know": {
+   "text": "You know.",
+   "dur": 0.79,
+   "f0_median": 133.3,
+   "centroid_hz": 781
+  }
+ },
+ "processing": "highpass 80 Hz, light FFT denoise (-30 dB floor), loudnorm -18 LUFS, 15/40 ms fades, Vorbis q5 mono 44.1 kHz",
+ "game_use": "client/audio/audio.js hvVocal: close-range fragment/call vocals (and some whispers) play these real lines"
+}
