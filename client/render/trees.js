@@ -43,6 +43,10 @@ export class TreeSystem {
     this.n = n;
     this.archOf = new Uint16Array(n);
     this.mats = new Float32Array(n * 16);
+    // far LOD: every variant of a species shares variant 0's LOD2 mesh (one draw per
+    // species instead of three; at LOD2 distances the variants are indistinguishable)
+    this.farArchOf = new Uint16Array(n);
+    this.farMats = new Float32Array(n * 16);
     this.pos = new Float32Array(n * 3);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
     const leanQ = new THREE.Quaternion(), yQ = new THREE.Quaternion(), axis = new THREE.Vector3();
@@ -50,19 +54,25 @@ export class TreeSystem {
       const t = trees[i];
       const presetName = t.scale < 0.4 && t.sp !== 5 && t.sp !== 6 ? 'sapling' : SPECIES_PRESET[t.sp];
       const ai = addArch(presetName, t.sp, t.variant % VARIANTS);
+      const fi = addArch(presetName, t.sp, 0);
       this.archOf[i] = ai; this.arch[ai].instances++;
-      const sc = t.height / this.arch[ai].top;
+      this.farArchOf[i] = fi; this.arch[fi].farInstances = (this.arch[fi].farInstances || 0) + 1;
       yQ.setFromAxisAngle(axis.set(0, 1, 0), t.rot);
       leanQ.setFromAxisAngle(axis.set(Math.cos(t.leanDir), 0, Math.sin(t.leanDir)), t.lean);
       q.multiplyQuaternions(leanQ, yQ);
-      m.compose(p.set(t.x, t.y - 0.05, t.z), q, s.set(sc * (0.92 + (i % 7) * 0.025), sc, sc * (0.92 + (i % 5) * 0.03)));
-      m.toArray(this.mats, i * 16);
+      for (const [arr, k] of [[this.mats, ai], [this.farMats, fi]]) {
+        const sc = t.height / this.arch[k].top;
+        m.compose(p.set(t.x, t.y - 0.05, t.z), q, s.set(sc * (0.92 + (i % 7) * 0.025), sc, sc * (0.92 + (i % 5) * 0.03)));
+        m.toArray(arr, i * 16);
+      }
       this.pos[i * 3] = t.x; this.pos[i * 3 + 1] = t.y; this.pos[i * 3 + 2] = t.z;
     }
     const caps = [preset.maxTrees * 0.25, preset.maxTrees, 1e9];
     for (const a of this.arch) {
       for (let l = 0; l < 3; l++) {
-        const cap = Math.max(4, Math.min(a.instances, Math.ceil(caps[l])));
+        const cnt = l < 2 ? a.instances : (a.farInstances || 0);
+        if (cnt === 0) { a.meshes[l] = null; continue; }
+        const cap = Math.max(4, Math.min(cnt, Math.ceil(caps[l])));
         const lod = a.lods[l];
         const bm = new THREE.InstancedMesh(lod.bark, a.barkMat, cap);
         bm.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -137,9 +147,9 @@ export class TreeSystem {
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
     const arch = this.arch, chunks = this.chunkList;
-    for (let ai = 0; ai < arch.length; ai++) { const ms = arch[ai].meshes; for (let l = 0; l < ms.length; l++) ms[l].count = 0; }
+    for (let ai = 0; ai < arch.length; ai++) { const ms = arch[ai].meshes; for (let l = 0; l < ms.length; l++) if (ms[l]) ms[l].count = 0; }
     const cx = camera.position.x, cz = camera.position.z;
-    const mats = this.mats, pos = this.pos, archOf = this.archOf;
+    const mats = this.mats, pos = this.pos, archOf = this.archOf, farMats = this.farMats, farArchOf = this.farArchOf;
     let drawn = 0;
     const sightOn = SIGHTLINE.on;
     for (let ci = 0; ci < chunks.length; ci++) {   // indexed + sqrt: no per-frame garbage
@@ -158,18 +168,19 @@ export class TreeSystem {
         if (!inView && d > shadowR) continue;
         if (sightOn && blocksSight(pos[i * 3], pos[i * 3 + 2])) continue;
         let l = d < d0 ? 0 : d < d1 ? 1 : 2;
-        const a = arch[archOf[i]];
-        let mm = a.meshes[l];
-        if (mm.count >= mm.cap) { if (l < 2) { l++; mm = a.meshes[l]; if (mm.count >= mm.cap) continue; } else continue; }
+        let mm = l < 2 ? arch[archOf[i]].meshes[l] : null;
+        if (mm && mm.count >= mm.cap) { l++; mm = l < 2 ? arch[archOf[i]].meshes[l] : null; if (mm && mm.count >= mm.cap) { l = 2; mm = null; } }
+        let srcM = mats;
+        if (l === 2) { mm = arch[farArchOf[i]].meshes[2]; srcM = farMats; if (mm.count >= mm.cap) continue; }
         const arr = mm.bark.instanceMatrix.array;
         const o = mm.count * 16, src = i * 16;
-        for (let j = 0; j < 16; j++) arr[o + j] = mats[src + j];
-        if (mm.leaves) { const la = mm.leaves.instanceMatrix.array; for (let j = 0; j < 16; j++) la[o + j] = mats[src + j]; }
+        for (let j = 0; j < 16; j++) arr[o + j] = srcM[src + j];
+        if (mm.leaves) { const la = mm.leaves.instanceMatrix.array; for (let j = 0; j < 16; j++) la[o + j] = srcM[src + j]; }
         mm.count++; drawn++;
       }
     }
     for (let ai = 0; ai < arch.length; ai++) for (let l = 0; l < arch[ai].meshes.length; l++) {
-      const mm = arch[ai].meshes[l];
+      const mm = arch[ai].meshes[l]; if (!mm) continue;
       // empty meshes would still bind programs/uniforms every pass (main + shadow)
       mm.bark.visible = mm.count > 0; if (mm.leaves) mm.leaves.visible = mm.count > 0;
       mm.bark.count = mm.count; mm.bark.instanceMatrix.clearUpdateRanges(); mm.bark.instanceMatrix.addUpdateRange(0, mm.count * 16); mm.bark.instanceMatrix.needsUpdate = mm.count > 0;
