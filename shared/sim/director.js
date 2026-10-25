@@ -2,7 +2,7 @@
 // grouped or isolated, recent chases/attacks, objective progress and how
 // predictable the night has become - and steers both entities accordingly.
 import { CONFIG } from '../config.js';
-import { clamp } from '../math.js';
+import { clamp, lerp } from '../math.js';
 import { playerActive } from './perception.js';
 
 export class Director {
@@ -12,7 +12,8 @@ export class Director {
     this.intensity = 0;          // short-term stress (0..1+)
     this.safeT = 0;              // seconds since anything threatening happened near anyone
     this.lastChase = -999; this.lastAttack = -999; this.lastReveal = -999; this.lastVocal = -999; this.lastSkunk = -999;
-    this.nextReveal = this.rng.range(110, 170);
+    // first deliberate reveal is scheduled 40-100 s after the dread period actually ends (see update)
+    this.nextReveal = null;
     this.revealKinds = ['watcher', 'crossing', 'skunk'];
     this.recentKinds = [];
     this.chasing = false;
@@ -22,8 +23,21 @@ export class Director {
   get progress() { return this.sim.obj ? this.sim.obj.doneCount() : 0; }
   get extraction() { return this.sim.obj ? this.sim.obj.extractOpen : false; }
 
+  // ---- session arc (owner): dread first, then escalating aggression as the night goes on
+  get D() { return CONFIG.DIRECTOR; }
+  // seconds of active play since the intro ended
+  get playT() { return Math.max(0, this.sim.time - CONFIG.SESSION.INTRO_TIME); }
+  // true during the opening dread period: cold and sounds only, he keeps his distance
+  inDread() { return this.playT < this.D.DREAD_TIME; }
+  // 0 at the end of the dread period -> 1 at full escalation; objectives push it along too
+  escalation() { return clamp((this.playT - this.D.DREAD_TIME) / this.D.ESCALATE_TIME + this.progress * 0.08, 0, 1); }
+  // distance he should keep from every player right now (0 = no limit); for roam/observation-spot choice
+  minDistance() { return this.inDread() ? this.D.DREAD_MIN_DIST : 0; }
+  _esc(pair) { return lerp(pair[0], pair[1], this.escalation()); }
+  _escRange(pair) { const e = this.escalation(); return this.rng.range(lerp(pair[0][0], pair[1][0], e), lerp(pair[0][1], pair[1][1], e)); }
+
   aggression() {
-    let a = 0.12 + 0.11 * this.progress + (this.extraction ? 0.25 : 0);
+    let a = 0.12 + 0.11 * this.progress + (this.extraction ? 0.25 : 0) + this.D.ESCALATE_AGGRESSION * this.escalation();
     if (this.phase === 'peak') a += 0.25;
     if (this.phase === 'relax') a *= 0.2;
     return clamp(a, 0, 0.85);
@@ -32,12 +46,13 @@ export class Director {
   // the player the monsters should pay most attention to: the isolated, the quiet, the one in front
   focusPlayer() { return this.focus ? this.sim.players.get(this.focus) : null; }
 
-  wantsPresence() { return this.phase !== 'relax' && (this.safeT > 50 || this.phase === 'peak'); }
+  wantsPresence() { return !this.inDread() && this.phase !== 'relax' && (this.safeT > this._esc(this.D.PRESENCE_SAFE) || this.phase === 'peak'); }
 
   allowChase(p) {
     const t = this.sim.time;
-    if (this.phase === 'relax' || this.sim.state === 'intro') return false;
-    if (t - this.lastChase < (this.extraction ? 35 : 70) || t - this.lastAttack < 50) return false;
+    if (this.phase === 'relax' || this.sim.state === 'intro' || this.inDread()) return false;
+    const chaseGap = this.extraction ? Math.min(35, this._esc(this.D.CHASE_COOLDOWN)) : this._esc(this.D.CHASE_COOLDOWN);
+    if (t - this.lastChase < chaseGap || t - this.lastAttack < this._esc(this.D.ATTACK_COOLDOWN)) return false;
     return true;
   }
 
@@ -49,7 +64,7 @@ export class Director {
   }
 
   chaseSpeedMul() { return this.extraction ? 1.06 : 1; }
-  allowSkunkAmbush() { return this.phase !== 'relax' && this.sim.time - this.lastSkunk > 35 && this.sim.state !== 'intro'; }
+  allowSkunkAmbush() { return !this.inDread() && this.phase !== 'relax' && this.sim.time - this.lastSkunk > 35 && this.sim.state !== 'intro'; }
 
   vocalRate(state, d) {
     // long silences are the default; vocals cluster in build-up and drop during relax
@@ -58,7 +73,7 @@ export class Director {
     if (this.phase === 'peak') r *= 1.6;
     if (d < 25) r *= 0.6;            // close by he mostly goes quiet
     if (this.sim.time - this.lastVocal < 30) r *= 0.3;
-    return r;
+    return r * this._esc(this.D.VOCAL_MUL);
   }
 
   onVocal() { this.lastVocal = this.sim.time; }
@@ -68,7 +83,7 @@ export class Director {
   onReveal(kind) { if (kind !== 'retreat') { this.lastReveal = this.sim.time; this.recentKinds.push(kind); if (this.recentKinds.length > 3) this.recentKinds.shift(); } this.intensity += 0.25; this.safeT = 0; }
   onSkunk() { this.lastSkunk = this.sim.time; this.intensity += 0.4; this.safeT = 0; }
 
-  enter(phase) { this.phase = phase; this.phaseT = 0; this.phaseLen = phase === 'relax' ? this.rng.range(45, 85) : phase === 'peak' ? this.rng.range(50, 90) : this.rng.range(90, 160); }
+  enter(phase) { this.phase = phase; this.phaseT = 0; this.phaseLen = phase === 'relax' ? this._escRange(this.D.RELAX_LEN) : phase === 'peak' ? this.rng.range(50, 90) : this._escRange(this.D.BUILD_LEN); }
 
   update(dt) {
     const sim = this.sim;
@@ -106,13 +121,14 @@ export class Director {
     if (this.intensity > 1.6 && this.phase !== 'relax' && !this.chasing) this.enter('relax');
     // deliberate reveals - rare, varied, never the same twice in a row
     if (sim.state === 'play' || sim.state === 'extract') {
-      if (sim.time > this.nextReveal && !this.chasing && this.phase !== 'relax') {
+      if (this.nextReveal === null && !this.inDread()) this.nextReveal = sim.time + this.rng.range(40, 100);
+      if (this.nextReveal !== null && sim.time > this.nextReveal && !this.chasing && this.phase !== 'relax' && !this.inDread()) {
         const p = this.focusPlayer();
         if (p) {
           let kinds = this.revealKinds.filter((k) => k !== this.recentKinds[this.recentKinds.length - 1]);
           const kind = this.rng.pick(kinds);
           const ok = kind === 'skunk' ? sim.sf.requestEmerge(p) : sim.hv.requestReveal(kind, p);
-          this.nextReveal = sim.time + (ok ? this.rng.range(150, 260) : 20);
+          this.nextReveal = sim.time + (ok ? this._escRange(this.D.REVEAL_GAP) : 20);
           if (ok) this.lastReveal = sim.time;
         }
       }

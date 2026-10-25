@@ -74,3 +74,29 @@ watcher reveals. The table was already from `655c05d`. The bullets now match
 the table: 5 chases, 3 bites, 3 watcher reveals (checked against the raw `PACING_JSON` output). Codex's independent run (Node 24)
 reproduced these numbers, so the simulation is deterministic per seed across
 both machines. The difference was my reporting error, not runtime variance.
+
+## Update: director pacing per owner decisions (Claude, after `9705ad7`)
+
+The owner decided (`docs/handoffs/OWNER_DECISIONS_2026-10-25.md`):
+- he may attack at any time,
+- dread should build longer before he appears,
+- he should grow more aggressive as the night goes on,
+- he must never enter the spawn area.
+
+`CONFIG.DIRECTOR` + `director.js` now add a 210 s dread period (no chases,
+reveals or skunk ambush) and time-based escalation. Same 16 sessions:
+
+| | before (`655c05d`) | after director change |
+|---|---|---|
+| earliest chase | 1:15 | 4:46 |
+| median first chase | 9:09 | 7:07 |
+| chases / HV hits / skunk hits | 9 / 2 / 3 | 13 / 1 / 1 |
+| median first on-screen sighting | 1:18 | 1:22 (unchanged) |
+| median longest quiet | 12:14 | 10:58 |
+| threat events per 5-min window | — | 14 / 13 / 8 |
+
+The director alone delays chases and adds more of them, but it doesn't delay the
+first sighting or make pressure rise over time. Both depend on Helium Voice's
+own movement choices. Codex task D wires `director.minDistance()` and
+`director.escalation()` into `heliumVoice.js`; task A enables unseen attacks.
+Re-measure after those land. The test now prints a "threats per 5 min" column.

@@ -129,7 +129,9 @@ function runSession(name, behaviours, seed) {
     chases: count('chase', (e) => e.on), firstChase: firstT('chase', (e) => e.on), hits: count('hit') + count('downed') + count('dead'), hvHits: events.filter((e) => ['hit', 'downed', 'dead'].includes(e.type) && e.by === 'hv').length, sfHits: events.filter((e) => ['hit', 'downed', 'dead'].includes(e.type) && e.by === 'sf').length,
     firstHit: firstT('hit') ?? firstT('downed') ?? firstT('dead'), sig: count('hv_sig'), firstSig: firstT('hv_sig'), snaps: count('snap'),
     vocals: count('hv_vocal'), sfVocals: count('sf_vocal'), mimic: count('mimic'), gas: count('gas'), reveals,
-    longestQuiet: +longestQuiet.toFixed(0), hvStateSec: Object.fromEntries(Object.entries(hvStateSec).map(([k, v]) => [k, Math.round(v)])), players: pt,
+    longestQuiet: +longestQuiet.toFixed(0),
+    // threat events (chase starts, hits, reveals, signature, snaps, mimicry, gas) per 5-minute window
+    buckets: Array.from({ length: Math.ceil(MINUTES / 5) }, (_, b) => events.filter((e) => e.t >= b * 300 && e.t < (b + 1) * 300 && THREATS.has(e.type) && !(e.type === 'chase' && e.on === false)).length + reveals.filter((r) => r.t >= b * 300 && r.t < (b + 1) * 300).length), hvStateSec: Object.fromEntries(Object.entries(hvStateSec).map(([k, v]) => [k, Math.round(v)])), players: pt,
   };
 }
 
@@ -143,11 +145,11 @@ const fmt = (v) => (v == null ? '—' : typeof v === 'number' ? (v >= 100 ? Math
 const mmss = (s) => (s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`);
 for (const name of Object.keys(SCENARIOS)) {
   console.log(`## ${name}`);
-  console.log(`seed | outcome | cold (${T.OUTER} m) | inner (${T.INNER} m) | first on screen | 1st chase | chases | HV hits | skunk hits | parked ≤2.6 m max | sig | reveals | longest quiet`);
+  console.log(`seed | outcome | cold (${T.OUTER} m) | inner (${T.INNER} m) | first on screen | 1st chase | chases | HV hits | skunk hits | parked ≤2.6 m max | sig | reveals | longest quiet | threats per 5 min`);
   for (const r of results.filter((x) => x.scenario === name)) {
     const p1 = r.players.p1;
     console.log([r.seed, r.outcome, mmss(p1.firstRing.outer), mmss(p1.firstRing.inner), mmss(p1.firstSeen), mmss(r.firstChase), r.chases, r.hvHits, r.sfHits,
-      `${fmt(Math.max(...Object.values(r.players).map((p) => p.parkedMax)))} s`, r.sig, r.reveals.map((x) => x.kind).join('/') || '—', mmss(r.longestQuiet)].join(' | '));
+      `${fmt(Math.max(...Object.values(r.players).map((p) => p.parkedMax)))} s`, r.sig, r.reveals.map((x) => x.kind).join('/') || '—', mmss(r.longestQuiet), r.buckets.join(' ')].join(' | '));
   }
   console.log('');
 }

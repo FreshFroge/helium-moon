@@ -7,7 +7,7 @@ import { pointAtDistance } from '../shared/math.js';
 const world = new World();
 function encounter(creature, separation=6) {
   const sim=new GameSim(world,{seed:42});
-  sim.state='play';sim.time=100;sim.director.update=()=>{};sim.director.enter('build');sim.mimic.update=()=>{};
+  sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.director.update=()=>{};sim.director.enter('build');sim.mimic.update=()=>{};
   const p=sim.addPlayer('tester','Tester');
   const at=pointAtDistance(world.trail,world.trailCum,500);
   const target=pointAtDistance(world.trail,world.trailCum,500+separation);
@@ -41,7 +41,7 @@ test('a close flashlight encounter remains dangerous during the director cooldow
 for(const flash of [true,false]) test(`first sighting reaches a real attack without preassigned awareness (flashlight ${flash})`,()=>{
   for(const seed of [1,2,3,4,5,6,7,8]) {
     const sim=new GameSim(world,{seed}),p=sim.addPlayer('tester','Tester'),hv=sim.hv;
-    sim.state='play';sim.time=100;sim.sf.update=()=>{};sim.mimic.update=()=>{};
+    sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.sf.update=()=>{};sim.mimic.update=()=>{};
     const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
     Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z)+Math.PI,pitch:0,flash});
     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
@@ -56,7 +56,7 @@ for(const flash of [true,false]) test(`first sighting reaches a real attack with
 
 test('an observer-triggered chase uses the newly selected teammate immediately',()=>{
   const sim=new GameSim(world,{seed:2}),old=sim.addPlayer('old','Old'),p=sim.addPlayer('new','New'),hv=sim.hv;
-  sim.state='play';sim.time=100;sim.sf.update=()=>{};sim.mimic.update=()=>{};
+  sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.sf.update=()=>{};sim.mimic.update=()=>{};
   old.state='downed';hv.target=old.id;
   const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
   Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z)+Math.PI,pitch:0,flash:true});

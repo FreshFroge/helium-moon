@@ -9,7 +9,7 @@ import { onScreen } from '../shared/sim/perception.js';
 const world = new World();
 function encounter() {
   const sim = new GameSim(world, {seed:42});
-  sim.state='play';sim.time=100;sim.director.update=()=>{};sim.director.enter('build');sim.sf.update=()=>{};sim.mimic.update=()=>{};
+  sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.director.update=()=>{};sim.director.enter('build');sim.sf.update=()=>{};sim.mimic.update=()=>{};
   const p=sim.addPlayer('one','One'), hv=sim.hv;
   const at=pointAtDistance(world.trail,world.trailCum,500), to=pointAtDistance(world.trail,world.trailCum,502.3);
   Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),flash:true,pitch:0,viewFov:75,viewAspect:16/9});

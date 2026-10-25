@@ -23,8 +23,8 @@ possible without waiting on each other:
 | 5 | Performance budget per quality preset: draw calls/triangles/programs at fixed views, recorded as a regression test so changes can't silently double the cost | new `tests/browser_perf_budget.py` + `docs/PERFORMANCE.md` | Claude |
 | 6 | Visibility vs rendered silhouette: AI concealment uses sampled LOS; check against what the player actually sees (leaf gaps) | AI files (Codex) | — |
 | 7 | **Owner decided:** he can attack at any time (including unseen); when on a player's screen he seeks concealment. See `docs/handoffs/OWNER_DECISIONS_2026-10-25.md` (task A) | `shared/sim/heliumVoice.js`, attack/encounter tests | Codex (proposed) |
-| 8 | **Owner decided:** aggression escalates as the session goes on (task C) | `shared/sim/director.js`, `shared/config.js` DIRECTOR keys, pacing test/report | Claude |
-| 9 | **Owner decided:** dread builds longer before his first appearance (task C); **he must never enter the spawn area** (task B: Claude `shared/sim/zones.js` + test, Codex wires into AI) | director, new `zones.js` | Claude + Codex |
+| 8b | Wire `director.minDistance()` / `director.escalation()` into Helium Voice movement (task D): first sighting ≥ ~4 min, pressure rising over the session | `shared/sim/heliumVoice.js` | Codex (proposed) |
+| 9 | **Owner decided:** he must never enter the spawn area (task B): Claude writes `shared/sim/zones.js` + `tests/zones.test.mjs`, Codex wires into both AIs | new `zones.js`, AI files | Claude + Codex |
 | 10 | Real WebRTC voice between different networks untested (cloud UDP policy); add an optional TURN relay config | `server/server.js` (welcome msg), `client/net/transport.js`, `client/audio/voice.js`, README | Claude |
 
 ## Done
@@ -36,6 +36,8 @@ possible without waiting on each other:
 | — | Pacing timeline + report (Claude) | `03b1dc6`, corrected `102160d` |
 | — | Hosted page from shared branch (Claude) | built from `608918f` |
 | 1 | Extraction cruiser visibility: **not a bug**. The cruiser is placed on the ground 5 m from the extraction point (−444, −636), visible with flare and a 55-intensity strobe once extraction opens; the earlier render was a bad camera angle into bushes | in-page state check at `2843b71` (Claude) |
+| 8 | Director dread period + escalation (task C) | this commit; `npm test` exit 0; pacing before/after in `PACING_REPORT.md` (Claude) |
+| 10 | Optional TURN relay for voice | `9705ad7`; `tests/ice.test.mjs` 3/3 (Claude) |
 | 2 | Station placement: **not a bug**. All 7 station variants over 40 seeds have 62–96 standable spots within 2 m, all with clear line of sight, none inside a building collider; the earlier render was a test camera placed inside the shed | Node check at `2843b71` (Claude) |
 | 11 | Compact pause panels no longer cover navigation; actual UI layout checks pass five viewports | Codex; browser_menu_layout.py |
 | 12 | Restart/quit cancel unsent chat and release movement focus; failing-before actual multiplayer fixture now passes | Codex; browser_sessions.py |
