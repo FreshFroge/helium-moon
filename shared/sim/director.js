@@ -38,7 +38,7 @@ export class Director {
   _escRange(pair) { const e = this.escalation(); return this.rng.range(lerp(pair[0][0], pair[1][0], e), lerp(pair[0][1], pair[1][1], e)); }
 
   aggression() {
-    let a = 0.12 + 0.11 * this.progress + (this.extraction ? 0.25 : 0) + this.D.ESCALATE_AGGRESSION * this.escalation();
+    let a = 0.2 + 0.11 * this.progress + (this.extraction ? 0.25 : 0) + this.D.ESCALATE_AGGRESSION * this.escalation();
     if (this.phase === 'peak') a += 0.25;
     if (this.phase === 'relax') a *= 0.2;
     return clamp(a, 0, 0.85);
@@ -61,7 +61,7 @@ export class Director {
     if (!this.allowChase(p)) return false;
     const iso = p.isolation || 0;
     const chance = this.aggression() * (d < 20 ? 1.4 : d < 35 ? 0.8 : 0.3) * (iso > 25 ? 1.4 : 1) * (this.phase === 'peak' ? 1.3 : 1);
-    return this.rng() < chance * 0.04;   // evaluated every tick -> per-second hazard ~0.8*chance
+    return this.rng() < chance * 0.14;   // evaluated every tick -> per-second hazard ~2.8*chance (owner: 2-3x more active)
   }
 
   chaseSpeedMul() { return this.extraction ? 1.06 : 1; }
@@ -90,7 +90,7 @@ export class Director {
     const sim = this.sim;
     this.phaseT += dt;
     if (!this.phaseLen) this.enter('build');
-    this.intensity = Math.max(0, this.intensity - dt * 0.02);
+    this.intensity = Math.max(0, this.intensity - dt * 0.035);
     // proximity of danger -> resets the safe timer
     const hv = sim.hv;
     let closest = 1e9;
@@ -123,7 +123,7 @@ export class Director {
     if (this.phase === 'relax' && this.phaseT > this.phaseLen) this.enter('build');
     else if (this.phase === 'build' && this.phaseT > this.phaseLen && !this.chasing) this.enter('peak');
     else if (this.phase === 'peak' && this.phaseT > this.phaseLen && !this.chasing) this.enter(this.intensity > 1 ? 'relax' : 'build');
-    if (this.intensity > 1.6 && this.phase !== 'relax' && !this.chasing) this.enter('relax');
+    if (this.intensity > 2.4 && this.phase !== 'relax' && !this.chasing) this.enter('relax');   // owner: more active -> tolerates more before forcing a break
     // deliberate reveals - rare, varied, never the same twice in a row
     if (sim.state === 'play' || sim.state === 'extract') {
       if (this.nextReveal === null && !this.inDread()) this.nextReveal = sim.time + this.rng.range(20, 45);

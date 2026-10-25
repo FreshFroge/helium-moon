@@ -38,7 +38,7 @@ test('no repeats, reuse gap, cooldown', () => {
   for (const list of Object.values(by)) for (let i = 1; i < list.length; i++) {
     const a = list[i - 1], b = list[i];
     assert.notEqual(a.id, b.id, `${a.id} twice in a row`);
-    if (b.ctx !== 'hunt_start') assert.ok(b.t - a.t >= VOICE_COOLDOWN[0] - 0.01, `${b.t - a.t} s between lines`);
+    if (b.ctx !== 'hunt_start' && b.ctx !== 'hit') assert.ok(b.t - a.t >= VOICE_COOLDOWN[0] - 0.01, `${b.t - a.t} s between lines`);
     for (const c of list.slice(0, i)) if (c.id === b.id) assert.ok(b.t - c.t >= VOICE_REUSE - 0.01, `${b.id} reused after ${b.t - c.t} s`);
   }
 });

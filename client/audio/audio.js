@@ -61,6 +61,7 @@ export class AudioEngine {
     for (const k of ['reveal', 'snap', 'chase']) add('st_' + k, () => S.stinger(k, 8));
     add('hurt', () => S.hurt(9, false)); add('down', () => S.hurt(10, true));
     // real-animal false alarms (wildlife.js)
+    for (let i = 0; i < 3; i++) add('swing' + i, () => S.swing(70 + i));
     for (let i = 0; i < 3; i++) { add('deerBlow' + i, () => S.deerBlow(40 + i)); add('owlHoot' + i, () => S.owl(50 + i)); add('wings' + i, () => S.wingFlap(60 + i)); }
     let t0 = performance.now();
     for (let i = 0; i < jobs.length; i++) {
@@ -105,7 +106,7 @@ export class AudioEngine {
     } catch (e) { /* cloned lines optional */ }
   }
 
-  // one of his spoken lines, positioned at him. Audible to ~24 m (an AI event chose it,
+  // one of his spoken lines, positioned at him. Audible to ~45 m (an AI event chose it,
   // never a distance threshold), so it carries to nearby players in co-op.
   hvLine(id, pos, take = 0) {
     const bufs = this.lineBufs && this.lineBufs[id];
@@ -116,12 +117,12 @@ export class AudioEngine {
     // nonlinear roughness and one unstable double 18-35 ms behind. Texture, never louder, and
     // some close lines stay clean so the processing never becomes a rangefinder.
     if (d < 15 && take % 3 !== 0) {
-      const opts = { pos, bus: 'mon', gain: 1.0, rate: 0.97, ref: 3, reverb: 0.04, range: { fadeStart: 12, maxDistance: 24 } };
+      const opts = { pos, bus: 'mon', gain: 1.0, rate: 0.97, ref: 3, reverb: 0.04, range: { fadeStart: 20, maxDistance: 45 } };
       const h = this.play(buf, { ...opts, roughness: 0.18 + (take % 5) * 0.02 });
       this.play(buf, { ...opts, gain: 0.28, rate: 0.955 + (take % 4) * 0.004, delay: 0.018 + (take % 7) * 0.0025 });
       return h;
     }
-    return this.play(buf, { pos, bus: 'mon', gain: 1.15, rate: 0.97, ref: 3, reverb: 0.2, range: { fadeStart: 12, maxDistance: 24 } });
+    return this.play(buf, { pos, bus: 'mon', gain: 1.3, rate: 0.97, ref: 4, reverb: 0.3, range: { fadeStart: 20, maxDistance: 45 } });
   }
 
   async loadPlayerBreathing() {
@@ -452,6 +453,13 @@ export class AudioEngine {
     if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal(HV_KINDS.includes(kind) ? kind : 'giggle', seed % 5 + 1, this.sigPCM));
     const loud = { scream: 2.2, call: 1.6, cry: 1.2, laugh: 1.2, whisper: 0.55, breath: 0.6, inhale: 0.7, hum: 0.8, giggle: 1, fragment: 1.2 }[kind] || 1;
     return this.play(this.var[key], { pos, bus: 'mon', gain: loud, ref: 1.5, reverb: 0.1, range: creatureFootstepCue('hv', 0) });
+  }
+
+  // the attack scream: his loudest sound, never range-gated like ordinary close vocals
+  hvScream(pos, seed = 0) {
+    const key = `hv_scream_${seed % 5}`;
+    if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal('scream', seed % 5 + 1, this.sigPCM));
+    return this.play(this.var[key], { pos, bus: 'mon', gain: 2.6, ref: 4, rolloff: 1, reverb: 0.3, range: { fadeStart: 25, maxDistance: 60 } });
   }
 
   signature(pos) { return this.play(this.lib.signature, { pos, bus: 'mon', gain: 1.35, ref: 7, reverb: 0.4 }); }

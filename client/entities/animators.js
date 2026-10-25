@@ -79,7 +79,7 @@ export class HeliumAnimator {
     this.phase = 0; this.t = 0;
     this.headYaw = 0; this.headPitch = 0; this.tilt = 0; this.jaw = 0;
     this.speed = 0; this.accel = 0; this.turn = 0; this.lastYaw = null; this.torsoYaw = 0;
-    this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0, stalk: 0, crawl: 0 };
+    this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0, stalk: 0, crawl: 0, windup: 0, strike: 0 };
     this.hands = {};
   }
 
@@ -141,6 +141,9 @@ export class HeliumAnimator {
     B.run = lerp(B.run, p.run ? 1 : 0, 1 - Math.exp(-dt * 4));
     B.crouch = lerp(B.crouch, p.crouch || 0, k);
     B.reach = lerp(B.reach, p.reach || 0, 1 - Math.exp(-dt * 10));
+    // attack (owner): arms thrown up and back while he screams, then a fast swing down at you
+    B.windup = lerp(B.windup, p.windup || 0, 1 - Math.exp(-dt * 12));
+    B.strike = lerp(B.strike, p.strike || 0, 1 - Math.exp(-dt * (p.strike ? 40 : 6)));
     B.still = lerp(B.still, p.still ? 1 : 0, 1 - Math.exp(-dt * 8));
     const stalking = creature && !p.run && (p.state === 3 || p.state === 4 || p.state === 7 || p.state === 9);
     B.stalk = lerp(B.stalk, stalking ? 1 : 0, k);
@@ -155,7 +158,7 @@ export class HeliumAnimator {
     const weight = (Math.sin(this.t * 0.53) + 0.35 * Math.sin(this.t * 0.19 + 0.8)) * 0.013 * idle;
     const drive = this.accel * 0.012 * creature * free;
     const bank = -this.turn * 0.025 * moving * creature * free;
-    const lean = 0.06 * B.walk + 0.38 * B.run + 0.25 * B.crouch + 0.3 * B.reach + drive;
+    const lean = 0.06 * B.walk + 0.38 * B.run + 0.25 * B.crouch + 0.3 * B.reach - 0.25 * B.windup + 0.55 * B.strike + drive;
     const bob = Math.abs(Math.sin(cycle)) * (0.025 * B.walk + 0.06 * B.run) * moving;
     const breathe = free * Math.sin(this.t * 1.7) * 0.012;
     b.root.position.x = b.root.userData.restPos.x + weight + Math.sin(cycle) * 0.012 * B.walk * creature * free;
@@ -232,8 +235,16 @@ export class HeliumAnimator {
       const up = new THREE.Vector3(0.14 * sign, -1, swing * armSwing * 0.6 + 0.05 - lag).normalize();
       const fore = new THREE.Vector3(0.05 * sign, -1, 0.12 + swing * armSwing * 0.4 + B.run * 0.9 - lag).normalize();
       if (B.reach > 0.01) {
-        up.lerp(new THREE.Vector3(0.15 * sign, -0.05, 1).normalize(), B.reach).normalize();
-        fore.lerp(new THREE.Vector3(0.05 * sign, 0.02, 1).normalize(), B.reach).normalize();
+        up.lerp(_v3.set(0.15 * sign, -0.05, 1).normalize(), B.reach).normalize();
+        fore.lerp(_v3.set(0.05 * sign, 0.02, 1).normalize(), B.reach).normalize();
+      }
+      if (B.windup > 0.01) {          // raised overhead, elbows bent back, claws forward
+        up.lerp(_v3.set(0.6 * sign, 0.65, -0.3).normalize(), B.windup).normalize();
+        fore.lerp(_v3.set(0.12 * sign, 0.2, 1).normalize(), B.windup).normalize();
+      }
+      if (B.strike > 0.01) {          // the swing: down and across, through where you stand
+        up.lerp(_v3.set(-0.2 * sign, -0.45, 1).normalize(), B.strike).normalize();
+        fore.lerp(_v3.set(-0.35 * sign, -0.6, 0.8).normalize(), B.strike).normalize();
       }
       rig.aim(b['clavicle.' + s], new THREE.Vector3(sign, 0.02 * B.run, 0).normalize());
       this._aimSegment(b['upperarm01.' + s], L.upperDir, up);

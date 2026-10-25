@@ -98,6 +98,13 @@ export const CONFIG = {
     //  flash  -> won't commit a hunt while they are facing him; waits (<= LEARN_WAIT s) for them to turn
     //  sprint -> cuts them off sooner (cut-off after LEARN_CUTOFF_UNSEEN s instead of RELOCATE_CUTOFF_UNSEEN)
     LEARN_HALF_LIFE: 420, LEARN_COUNTER: 1.7, LEARN_WAIT: 7, LEARN_CUTOFF_UNSEEN: 2,
+    // Attack (owner, Oct 25 midday): no more hit-and-run. He stops, screams and winds up
+    // (WINDUP s, arms raised), swings, and if it lands he stays over you for LINGER s
+    // staring before backing off at walking pace. The 7-ft flashlight still breaks the windup.
+    WINDUP: 0.6, STRIKE_REACH: 2.3, LINGER: 1.6, MISS_PAUSE: 0.5,
+    // Seen from a distance (owner): he doesn't vanish instantly. Beyond STARE_MIN_DIST he holds
+    // still and stares back for STARE s (shorter if lit: STARE_LIT), then leaves at SLOW_RETREAT.
+    STARE_MIN_DIST: 10, STARE: [3, 6], STARE_LIT: [1.8, 3.2], STARE_REFRACTORY: 8, SLOW_RETREAT: 2.4,
   },
   SF: {
     MODEL_SCALE: 0.6,               // keep the creature low and partially concealed in undergrowth
@@ -133,13 +140,14 @@ export const CONFIG = {
     DREAD_MIN_DIST: 55,       // m he is asked to stay beyond during the dread period (inside the outer cold ring)
     ESCALATE_TIME: 840,       // s after the dread period to reach full escalation (~18 min into the session)
     ESCALATE_AGGRESSION: 0.35,// added to base aggression at full escalation
-    CHASE_COOLDOWN: [50, 22], // s between chases: start -> full escalation
-    ATTACK_COOLDOWN: [40, 18],
-    RELAX_LEN: [[30, 55], [15, 25]],   // relax phase length range: start -> full escalation
-    BUILD_LEN: [[90, 160], [45, 80]],
-    REVEAL_GAP: [[75, 130], [45, 80]],
-    PRESENCE_SAFE: [25, 8],  // s of safety before he deliberately comes closer
-    VOCAL_MUL: [1, 1.8],
+    // owner, Oct 25 midday: "far more active, like 2-3x" -> cooldowns/phase lengths roughly halved
+    CHASE_COOLDOWN: [16, 8],  // s between chases: start -> full escalation
+    ATTACK_COOLDOWN: [14, 7],
+    RELAX_LEN: [[16, 28], [8, 14]],   // relax phase length range: start -> full escalation
+    BUILD_LEN: [[45, 80], [22, 40]],
+    REVEAL_GAP: [[26, 45], [15, 30]],
+    PRESENCE_SAFE: [12, 4],  // s of safety before he deliberately comes closer
+    VOCAL_MUL: [2, 3.5],
   },
   SESSION: {
     INTRO_TIME: 9,

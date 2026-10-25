@@ -127,13 +127,14 @@ test('an intentional appearance registers briefly before physically retreating',
   const {hv,player}=fixture();hv.x=30;
   hv.setState('reveal');hv.reveal={pid:player.id,kind:'watcher',phase:'show'};
   hv.sim.director.onReveal=()=>{};
-  hv.perceive=()=>{hv.observers=[{p:player}];hv.litBy=null;};
+  hv.perceive=()=>{hv.observers=[{p:player}];hv.litBy=null;hv.sim.time+=.05;};
   hv.vocals=()=>{};hv.updateReveal=()=>{};hv.followPath=()=>false;
   hv.concealedAt=()=>false;hv.coverAway=()=>null;
   let retreats=0;hv.retreatFrom=()=>{retreats++;hv.setState('retreat');};
   for(let i=0;i<10;i++)hv.update(.05);
   assert.equal(retreats,0,'a deliberate glimpse survives its first visible frame');
-  for(let i=0;i<15;i++)hv.update(.05);
+  // owner (Oct 25 midday): seen from a distance he stares back for HV.STARE before leaving
+  for(let i=0;i<140;i++)hv.update(.05);
   assert.equal(retreats,1,'appearance still ends in physical escape');
 });
 

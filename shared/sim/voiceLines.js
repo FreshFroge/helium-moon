@@ -22,9 +22,10 @@ export const VOICE_CONTEXTS = {
   chatter: ['rec_you_know', 'rec_got_a_wire', 'rec_you_got_a_point', 'rec_dont_care', 'rec_no_you_cant', 'rec_okay_ace', 'rec_i_can_tell'],
 };
 // how often each context actually speaks (the rest stay silent: silence is the default)
-export const VOICE_CHANCE = { hunt_start: 0.25, hit: 0.34, watched: 0.15, lost_target: 0.35, heard: 0.3, left_behind: 0.3, flashed_off: 0.2, repeated_counter: 0.5, chatter: 0.25 };
-export const VOICE_COOLDOWN = [18, 30];
-export const VOICE_REUSE = 240;       // s before the same line may be used again
+// owner (Oct 25 midday): "he isn't talking" -> he speaks far more often now
+export const VOICE_CHANCE = { hunt_start: 0.6, hit: 0.7, watched: 0.55, lost_target: 0.75, heard: 0.6, left_behind: 0.5, flashed_off: 0.6, repeated_counter: 0.8, chatter: 0.7 };
+export const VOICE_COOLDOWN = [9, 16];
+export const VOICE_REUSE = 100;       // s before the same line may be used again
 
 export class VoiceLines {
   constructor(sim) {

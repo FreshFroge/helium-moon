@@ -168,6 +168,18 @@ export function wingFlap(seed) {
   return fade(normalize(out, 0.85), SR);
 }
 
+// his arm cutting the air on a swing: a fast, low-mid noise sweep (attack, owner Oct 25)
+export function swing(seed) {
+  const r = rngFor(seed), n = N(0.32), out = new Float32Array(n), nz = noise(n, r);
+  const bp = new Biquad('bp', 400, 1.3, SR);
+  for (let i = 0; i < n; i++) {
+    const k = i / n;
+    if ((i & 31) === 0) bp.set('bp', 300 + 1600 * Math.sin(Math.PI * k), 1.3);   // the sweep: low -> high -> low
+    out[i] = bp.tick(nz[i]) * Math.sin(Math.PI * Math.min(1, k * 1.15)) ** 2;
+  }
+  return fade(normalize(filter(out, 'lp', 2800, 0.7, SR), 0.8), SR, 0.01, 0.06);
+}
+
 export function coyotes(seed) {
   const r = rngFor(seed), dur = 5.5, out = new Float32Array(N(dur));
   for (let v = 0; v < 4; v++) {

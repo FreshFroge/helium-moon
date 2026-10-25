@@ -15,9 +15,13 @@ function fixture(kind='watcher'){
   return {hv,p,sim,reports};
 }
 for(const kind of ['watcher','crossing'])test(`${kind} sighting reports once before its short visible escape`,()=>{
-  const {hv,p,reports}=fixture(kind);
-  hv.perceive=()=>{hv.observers=[{p}];hv.litBy=null;};
-  for(let i=0;i<25;i++)hv.update(.05);
+  const {hv,p,sim,reports}=fixture(kind);
+  hv.perceive=()=>{hv.observers=[{p}];hv.litBy=null;sim.time+=.05;};
+  // owner (Oct 25 midday): seen from a distance he holds and stares back first (HV.STARE),
+  // then leaves; he must not vanish within the first second any more
+  for(let i=0;i<20;i++)hv.update(.05);
+  assert.notEqual(hv.state,'retreat','he stares back before leaving');
+  for(let i=0;i<140;i++)hv.update(.05);
   assert.deepEqual(reports,[kind],'one real appearance must not disappear from pacing or count twice');
   assert.equal(hv.state,'retreat');
 });

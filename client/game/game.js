@@ -351,6 +351,15 @@ export class Game {
       case 'wildlife': if (this.wildlife && this._near(pos, 90)) this.wildlife.spawn(e, this.player.pos); break;
       case 'hv_vocal': if (this._near(pos, CONFIG.HV.FOOTSTEP_MAX_DISTANCE) && this._canSee(pos)) { A.hvVocal(e.k, e.s, pos); this.voice.suppress(2); } break;
       case 'hv_line': A.hvLine(e.id, pos, e.seq || 0); this.voice.suppress(2.5); break;
+      // owner: a real attack - he stops, SCREAMS and winds up, then swings
+      case 'hv_attack': {
+        const at = { x: e.x, y: this.world.heightAt(e.x, e.z) + 1.7, z: e.z };
+        if (e.phase === 'windup') {
+          A.hvScream(at, e.seq || 0);
+          if (this._near(at, 12)) { this.player.shake = Math.max(this.player.shake, 0.6); this.voice.suppress(3); }
+        } else if (e.phase === 'strike') A.at('swing' + ((e.seq || 0) % 3), at, { bus: 'mon', gain: e.hit ? 1.2 : 0.9, ref: 2.5, reverb: 0.08 });
+        break;
+      }
       case 'hv_sig': if (this._canSee(pos)) { A.signature(pos); this.voice.suppress(2.6); } break;
       case 'sf_vocal': A.sfVocal(e.k, e.s, pos); break;
       case 'snap': break; // no artificial branch-snap warning of an unseen approach
@@ -544,8 +553,9 @@ export class Game {
     // Attack lock (owner, Oct 25): the instant he strikes you, the camera is pulled onto his
     // face and held there for a moment. Only on an actual hit, so it never aims the
     // flashlight for you during the approach (the 7-ft flashlight counter stays yours).
-    // Only once he is within ~4 ft (owner): on his strike, or while a hunt has him that close.
-    if (this.hv && (this._attackLockPending || this.chasing) && this.myState !== 'dead'
+    // Only once he is within ~4 ft (owner), and only on his actual strike: locking while he
+    // closes in would aim your flashlight at him and hand you a free 7-ft flash-off.
+    if (this.hv && this._attackLockPending && this.myState !== 'dead'
         && Math.hypot(this.hv.pos.x - pl.pos.x, this.hv.pos.z - pl.pos.z) <= ATTACK_LOCK_DIST) {
       this._attackLock = Math.max(this._attackLock || 0, this._attackLockPending || 1.2);
     }
