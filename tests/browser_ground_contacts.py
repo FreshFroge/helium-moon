@@ -77,7 +77,7 @@ async def play(port):
             assert result['bridge'],result
             output=Path(os.environ.get('HM_ARTIFACT_DIR','/tmp/helium-moon-ground-contacts'))
             output.mkdir(parents=True,exist_ok=True)
-            await page.screenshot(path=str(output/'grounded-crawl.png'))
+            await page.screenshot(path=str(output/'grounded-crawl.png'),timeout=120000)
             assert not errors,errors
             print('  ok  actual view plants on real slopes in three orientations and on the bridge:',result,flush=True)
             print('all browser ground-contact checks passed',flush=True)

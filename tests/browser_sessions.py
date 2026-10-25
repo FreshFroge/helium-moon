@@ -109,6 +109,22 @@ async def run(port):
             await page.evaluate("game.quitToMenu(true)")
             assert await page.evaluate("!ui.chatOpen && !game.input.textFocus && !document.querySelector('#chat-input').value")
             print("  ok  restart and quit cancel unsent chat and release movement focus")
+            await page.click("#menu-main [data-act=multi]")
+            await page.click("#mp-create")
+            await page.wait_for_function("game.lobby && game.lobby.code")
+            await page.click("#lb-start")
+            await page.wait_for_function("game.mode === 'playing'")
+            await page.keyboard.press("Enter")
+            await page.evaluate("game.advance(3,1/30,false)")
+            assert await page.evaluate("ui.chatOpen")
+            # Dedicated HM_TEST server supplies a real death/end event; the
+            # fixture tests UI lifecycle, not enemy pursuit or damage balance.
+            await page.evaluate("game.net.send({t:'debug',cmd:'down'})")
+            await page.wait_for_function("game.ended")
+            assert await page.evaluate("!ui.chatOpen && !game.input.textFocus")
+            await page.evaluate("game.quitToMenu(true)")
+            print("  ok  authoritative death/end event cancels open chat immediately")
+
 
             await page.click("#menu-main [data-act=multi]")
             await page.click("#mp-create")
@@ -130,7 +146,7 @@ def main():
     with tempfile.TemporaryFile(mode="w+") as log:
         server = subprocess.Popen(
             ["node", str(ROOT / "server/server.js")],
-            env={**os.environ, "PORT": str(port)}, stdout=log, stderr=log,
+            env={**os.environ, "PORT": str(port), "HM_TEST": "1"}, stdout=log, stderr=log,
         )
         try:
             deadline = time.monotonic() + 30

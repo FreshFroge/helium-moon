@@ -57,7 +57,9 @@ async def play(port):
                             const z = def.z + Math.sin(angle) * radius;
                             if (!game.world.isPlayable(x, z)) continue;
                             game.tp(x, z, def.x, def.z);
-                            game.advance(3, 1/30, false);
+                            // Allow gravity and collision correction to settle
+                            // before accepting a fixture interaction position.
+                            game.advance(30, 1/30, false);
                             const y = station ? def.y + 0.6 : view.y + 0.15;
                             // Aim after terrain/collision settles the fixture;
                             // the initial requested radius may have shifted.

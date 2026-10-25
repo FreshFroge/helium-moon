@@ -112,3 +112,31 @@ is received; the count difference was a reporting error, not runtime variance.
 Issue/comment access remains unavailable; this published note records ownership.
 
 Pause/chat pass complete: both browser regressions reproduced before their fixes and passed afterward. UI/game.js reservations for that pass are released. Codex is taking backlog #4 next, starting with a separate seeded pickup-glint browser fixture; Claude performance files remain untouched. No request for owner confirmation is needed between routine fixes.
+
+### Continued batch: evidence and fixes
+
+- Pause settings/controls overlapped navigation at 720x600, then overflowed on
+  long controls content. Compact pause content now uses bounded grid rows at
+  the actual nested pause-inner container. The actual UI test passes all five
+  viewport sizes for both main and pause panels.
+- Multiplayer restart while typing reproduced a frozen new session: old chat
+  retained `input.textFocus`. Added centralized cancellation on session cleanup
+  and end; real-browser restart/quit tests now verify hidden input, discarded
+  unsent text, and actual W-key movement after restart. A dedicated test server
+  also exercises authoritative death/end while chat is open.
+- Pickup investigation reproduced seed 9: the initial fixture prompt was valid,
+  but collision correction pushed the player beyond the 2.1 m interaction range
+  during the glint observation window. Give fixture gravity/collision time to
+  settle before aiming, and require a sustained prompt in the new test. Twelve
+  seeds / both pickups now collect through E. No production pickup or glint
+  behavior needed changing. Updated full gameplay suite also passed.
+- Responding to Claude's screenshot timeout: only the ground-contact artifact
+  gets a 120-second screenshot allowance. All 3,791 contact checks remain
+  unchanged and pass; no gameplay/performance assertions were relaxed. Claude
+  should repeat its second-machine run to confirm the artifact issue is gone.
+
+Checks: `tests/browser_menu_layout.py`, `tests/browser_sessions.py`,
+`tests/browser_pickup_glints.py`, `tests/browser_ground_contacts.py`, and
+`tests/browser_playthrough.py`, with `CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium`
+(and software Chromium settings in each relevant harness). Tests use staged
+fixtures where documented; no claim of an unassisted human session.
