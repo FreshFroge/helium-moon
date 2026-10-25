@@ -8,6 +8,7 @@ import {
   clamp, lerp, smoothstep, makeRng, makeNoise2, cumulativeLengths, pointAtDistance,
   nearestOnPolyline, pointInPolygon, distanceTransform, rasterPolyline, TAU, BinaryHeap,
 } from './math.js';
+const NO_OPTS = Object.freeze({});
 const NAV_DX = [1, -1, 0, 0, 1, -1, 1, -1], NAV_DY = [0, 0, 1, -1, 1, 1, -1, -1], NAV_DL = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
 
 // Species table. Leaf texture + bark texture names are resolved by the client.
@@ -379,7 +380,7 @@ export class World {
       for (const p of pts) { a = [Math.min(a[0], p[0]), Math.min(a[1], p[1])]; b = [Math.max(b[0], p[0]), Math.max(b[1], p[1])]; }
       pts._bb = [a, b];
     }
-    const [a, b] = pts._bb;
+    const a = pts._bb[0], b = pts._bb[1];
     if (x < a[0] - early || x > b[0] + early || z < a[1] - early || z > b[1] + early) return 1e9;
     let best = 1e18;
     for (let i = 1; i < pts.length; i++) {
@@ -816,7 +817,7 @@ export class World {
   }
 
   // Line of sight between two eye points. Returns 0..1 visibility (brush attenuates, trunks/terrain block).
-  lineOfSight(ax, ay, az, bx, by, bz, opts = {}) {
+  lineOfSight(ax, ay, az, bx, by, bz, opts = NO_OPTS) {
     const dx = bx - ax, dz = bz - az, dist = Math.hypot(dx, dz);
     if (dist < 0.5) return 1;
     const steps = Math.ceil(dist / 1.5);
@@ -833,7 +834,8 @@ export class World {
     }
     const cand = this.queryColliders((ax + bx) / 2, (az + bz) / 2, dist / 2 + 1, this._losTmp || (this._losTmp = []));
     const L2 = dist * dist;
-    for (const ref of cand) {
+    for (let ci = 0; ci < cand.length; ci++) {
+      const ref = cand[ci];
       if (ref >= 100000) {
         if (ref >= 200000) {
           const b = this.boxes[ref - 200000];
