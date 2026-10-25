@@ -73,7 +73,10 @@ export class WSTransport extends Emitter {
       ws.onmessage = (e) => {
         if (typeof e.data !== 'string') { this.emit('binary', e.data); return; }
         let m; try { m = JSON.parse(e.data); } catch (er) { return; }
-        if (m.t === 'welcome') { this.id = m.id; clearTimeout(to); this.send({ t: 'hello', name }); resolve(m); }
+        if (m.t === 'welcome') {
+          this.id = m.id; clearTimeout(to);
+          // the server's STUN/TURN list for voice (see server/server.js); voice.js falls back to public STUN
+          if (Array.isArray(m.iceServers) && typeof window !== 'undefined') window.HM_ICE_SERVERS = m.iceServers; this.send({ t: 'hello', name }); resolve(m); }
         this.emit(m.t, m);
       };
     });

@@ -26,6 +26,25 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
   '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.mp4': 'audio/mp4', '.wav': 'audio/wav', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.md': 'text/plain; charset=utf-8' };
 const ALLOWED_TOP = new Set(['index.html', 'client', 'shared', 'vendor', 'assets', 'favicon.ico']);
 
+// WebRTC ICE servers handed to every client for proximity voice. STUN alone works on most home
+// networks; players behind strict NATs/firewalls need a TURN relay. Configure with either
+//   HM_ICE_SERVERS='[{"urls":"turn:turn.example.com:3478","username":"u","credential":"p"}]'
+// or TURN_URL=turn:turn.example.com:3478[,turns:...] TURN_USERNAME=u TURN_CREDENTIAL=p
+// (TURN credentials necessarily reach players' browsers; prefer short-lived credentials.)
+function iceServersFromEnv(env) {
+  if (env.HM_ICE_SERVERS) {
+    try {
+      const v = JSON.parse(env.HM_ICE_SERVERS);
+      if (Array.isArray(v) && v.every((e) => e && (typeof e.urls === 'string' || Array.isArray(e.urls)))) return v;
+    } catch (e) { /* fall through */ }
+    console.warn('HM_ICE_SERVERS is not a JSON array of {urls, username?, credential?}; using defaults');
+  }
+  const list = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (env.TURN_URL) list.push({ urls: env.TURN_URL.split(',').map((u) => u.trim()).filter(Boolean), username: env.TURN_USERNAME || '', credential: env.TURN_CREDENTIAL || '' });
+  return list;
+}
+const ICE_SERVERS = iceServersFromEnv(process.env);
+
 function log(...a) { console.log(new Date().toISOString().slice(11, 19), ...a); }
 
 // ------------------------------------------------------------------ static files
@@ -111,7 +130,7 @@ function leave(member) {
 
 attachWebSocket(server, '/ws', (conn, req) => {
   const member = { id: 'p' + (nextId++), name: 'Visitor', conn, room: null, ready: false, alive: true };
-  send(conn, { t: 'welcome', id: member.id, version: VERSION, maxPlayers: CONFIG.NET.MAX_PLAYERS });
+  send(conn, { t: 'welcome', id: member.id, version: VERSION, maxPlayers: CONFIG.NET.MAX_PLAYERS, iceServers: ICE_SERVERS });
   conn.on('message', (data, binary) => {
     if (binary) {
       // mimicry audio relay: [u32 header length][json header][pcm payload]

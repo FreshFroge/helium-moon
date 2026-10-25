@@ -65,6 +65,11 @@ node server/server.js          # Node 18+; no npm install needed
 
 Open `http://localhost:8080` (friends on your network use `http://<your-LAN-IP>:8080`). One player chooses *Multiplayer → Create lobby* and shares the 5-letter code; others *Join*. The host starts the game. Over the internet you need a port-forward or a tunnel to port 8080 (and for voice chat, players behind strict NATs may need a TURN server; only public STUN is configured).
 
+To relay voice for players behind strict NATs, start the server with a TURN service, e.g.
+`TURN_URL=turn:turn.example.com:3478 TURN_USERNAME=user TURN_CREDENTIAL=pass node server/server.js`
+(or `HM_ICE_SERVERS='[{"urls":"turn:...","username":"...","credential":"..."}]'`). The server passes the list to every
+client in its welcome message; TURN credentials therefore reach players' browsers, so prefer short-lived ones.
+
 **Windows:** double-click `start-game.cmd`, keep its window open, and open the
 address it prints. If 8080 is busy, an unconfigured start tries 8081 through 8089.
 Use the printed address and its port for all players and any port-forward.

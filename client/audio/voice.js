@@ -258,7 +258,8 @@ export class VoiceSystem {
   _num(id) { return parseInt(String(id).replace(/\D/g, ''), 10) || 0; }
 
   _makePeer(id, initiator) {
-    const pc = new RTCPeerConnection({ iceServers: ICE });
+    const fromServer = typeof window !== 'undefined' && Array.isArray(window.HM_ICE_SERVERS) && window.HM_ICE_SERVERS.length ? window.HM_ICE_SERVERS : null;
+    const pc = new RTCPeerConnection({ iceServers: fromServer || ICE });
     const p = { id, pc, sender: null, e: null, initiator, el: null, analyser: null, speaking: false };
     this.peers.set(id, p);
     const tr = pc.addTransceiver('audio', { direction: 'sendrecv' });
