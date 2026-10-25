@@ -20,23 +20,20 @@ function encounter() {
 }
 function tick(sim,seconds) {for(let t=0;t<seconds;t+=.05)sim.step(.05);}
 
-test('unseen close approach brakes to a creep, waits, then attacks when spotted',()=>{
+test('a committed chase attacks a player who never looks back',()=>{
   const {sim,p,hv}=encounter();
-  sim.step(.05);
-  assert.ok(hv.speed<=CONFIG.HV.CREEP_SPEED,'a running arrival brakes at eight feet');
   tick(sim,2);
-  assert.equal(p.health,2);assert.equal(hv.closeCommitted,false);
-  assert.ok(hv.dist(p)>1.6 && hv.dist(p)<2.4,'he creeps into a nearby waiting position');
-  p.yaw+=Math.PI;sim.step(.05);
-  assert.equal(hv.closeCommitted,true);assert.ok(hv.speed>CONFIG.HV.CREEP_SPEED);
-  p.yaw+=Math.PI;tick(sim,2);
-  assert.ok(p.health<2,'looking away after spotting him cannot undo his committed lunge');
+  assert.ok(p.health<2,'unseen pursuit must be able to land a real hit');
+  assert.equal(sim.director.chasing,false,'the hit ends the chase');
 });
 
-test('looking above him is not a sighting; looking down at him triggers the attack',()=>{
-  const {sim,p,hv}=encounter();p.yaw+=Math.PI;p.pitch=1.45;
-  tick(sim,1);assert.equal(hv.closeCommitted,false);assert.equal(p.health,2);
-  p.pitch=-.25;tick(sim,2);assert.ok(p.health<2);
+test('spotting a chase outside contact range sends him physically toward cover',()=>{
+  const {sim,p,hv}=encounter();p.yaw+=Math.PI;
+  const start=[hv.x,hv.z];sim.step(.05);
+  assert.equal(hv.state,'retreat');assert.ok(hv.snapshot()[7]&16);
+  assert.equal(p.health,2);assert.equal(sim.director.chasing,false);
+  tick(sim,.5);
+  assert.ok(Math.hypot(hv.x-start[0],hv.z-start[1])>.5,'escape uses real movement');
 });
 
 test('screen checks account for pitch, screen edges, aspect ratio and occlusion',()=>{

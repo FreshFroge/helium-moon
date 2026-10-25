@@ -27,7 +27,7 @@ async def play(port):
                     const {pointAtDistance}=await import('/shared/math.js');
                     const at=pointAtDistance(game.world.trail,game.world.trailCum,500);
                     const to=pointAtDistance(game.world.trail,game.world.trailCum,506);
-                    game.tp(to.x,to.z,at.x,at.z);game.flashlight.on=flash;game.advance(6,1/30,false);
+                    game.tp(to.x,to.z,at.x,at.z);game.look(game.player.yaw+Math.PI,0);game.flashlight.on=flash;game.advance(6,1/30,false);
                     const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
                     sim.state='play';sim.time=100;sim.sf.update=()=>{};sim.mimic.update=()=>{};
                     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
@@ -58,25 +58,23 @@ async def play(port):
                 hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);
                 hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.setState('chase');hv.speed=6.6;
                 game.advance(60,1/30,false);
-                const unseen={health:p.health,speed:hv.speed,d:hv.dist(p),committed:hv.closeCommitted,fov:p.viewFov,aspect:p.viewAspect};
-                game.look(game.player.yaw+Math.PI,-.15);
-                const spotted={committed:false,speed:0};
-                for(let i=0;i<6;i++) {
-                    game.advance(1,1/30,false);
-                    spotted.committed ||= hv.closeCommitted;
-                    spotted.speed=Math.max(spotted.speed,hv.speed);
-                }
-                game.look(game.player.yaw+Math.PI,0);
-                for(let i=0;i<90 && p.health===2;i++)game.advance(1,1/30,false);
-                game.advance(3,1/30,false);
-                return {unseen,spotted,hit:p.health,client:game.health};
+                return {server:p.health,client:game.health};
             }''')
-            assert result['unseen']['health']==2 and not result['unseen']['committed'],result
-            assert result['unseen']['speed']<=.38 and 1.6<result['unseen']['d']<2.4,result
-            assert result['unseen']['aspect']==1280/720,result
-            assert result['spotted']['committed'] and result['spotted']['speed']>.38,result
-            assert result['hit']<2 and result['client']==result['hit'],result
-            print('  ok  real client sends screen geometry, unseen creep -> sighting -> committed attack:',result,flush=True)
+            assert result['server']<2 and result['client']==result['server'],result
+            print('  ok  unseen committed chase lands a real hit without a sighting:',result,flush=True)
+            escape=await page.evaluate('''async()=>{
+                game.restart();game.advance(6,1/30,false);
+                const {pointAtDistance}=await import('/shared/math.js');
+                const at=pointAtDistance(game.world.trail,game.world.trailCum,500),to=pointAtDistance(game.world.trail,game.world.trailCum,506);
+                game.tp(to.x,to.z,at.x,at.z);game.advance(3,1/30,false);
+                const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
+                sim.state='play';sim.time=100;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
+                hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.startChase(p);
+                game.advance(9,1/30,false);
+                return {state:hv.state,health:p.health,flags:game.hv.flags,moved:Math.hypot(hv.x-at.x,hv.z-at.z)};
+            }''')
+            assert escape['state']=='retreat' and escape['health']==2 and escape['flags']&16 and escape['moved']>.1,escape
+            print('  ok  spotting a pursuit triggers physical reverse-crawl concealment:',escape,flush=True)
             pose=await page.evaluate('''async()=>{
                 game.restart();game.advance(9,1/30,false);
                 const {pointAtDistance}=await import('/shared/math.js');

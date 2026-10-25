@@ -153,7 +153,7 @@ export class HeliumVoiceAI {
     // Brake before crossing the 8-foot boundary, including an already running
     // chase. Once spotted at close range, looking away cannot cancel the attack.
     const tp = this.target != null ? this.sim.players.get(this.target) : null;
-    if (tp && this.state !== 'retreat' && !this.closeCommitted
+    if (tp && this.state !== 'retreat' && this.state !== 'chase' && !this.closeCommitted
         && this.dist(tp) <= C.CREEP_DISTANCE + Math.max(speed, this.speed) * dt
         && !this.observers?.some(o => o.p.id === tp.id)) {
       speed = this.dist(tp) <= C.CREEP_STOP ? 0 : C.CREEP_SPEED;
@@ -285,27 +285,22 @@ export class HeliumVoiceAI {
     anim.run = 0; anim.reach = 0; anim.still = 0;
     let lookP = tp && playerAlive(tp) && (this.awareness.get(tp.id) || 0) > 0.6 ? tp : null;
 
-    // At close range he creeps while unseen, then commits the moment he enters
-    // the target's actual screen. Distant encounters retain director pacing.
+    // A recognized nearby player can be pursued from any direction. Seeing
+    // him encourages concealment; it is no longer permission to deal damage.
     const close = tp && playerActive(tp) && this.dist(tp) <= C.CREEP_DISTANCE;
-    const seen = tp && this.observers.some(o => o.p.id === tp.id);
-    if ((close || (seen && tp && this.dist(tp) < CONFIG.TERROR.CRITICAL
-          && (dir.allowChase(tp) || this.dist(tp) < C.ATTACK_RANGE * 2)))
+    if (tp && playerActive(tp) && this.dist(tp) < CONFIG.TERROR.CRITICAL
         && sim.state !== 'intro' && this.state !== 'chase' && this.state !== 'retreat'
         && (this.awareness.get(tp.id) || 0) >= 1
         && this.lastSeen.get(tp.id)?.t === sim.time
-        && sim.time - this.attackT >= C.ATTACK_COOLDOWN) this.startChase(tp);
-    if (close && seen && this.state === 'chase') this.closeCommitted = true;
+        && sim.time - this.attackT >= C.ATTACK_COOLDOWN
+        && (dir.allowChase(tp) || close || this.dist(tp) < C.ATTACK_RANGE * 2)) this.startChase(tp);
 
-    // react to flashlight / being watched (not while chasing or attacking)
-    if (this.state !== 'chase' && this.state !== 'retreat' && this.state !== 'reveal') {
-      if (this.litBy && this.litT > (this.state === 'freeze' ? 0.9 : 0.25)) {
-        this.retreatFrom(this.litBy.p, true);
-      } else if (this.observers.length && ['stalk', 'watch', 'roam', 'investigate', 'search'].includes(this.state)) {
-        const o = this.observers[0];
-        if (o.ob.d < 9 && dir.allowChase(o.p) && this.rng() < 0.5) this.startChase(o.p);
-        else this.setState('freeze', { freezeFor: this.rng.range(1.2, 3.2), watcher: o.p.id });
-      }
+    if (this.state !== 'retreat' && this.observers.length) {
+      const observer = this.litBy || this.observers[0];
+      // Complete an already committed contact strike, then escape. At longer
+      // range immediately seek cover, including when a chase is spotted.
+      const contact = this.state === 'chase' && tp && this.dist(tp) < C.ATTACK_RANGE;
+      if (!contact) this.retreatFrom(observer.p, !!this.litBy, true);
     }
 
     // Reactions above can start a chase of a player who was not the previous
@@ -428,17 +423,14 @@ export class HeliumVoiceAI {
         this.replanT -= dt;
         if (this.replanT <= 0 || !this.path) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = this.dist(tp) < 15 ? 0.3 : 0.7; }
         const d = this.dist(tp);
-        if (d <= C.CREEP_DISTANCE && seen) this.closeCommitted = true;
-        const creeping = d <= C.CREEP_DISTANCE && !this.closeCommitted;
-        const burst = creeping ? (d <= C.CREEP_STOP ? 0 : C.CREEP_SPEED) : d < 12 ? C.BURST : C.CHASE;
-        anim.run = creeping ? 0 : 1;
+        const burst = d < 12 ? C.BURST : C.CHASE;
         if (d < 7 && this.world._straightWalkable([this.x, this.z], [tp.x, tp.z])) {
           // close enough to lunge straight at them
           this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1;
         }
-        this.followPath(dt, creeping ? burst : burst * dir.chaseSpeedMul());
-        if (d < 4 && !creeping) anim.reach = 1;
-        if (this.closeCommitted && d < C.ATTACK_RANGE && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
+        this.followPath(dt, burst * dir.chaseSpeedMul());
+        if (d < 4) anim.reach = 1;
+        if (d < C.ATTACK_RANGE && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
             && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2) {
           this.attackT = sim.time;
           sim.damagePlayer(tp, 'hv', this);
@@ -497,7 +489,7 @@ export class HeliumVoiceAI {
   startChase(p) {
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time };
     this.setState('chase'); this.replanT = 0;
-    this.closeCommitted = false;
+    this.closeCommitted = true;
     this.sim.director.onChaseStart(p);
     this.vocal('scream', true);
   }

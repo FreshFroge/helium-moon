@@ -272,6 +272,7 @@ async def play(port):
                     const at = pointAtDistance(game.world.trail,game.world.trailCum,500);
                     const target = pointAtDistance(game.world.trail,game.world.trailCum,506);
                     game.tp(target.x,target.z,at.x,at.z);
+                    if(creature === 'hv') game.look(game.player.yaw+Math.PI,0);
                     // Let the real input transport deliver the fixture's player
                     // position before aiming/placing the enemy relative to it.
                     game.advance(3,1/30,false);

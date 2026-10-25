@@ -12,7 +12,7 @@ function encounter(creature, separation=6) {
   const at=pointAtDistance(world.trail,world.trailCum,500);
   const target=pointAtDistance(world.trail,world.trailCum,500+separation);
   Object.assign(p,{x:target.x,z:target.z,y:world.heightAt(target.x,target.z),flash:creature==='hv',noise:0});
-  p.yaw=Math.atan2(at.x-p.x,at.z-p.z)+Math.PI;
+  p.yaw=Math.atan2(at.x-p.x,at.z-p.z);
   const actor=sim[creature];actor.x=at.x;actor.z=at.z;actor.y=world.heightAt(at.x,at.z);
   actor.yaw=actor.lookYaw=Math.atan2(p.x-at.x,p.z-at.z);
   if(creature==='hv') {sim.sf.update=()=>{};actor.target=p.id;actor.awareness.set(p.id,1.5);actor.spotted.add(p.id);actor.setState('watch');}
@@ -43,7 +43,7 @@ for(const flash of [true,false]) test(`first sighting reaches a real attack with
     const sim=new GameSim(world,{seed}),p=sim.addPlayer('tester','Tester'),hv=sim.hv;
     sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.sf.update=()=>{};sim.mimic.update=()=>{};
     const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
-    Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z)+Math.PI,pitch:0,flash});
+    Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash});
     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
     assert.equal(hv.target,null);assert.equal(hv.awareness.size,0);
     let retreatBeforeHit=false;
@@ -54,12 +54,12 @@ for(const flash of [true,false]) test(`first sighting reaches a real attack with
   }
 });
 
-test('an observer-triggered chase uses the newly selected teammate immediately',()=>{
+test('acquisition switches from a downed teammate to the living target',()=>{
   const sim=new GameSim(world,{seed:2}),old=sim.addPlayer('old','Old'),p=sim.addPlayer('new','New'),hv=sim.hv;
   sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.sf.update=()=>{};sim.mimic.update=()=>{};
   old.state='downed';hv.target=old.id;
   const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
-  Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z)+Math.PI,pitch:0,flash:true});
+  Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash:true});
   hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
   for(let t=0;t<8&&p.health===2;t+=.05)sim.step(.05);
   assert.ok(p.health<2,'the living observer becomes the actual attack target');
