@@ -52,7 +52,10 @@ async def play(port):
                 assert mid['state']=='reveal' and mid['reports']==[kind] and mid['screen'] and mid['visible'] and mid['health']==2,mid
                 # Manual simulation is frozen at the glimpse; let only the UI's
                 # real-time opening title finish fading before the artifact.
-                await page.wait_for_function("!document.querySelector('#intro').classList.contains('show') && Number(getComputedStyle(document.querySelector('#intro')).opacity)<.02",timeout=15000)
+                # The opening title fades on a real-time 7.5 s timer + CSS transition; on slow
+                # software-rendered machines that exceeded 15 s (flaky). Hide it deterministically:
+                # it is DOM UI over the canvas and not under test here.
+                await page.evaluate("void (document.querySelector('#intro').classList.remove('show'), document.querySelector('#intro').style.display='none')")
                 await page.screenshot(path=str(output/f'{kind}-glimpse.png'),timeout=120000)
                 end=await page.evaluate('''()=>{
                     const hv=game.sim.hv,c=window.revealCheck;
