@@ -20,13 +20,14 @@ possible without waiting on each other:
 | # | Issue / improvement | Area / likely files | Claimed |
 |---|---|---|---|
 | 3 | Run every existing browser suite (`browser_playthrough.py`, `browser_encounters.py`, `browser_ground_contacts.py`, `browser_menu_layout.py`, `browser_multiplayer.py`, `browser_sessions.py`) on a second machine and log failures/flakes here | tests only | Claude |
+| 11 | `browser_ground_contacts.py` failed on Claude's machine at its final `page.screenshot` (Playwright default 30 s timeout; software rendering + concurrent load). Assertions before it ran. Suggest `page.screenshot(..., timeout=300000)` / `page.set_default_timeout` | `tests/browser_ground_contacts.py` (Codex's file) | — |
 | 4 | Pickup-glint fixture repeatability (from Codex's handoffs) | new `tests/browser_pickup_glints.py`, existing fixture/glint files if needed | Codex |
 | 5 | Performance budget per quality preset: draw calls/triangles/programs at fixed views, recorded as a regression test so changes can't silently double the cost | new `tests/browser_perf_budget.py` + `docs/PERFORMANCE.md` | Claude |
 | 6 | Visibility vs rendered silhouette: AI concealment uses sampled LOS; check against what the player actually sees (leaf gaps) | AI files (Codex) | — |
 | 7 | (owner) Blind fleeing: should never-looking-back players stay safe from Helium Voice? See `PACING_REPORT.md` | AI (Codex) | owner |
 | 8 | (owner) Long quiet middle (8–15 min with no threat event) | director (Codex) | owner |
 | 9 | (owner) First sighting arrives seconds after the first cold | director (Codex) | owner |
-| 10 | Real WebRTC voice between different networks untested (cloud UDP policy); TURN option documented? | `docs`, `client/audio/voice.js` | — |
+| 10 | Real WebRTC voice between different networks untested (cloud UDP policy); add an optional TURN relay config | `server/server.js` (welcome msg), `client/net/transport.js`, `client/audio/voice.js`, README | Claude |
 
 ## Done
 
