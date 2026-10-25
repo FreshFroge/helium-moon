@@ -600,7 +600,7 @@ export class Game {
     const typing = inp.textFocus;
     if (active && !typing) {
       if (inp.hitCode('Escape') && !inp.locked) this.pause(true);
-      if (inp.hit('flashlight') && this.myState === 'alive') { this.flashlight.toggle(); A.ui(this.flashlight.on ? 'clickOn' : 'clickOff', 0.5); }
+      if (inp.hit('flashlight') && this.myState === 'alive' && !this._grab) { this.flashlight.toggle(); A.ui(this.flashlight.on ? 'clickOn' : 'clickOff', 0.5); }
       if (inp.hit('chat') && this.net.networked) this.ui.openChat((text) => { if (text) this.net.send({ t: 'chat', text }); });
       if (inp.hitCode('F3')) this.ui.toggleDebug();
       if (this.settings.devMode) {
@@ -677,7 +677,7 @@ export class Game {
     this._interact(dt, active && !typing && !this.reading);
     // ---- flashlight + breath + anomalies
     const walkBob = Math.sin(pl.bobT) * clamp(pl.speed / 2, 0, 1);
-    fl.update(dt, this.camera, this.terror, { walkBob, gas: this.gasFx, off: dead, aimAt: this._grab && this.hv.root.visible ? this.hv.headPos(this._v4 || (this._v4 = new THREE.Vector3())) : null });
+    fl.update(dt, this.camera, this.terror, { walkBob, gas: this.gasFx, off: dead, rush: this._rush(dt) });
     this.wildlife.update(dt, this.camera.position, { on: fl.on && fl.light.intensity > 5, pos: fl.light.position, dir: fl.dir, k: fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY });
     this.objViews.update(dt, this.sessionT, {
       on: fl.on, pos: fl.light.position, dir: fl.dir,
@@ -686,7 +686,7 @@ export class Game {
     this.breath.update(dt);
     // eye/camera adaptation: a beam landing on something close floods the view, so exposure drops
     const lit = fl.on && fl.light.intensity > 5 && !dead;
-    const expT = this._grab ? 0.45 : lit ? clamp(Math.pow(this._beamDistance() / 7.5, 1.3), 0.16, 1) : 1;   // in his grab: his face, lit from below
+    const expT = lit ? clamp(Math.pow(this._beamDistance() / 7.5, 1.3), 0.16, 1) : 1;
     this.exposure += (expT - this.exposure) * (1 - Math.exp(-dt * (expT < this.exposure ? 5 : 1.1)));
     const sawAnomaly = this.anomaly.update(dt, this.camera, this.terror);
     if (sawAnomaly && !this._anomShown) { this._anomShown = true; }
@@ -754,8 +754,25 @@ export class Game {
   }
 
   // ---- the grab, from the inside (Puppet rework). kind: shoulders | throat | face | turn | drag | final
+  // how hard he is coming at you right now (0..1): running, closing, within 35 m. Drives the
+  // flashlight flicker (owner: "when he runs at you it flickers")
+  _rush(dt) {
+    const hv = this.hv, pl = this.player;
+    let target = 0;
+    if (hv.root.visible && HV_STATES[hv.state] === 'chase' && !this._grab) {
+      const d = Math.hypot(hv.pos.x - pl.pos.x, hv.pos.z - pl.pos.z);
+      const closing = (this._rushD ?? d) - d;
+      this._rushD = d;
+      if (d < 35 && hv.speed > 3 && closing > 0) target = clamp(1 - d / 35, 0.25, 1);
+    } else this._rushD = null;
+    this.rushK = lerp(this.rushK || 0, target, 1 - Math.exp(-dt * (target > (this.rushK || 0) ? 6 : 2)));
+    return this.rushK;
+  }
+
   _grabStart(e) {
     const pl = this.player;
+    // his hand closes on you and your light dies: it clicks off and stays off until you turn it back on
+    if (this.flashlight.on) { this.flashlight.on = false; this.audio.ui('clickOff', 0.7); }
     this._grab = { kind: e.kind, t: 0, dur: e.dur || 1.6, from: { x: pl.pos.x, z: pl.pos.z }, to: { x: e.px ?? pl.pos.x, z: e.pz ?? pl.pos.z } };
     pl.vel.set(0, 0, 0);
     pl.shake = Math.max(pl.shake, e.kind === 'final' ? 1 : 0.75);

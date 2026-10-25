@@ -138,7 +138,8 @@ test('hugging a big tree trunk is not an escape: the final lunge reaches the pla
   assert.ok(spots.length >= 3, `fixture: found ${spots.length} trunk-hugging spots`);
   for (const sp of spots) {
     const { sim, p, hv } = fixture(20, 3);
-    Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: false });
+    // light on: hugging a trunk in the dark, still and quiet, is hiding - and hiding does end a hunt (owner, Puppet)
+    Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: true });
     const at = pointAtDistance(world.trail, world.trailCum, sp.a - 20); hv.place(at.x, at.z);
     hv.startChase(p);
     for (let t = 0; t < 120 && p.health === MAXH; t += 0.05) sim.step(0.05);

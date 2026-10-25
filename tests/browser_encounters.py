@@ -44,7 +44,7 @@ async def play(port):
                 }''',[seed,flash])
                 assert first['initial']=={'seed':seed,'target':None,'awareness':0},first
                 assert first['chased'] and first['client']==first['server'] and not first['chasing'],first
-                # Puppet: a beam in his face no longer stops him (only cutting the strings does)
+                # Puppet: a beam in his face no longer stops him (only hiding from him does)
                 assert first['server']<3 and not first['aborted'],first
                 print(f'  ok  normal first sighting becomes a long hunt that ends in his grab (seed {seed}, flashlight {flash}):',first,flush=True)
             await page.evaluate('game.restart()')
@@ -73,20 +73,20 @@ async def play(port):
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
                 sim.state='play';sim.time=400;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.startChase(p);
-                // Puppet (owner): a hunt ends only when someone cuts his strings - a beam held on
-                // the control above him. The player looks up at it and holds the light there.
-                const aim=(q)=>{const ey=p.y+1.6;game.look(Math.atan2(-(q.x-p.x),-(q.z-p.z)),Math.atan2(q.y-ey,Math.hypot(q.x-p.x,q.z-p.z)));};
-                game.flashlight.on=true;
-                let cut=null,start=null;
-                for(let i=0;i<300&&cut==null;i++){const c=hv.controlPos();if(c)aim(c);game.advance(1,1/30,false);if(hv.state==='collapse'){cut=i/30;start=[hv.x,hv.z];}}
-                const fell={flags:game.hv.flags,strings:game.hv.strings.lines.visible};
-                aim({x:hv.x,y:hv.y+.3,z:hv.z});game.advance(45,1/30,false);
+                // Puppet (owner): a hunt ends only when the hunted player hides from him (dark, still,
+                // quiet, out of his sight; the rule itself is covered in tests/encounters.test.mjs).
+                // Here the rendered result: he goes limp, lies there while watched, gone once unwatched.
+                game.flashlight.on=false;hv.hidden=()=>true;
+                let lost=null,start=null;
+                for(let i=0;i<400&&lost==null;i++){game.advance(1,1/30,false);if(hv.state==='collapse'){lost=i/30;start=[hv.x,hv.z];}}
+                const fell={flags:game.hv.flags};
+                game.look(Math.atan2(-(hv.x-p.x),-(hv.z-p.z)),-.2);game.advance(45,1/30,false);
                 const stayed=Math.hypot(hv.x-start[0],hv.z-start[1]);
                 game.look(game.player.yaw+Math.PI,0);game.advance(30,1/30,false);
-                return {cut,fell,stayed,gone:Math.hypot(hv.x-start[0],hv.z-start[1]),health:p.health,state:hv.state};
+                return {lost,fell,stayed,gone:Math.hypot(hv.x-start[0],hv.z-start[1]),health:p.health,state:hv.state};
             }''')
-            assert escape['cut'] is not None and escape['health']==3 and escape['fell']['flags']&256 and escape['stayed']<.05 and escape['gone']>20,escape
-            print('  ok  holding the beam on the control cuts the strings: he collapses, and is gone once you look away:',escape,flush=True)
+            assert escape['lost'] is not None and escape['health']==3 and escape['fell']['flags']&256 and escape['stayed']<.05 and escape['gone']>20,escape
+            print('  ok  hiding ends the hunt: he goes limp, lies there while watched, and is gone once you look away:',escape,flush=True)
             pose=await page.evaluate('''async()=>{
                 game.restart();game.advance(9,1/30,false);
                 const {pointAtDistance}=await import('/shared/math.js');

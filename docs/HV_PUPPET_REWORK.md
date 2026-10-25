@@ -2,13 +2,13 @@
 
 Status: **implemented on `codex/early-build-playtest` (Oct 25 2026 afternoon)** - see "As built" at the end.
 
-Owner decisions (Oct 25, 13:57 and 14:17 CT):
+Owner decisions (Oct 25, 13:57, 14:17, 15:02 and 15:07 CT):
 - Looking back during a hunt **freezes him for a beat**.
 - The all-fours movement is **only glimpsed**.
 - **No swing.** Grabs, with variations. You **survive two grabs; the third kills** (MAX_HEALTH 3, no auto-heal).
 - Full replacement of the old behaviour (relayed via ChatGPT's agent), but **keep** spawn safety, the cold
-  warning and Developer mode. The 7-ft flashlight rule goes: **"find a more creative way to end a hunt"**
-  -> *cut the strings* (below).
+  warning and Developer mode. The 7-ft flashlight rule goes: **"find a more creative way to end a hunt"**.
+  First built as *cut the strings*; the owner then had the strings removed and chose **hiding** (below).
 
 ## Core idea
 
@@ -103,16 +103,20 @@ Owner note: motion-capture quality would need a rigged model with animation clip
 
 ## As built
 
-**Cut the strings (how a hunt ends).** During a hunt faint strings run from his head, hands and knees
-up into the canopy to *the control*, a dark wooden crossbar 9-12 m above him and 2-4 m behind him (as
-seen from the hunted player). The strings are nearly invisible until a flashlight beam crosses them.
-Hold a beam on the control for 1.5 s (within 11 deg of the beam centre; drains at 0.6x when the beam
-slips) and the strings snap: he collapses, the hunt is over, and the moment nobody is looking at him he
-is gone (reappears 35-70 m off, concealed). Anyone can cut it, so a teammate can save you. To look up at
-it you usually lose sight of him, and unwatched he moves. Learning: a player who has cut him before gets
-a control hung 1.35x higher and further back. The ranger's log note hints at it ("fishing line running
-up off him into the trees... Dale put the big light up into the branches and the man dropped like a coat
-off a hook"). Config: `CONFIG.HV.CONTROL_*`.
+**Hiding ends a hunt** (owner, 15:02-15:07 CT: the strings and the control above him were removed;
+"yes" to hiding). The hunted player has to be out of his sight (sightOf ~0: beyond his dark sight
+range, crouched or in thick brush, or behind cover), flashlight off, nearly still (< 0.6 m/s) and quiet
+(noise radius <= 6 m) for 6 s, more than 2.5 m from him. While they hide he does not track them: he goes
+to where he last saw or heard them and searches round it upright at a walk, head sweeping. If he sees or
+hears them again the count drains. At 6 s he has lost them: a long exhale, he goes limp, and he is gone
+the moment nobody is looking (reappears 35-70 m off, concealed). A player who has hidden from him before
+needs 1.5x longer. After a successful hide there is no new hunt on that player for 45 s solo / 25 s in a
+team. The ranger's log note hints at it ("Dale got down in the brush, killed his light and didn't
+breathe. It walked right past him..."). Config: `CONFIG.HV.HIDE_*`.
+
+**Flashlight** (owner, 15:07): in his grab your light clicks off and stays off until you turn it back on
+(it can't be toggled during the grab); when he runs at you (hunt, > 3 m/s, closing, within 35 m) it
+flickers and browns out, harder the closer he is.
 
 **Watched / unwatched.** Outside hunts, watched he freezes mid-pose (4-7 s; lit 2.5-4.5; close 2-3.5),
 peeking from cover at the wrong height, then backs away upright facing you. Unwatched: low, on all
@@ -134,11 +138,10 @@ inside 9 m) he does the plank rise (1.1 s) and hunts; if they pass by he slips o
 
 **Sounds** (all procedural, `client/audio/synth.js`): joint pops (the mark when he starts closing in,
 quiet, up to 40 m; one crack when a look back freezes him), crawl patter in leaves and knuckles on the
-boardwalk when he moves low (audible to 8-11 m only), string strain while a beam works at the control,
-string snaps when cut, the body drop, the cloth grab, your choke (throat/face/final), and his breath in
+boardwalk when he moves low (audible to 8-11 m only), his exhale when he loses you, the body drop, the cloth grab, your choke (throat/face/final), and his breath in
 time with yours when he is within 7 m and not hunting you.
 
-**Animation** (`client/entities/animators.js`, `views.js`, `strings.js`): hanging idle on his toes,
+**Animation** (`client/entities/animators.js`, `views.js`): hanging idle on his toes,
 mid-stride freeze, owl head (2.75 rad), dead-arm upright run with over-long strides, backing away with the
 gait in reverse, forward operated crawl, peek lean / low peek, six grab arm poses + reach, limp collapse
 (whole-body fall about the feet), prone and the plank rise, stop-motion stutter within 5 m (7 fps).
