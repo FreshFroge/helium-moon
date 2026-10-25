@@ -45,7 +45,6 @@ export class SnapBuffer {
 }
 
 // ------------------------------------------------------------------ Helium Voice
-const STUTTER_DIST = 5, STUTTER_FPS = 7;
 export class HeliumView {
   static async create(scene, world) { const v = new HeliumView(); await v._load(scene); v.world = world; return v; }
   async _load(scene) {
@@ -76,17 +75,15 @@ export class HeliumView {
   // s: [x,y,z,yaw,lookYaw,lookPitch,speed,flags,tilt,jaw,stateIdx, grabKind,grabPhase,peek]
   // flags: 1 run, 2 reach, 4 still, 8 hidden, 16 low (operated crawl), 128 frozen, 256 collapse,
   // 512 prone, 1024 rise, 2048 grab, 4096 backing away (see HeliumVoiceAI.snapshot)
-  // camPos: within STUTTER_DIST his motion stutters like stop-motion (Puppet).
+  // camPos is accepted for the common entity-view update interface.
   update(dt, s, camPos = null) {
     if (!s) { this.root.visible = false; return; }
     const [x, y, z, yaw, lookYaw, lookPitch, speed, flags, tilt, jaw, st] = s;
     this.flags = flags; this.state = st; this.speed = speed;
     this.root.visible = !(flags & 8);
-    // stop-motion within a few metres: pose and position update only STUTTER_FPS times a second
-    const near = camPos && this.root.visible ? Math.hypot(x - camPos.x, z - camPos.z) : 99;
-    this.stutterAcc = (this.stutterAcc || 0) + dt;
-    if (near < STUTTER_DIST && this.stutterAcc < 1 / STUTTER_FPS && this._posed) { this.moved = 0; return; }
-    const step = this._posed ? this.stutterAcc : dt; this.stutterAcc = 0; this._posed = true;
+    // Always update at the render cadence.  His unnatural movement comes from the animation,
+    // not an artificial low-frame-rate effect.
+    const step = dt;
     const prev = this.pos.clone();
     this.pos.set(x, y, z); this.yaw = yaw;
     this.root.position.copy(this.pos);
