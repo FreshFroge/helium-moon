@@ -14,6 +14,9 @@ const ok = (c, m) => { console.log(`${c ? '  ok ' : 'FAIL '} ${m}`); if (!c) fai
 const t0 = Date.now();
 const world = new World({});
 ok(world.trees.length > 30000, `world built in ${Date.now() - t0} ms with ${world.trees.length} trees, ${world.bushes.length} bushes`);
+let reopenedTrunks=0;
+for(let i=0;i<world.navCost.length;i++)if(world.gTrunk[i]>.55 && world.navCost[i]>0)reopenedTrunks++;
+ok(reopenedTrunks===0,`solid large trunks stay blocked on the actual generated nav grid (${reopenedTrunks} reopened cells)`);
 const w2 = new World({});
 ok(w2.trees.length === world.trees.length && w2.trees[1234].x === world.trees[1234].x && w2.logs.length === world.logs.length, 'world generation is deterministic (server and clients agree)');
 

@@ -859,7 +859,7 @@ export class World {
       }
       if (c) {
         if (this.gTrunk[i] > 0.55) c = 0; // big trunk fills the cell
-        c += this.gBrush[i] * 0.6;
+        else c += this.gBrush[i] * 0.6; // brush cannot reopen solid geometry
       }
       this.navCost[i] = c;
     }
@@ -1001,11 +1001,27 @@ export class World {
   }
 
   _straightWalkable(a, b) {
-    const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const steps = Math.ceil(d / 1.0);
-    for (let k = 1; k < steps; k++) {
-      const t = k / steps;
-      if (this.navCost[this.cellOf(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)] <= 0) return false;
+    // Traverse every grid cell touched by the shortcut. Fixed-distance samples
+    // miss corners and can undo A*'s prohibition on diagonal corner cutting.
+    const R=CONFIG.GRID_RES,gw=this.gw,gh=this.gh,nav=this.navCost;
+    const ax=clamp((a[0]-this.minX)/R,0,gw-1)+.5,az=clamp((a[1]-this.minZ)/R,0,gh-1)+.5;
+    const bx=clamp((b[0]-this.minX)/R,0,gw-1)+.5,bz=clamp((b[1]-this.minZ)/R,0,gh-1)+.5;
+    let x=Math.floor(ax),z=Math.floor(az);
+    const endX=Math.floor(bx),endZ=Math.floor(bz),dx=bx-ax,dz=bz-az;
+    const sx=Math.sign(dx),sz=Math.sign(dz);
+    const deltaX=sx?1/Math.abs(dx):Infinity,deltaZ=sz?1/Math.abs(dz):Infinity;
+    let nextX=sx>0?(x+1-ax)/dx:sx<0?(ax-x)/-dx:Infinity;
+    let nextZ=sz>0?(z+1-az)/dz:sz<0?(az-z)/-dz:Infinity;
+    if(nav[z*gw+x]<=0 || nav[endZ*gw+endX]<=0)return false;
+    while(x!==endX || z!==endZ){
+      if(nextX<nextZ-1e-10){x+=sx;nextX+=deltaX;}
+      else if(nextZ<nextX-1e-10){z+=sz;nextZ+=deltaZ;}
+      else {
+        // At a corner, both adjacent cells must also be clear, as in A*.
+        if(nav[z*gw+x+sx]<=0 || nav[(z+sz)*gw+x]<=0)return false;
+        x+=sx;z+=sz;nextX+=deltaX;nextZ+=deltaZ;
+      }
+      if(nav[z*gw+x]<=0)return false;
     }
     return true;
   }

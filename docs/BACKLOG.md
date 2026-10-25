@@ -23,7 +23,8 @@ possible without waiting on each other:
 | 15 | (Claude; part 1 done: terrain chunks 64→128 m cut 150–190 draws on every preset; Low tree LOD1 45 m (−15% tris into trees); empty instanced sets hidden; per-frame JS garbage 231 → 96 KB/frame by de-allocating the tree/foliage/terrain update loops; shadow-box culling measured as <0.5% gain, skipped. Next: remaining ~210 tree draws (archetype count)) Low preset still draws ~1.0–1.7 M triangles and 510–600 draw calls per frame at trail views (medium ~2.2 M): likely too heavy for integrated GPUs. Investigate tree/foliage caps and LOD distances for Low | `shared/config.js` presets, `client/render/trees.js`, `foliage.js` | Claude |
 
 
-| 18 | Solid large-trunk nav cells become walkable again when brush cost is added (114 generated-world cells reproduced) | `shared/world.js` navigation only, navigation regression, sim test | Codex |
+
+| 19 | Downed-player perception uses standing/crouched eye height while actual downed camera is 0.35 m | `shared/sim/perception.js`, camera/perception regression | Codex |
 
 ## Done
 
@@ -51,3 +52,5 @@ possible without waiting on each other:
 | 16 | Both creatures complete all long-route legs; skunk recovers from fallen-log stalls and refreshes stale prowl goals | Codex; five route regressions, full npm, actual-browser gameplay and exact-log collision check; CODEX_ROUTE_COMPLETION.md |
 
 | 17 | Planned glimpses report actual sightings once, refresh unseen moving-target plans and face the player | Codex; 11 regressions, full npm, 16-session pacing and actual-browser watcher/crossing glimpse/escape checks; CODEX_PLANNED_APPEARANCES.md |
+
+| 18 | Solid-trunk nav blocking and corner-safe route shortcuts | Codex; 114 reopened trunk cells → 0, five navigation regressions, full npm/objective reachability, 16-session pacing, full browser gameplay and planned glimpses; CODEX_NAVIGATION_BLOCKING.md |
