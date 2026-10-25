@@ -89,3 +89,9 @@ test('nearby enemies do not damage through an occluding wall',()=>{
     assert.equal(p.health,2,creature);
   }
 });
+
+ test('opening dread cannot be bypassed by the close aggression override',()=>{
+  const {sim,p}=encounter('hv',2.2);sim.time=20;
+  for(let t=0;t<5;t+=.05)sim.step(.05);
+  assert.equal(p.health,2);
+});

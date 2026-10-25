@@ -29,7 +29,7 @@ async def play(port):
                     const to=pointAtDistance(game.world.trail,game.world.trailCum,506);
                     game.tp(to.x,to.z,at.x,at.z);game.look(game.player.yaw+Math.PI,0);game.flashlight.on=flash;game.advance(6,1/30,false);
                     const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
-                    sim.state='play';sim.time=100;sim.sf.update=()=>{};sim.mimic.update=()=>{};
+                    sim.state='play';sim.time=400;sim.sf.update=()=>{};sim.mimic.update=()=>{};
                     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
                     const initial={seed:sim.seed,target:hv.target,awareness:hv.awareness.size};
                     let chased=false,aborted=false;
@@ -53,7 +53,7 @@ async def play(port):
                 game.tp(to.x,to.z,at.x,at.z);game.look(game.player.yaw+Math.PI,0);
                 game.advance(6,1/30,false);
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
-                sim.state='play';sim.time=100;sim.director.update=()=>{};sim.director.enter('build');
+                sim.state='play';sim.time=400;sim.director.update=()=>{};sim.director.enter('build');
                 sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);
                 hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.setState('chase');hv.speed=6.6;
@@ -68,7 +68,7 @@ async def play(port):
                 const at=pointAtDistance(game.world.trail,game.world.trailCum,500),to=pointAtDistance(game.world.trail,game.world.trailCum,506);
                 game.tp(to.x,to.z,at.x,at.z);game.advance(3,1/30,false);
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
-                sim.state='play';sim.time=100;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
+                sim.state='play';sim.time=400;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.startChase(p);
                 game.advance(9,1/30,false);
                 return {state:hv.state,health:p.health,flags:game.hv.flags,moved:Math.hypot(hv.x-at.x,hv.z-at.z)};
@@ -80,7 +80,7 @@ async def play(port):
                 const {pointAtDistance}=await import('/shared/math.js');
                 const at=pointAtDistance(game.world.trail,game.world.trailCum,500),end=pointAtDistance(game.world.trail,game.world.trailCum,470);
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
-                sim.state='play';sim.time=100;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
+                sim.state='play';sim.time=400;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 game.tp(at.x+3,at.z+2,at.x,at.z);game.advance(3,1/30,false);
                 hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);
                 hv.retreatFrom(p,false,true);hv.path=game.world.findPath(hv.x,hv.z,end.x,end.z);hv.pathI=1;
