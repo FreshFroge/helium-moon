@@ -23,6 +23,7 @@ import { AudioEngine } from '../audio/audio.js';
 import { VoiceSystem } from '../audio/voice.js';
 import { LocalTransport } from '../net/transport.js';
 import { SnapBuffer, HeliumView, SkunkView, PlayerAvatar, ObjectiveViews, PLAYER_COLORS } from '../entities/views.js';
+import { WildlifeSystem } from '../entities/wildlife.js';
 
 const T = CONFIG.TERROR;
 const PST = ['alive', 'downed', 'dead', 'escaped'];
@@ -116,6 +117,7 @@ export class Game {
     progress(0.9, 'Something is in the trees');
     const [hv, sf] = await Promise.all([HeliumView.create(this.scene, world), SkunkView.create(this.scene)]);
     this.hv = hv; this.sf = sf;
+    this.wildlife = new WildlifeSystem(this.scene, world, this.audio);
     this.hvBuf = new SnapBuffer([3, 4], [7, 10], 8); this.sfBuf = new SnapBuffer([3, 4], [6, 8], 8);   // >8 m between snapshots = relocation: snap, never slide
     progress(0.97, 'Compiling shaders');
     this._menuCamera(0);
@@ -138,9 +140,12 @@ export class Game {
     const gl = this.renderer.gl;
     const vis = [this.hv.root.visible, this.sf.root.visible];
     this.hv.root.visible = true; this.sf.root.visible = true;
+    const wl = this.wildlife ? [this.wildlife.deer.root, this.wildlife.owl.root] : [];
+    for (const r of wl) r.visible = true;
     try { gl.setRenderTarget(this.renderer.sceneRT); gl.compile(this.scene, this.camera); } catch (e) { /* optional */ }
     gl.setRenderTarget(null);
     this.hv.root.visible = vis[0]; this.sf.root.visible = vis[1];
+    for (const r of wl) r.visible = false;
   }
 
   _resize() {
@@ -335,8 +340,11 @@ export class Game {
     if (this.mode !== 'playing') return;
     const A = this.audio, pos = e.x !== undefined ? { x: e.x, y: e.y ?? (this.world.heightAt(e.x, e.z) + 1), z: e.z } : null;
     switch (e.type) {
-      case 'begin': this._objectivesDirty = true; break;
+      case 'begin': this._objectivesDirty = true; this.wildlife?.end(); break;
+      // a real animal: deer bolting from the brush or an owl lifting off (SCARE_RESEARCH X4)
+      case 'wildlife': if (this.wildlife && this._near(pos, 90)) this.wildlife.spawn(e, this.player.pos); break;
       case 'hv_vocal': if (this._near(pos, CONFIG.HV.FOOTSTEP_MAX_DISTANCE) && this._canSee(pos)) { A.hvVocal(e.k, e.s, pos); this.voice.suppress(2); } break;
+      case 'hv_line': A.hvLine(e.id, pos, e.seq || 0); this.voice.suppress(2.5); break;
       case 'hv_sig': if (this._canSee(pos)) { A.signature(pos); this.voice.suppress(2.6); } break;
       case 'sf_vocal': A.sfVocal(e.k, e.s, pos); break;
       case 'snap': break; // no artificial branch-snap warning of an unseen approach
@@ -569,6 +577,7 @@ export class Game {
     // ---- flashlight + breath + anomalies
     const walkBob = Math.sin(pl.bobT) * clamp(pl.speed / 2, 0, 1);
     fl.update(dt, this.camera, this.terror, { walkBob, gas: this.gasFx, off: dead });
+    this.wildlife.update(dt, this.camera.position, { on: fl.on && fl.light.intensity > 5, pos: fl.light.position, dir: fl.dir, k: fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY });
     this.objViews.update(dt, this.sessionT, {
       on: fl.on, pos: fl.light.position, dir: fl.dir,
       k: fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY,

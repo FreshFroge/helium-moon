@@ -91,6 +91,26 @@ export class AudioEngine {
       this.hvLines.push({ name, buf: await this.ctx.decodeAudioData(await r.arrayBuffer()) });
     }));
     this.hvLines.sort((a, b) => HV_REAL_LINES.indexOf(a.name) - HV_REAL_LINES.indexOf(b.name));
+    // spoken lines by id (server-chosen, shared/sim/voiceLines.js): rec_* are his recordings,
+    // gen_* are lines cloned from his voice (several takes each; lines.json lists them)
+    this.lineBufs = {};
+    for (const l of this.hvLines) this.lineBufs['rec_' + l.name.slice(3)] = [l.buf];
+    try {
+      const m = await (await fetch(assetUrl('assets/audio/hv_voice/lines.json'))).json();
+      await Promise.all(Object.entries(m.lines || {}).map(async ([id, files]) => {
+        const bufs = [];
+        for (const f of files) { const r = await fetch(assetUrl('assets/audio/hv_voice/' + f)); if (r.ok) bufs.push(await this.ctx.decodeAudioData(await r.arrayBuffer())); }
+        if (bufs.length) this.lineBufs[id] = bufs;
+      }));
+    } catch (e) { /* cloned lines optional */ }
+  }
+
+  // one of his spoken lines, positioned at him. Audible to ~24 m (an AI event chose it,
+  // never a distance threshold), so it carries to nearby players in co-op.
+  hvLine(id, pos, take = 0) {
+    const bufs = this.lineBufs && this.lineBufs[id];
+    if (!bufs || !bufs.length) return null;
+    return this.play(bufs[take % bufs.length], { pos, bus: 'mon', gain: 1.15, rate: 0.97, ref: 3, reverb: 0.2, range: { fadeStart: 12, maxDistance: 24 } });
   }
 
   async loadPlayerBreathing() {

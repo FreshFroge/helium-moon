@@ -45,6 +45,8 @@ export class HeliumVoiceAI {
   place(x, z) { if (!this.outsideSpawn(x,z)) return false; this.x = x; this.z = z; this.y = groundAt(this.world, x, z); this.path = null; this.finalGoal = null; }
 
   setState(s, info) {
+    // lost them: sometimes he calls out ("Where are you?"), as a person would (voiceLines.js)
+    if (s === 'search' && (this.state === 'stalk' || this.state === 'chase')) this.say('lost_target');
     this.state = s; this.stateT = 0; this.path = null; this.goal = null; this.finalGoal = null;
     if (s !== 'chase') this.closeCommitted = false;
     if (info) Object.assign(this, info);
@@ -407,6 +409,7 @@ export class HeliumVoiceAI {
           this.reveal.counted=true;dir.onReveal(this.reveal.kind);this.presenceReportT=sim.time;
         }
       }
+      if (flashedOff) this.say('flashed_off');
       if (!contact && (!deliberate || this.reveal.exposureT >= .9))
         this.retreatFrom(observer.p, !!this.litBy, true);
     }
@@ -674,7 +677,8 @@ export class HeliumVoiceAI {
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
     this.sim.director.onChaseStart(p);
-    this.vocal('scream', true);
+    // usually the nonverbal cry; sometimes his own voice: "There you are." (Codex voice direction)
+    if (this.say('hunt_start', { force: true })) { this.vocalT = this.sim.time; this.sim.director.onVocal(); } else this.vocal('scream', true);
   }
 
   // "The forest holds its breath" (SCARE_RESEARCH C1): once per closing-in attempt, inside
@@ -814,6 +818,9 @@ export class HeliumVoiceAI {
     else if (this.state === 'freeze') kind = r.chance(0.5) ? 'inhale' : null;
     if (kind) this.vocal(kind);
   }
+
+  // a spoken line in his own voice (server-chosen id; see shared/sim/voiceLines.js)
+  say(context, opts) { return this.sim.voice ? this.sim.voice.say(context, { x: this.x, y: this.y + EYE, z: this.z }, opts) : null; }
 
   vocal(kind, force = false) {
     const sim = this.sim;
