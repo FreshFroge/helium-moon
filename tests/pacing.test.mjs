@@ -78,8 +78,12 @@ function runSession(name, behaviours, seed) {
     hits: 0, parkedMax: 0, parked: 0, state: 'alive', diedAt: null,
   }]));
   const events = [], reveals = [];
+  let revealNow = false;
   const origReveal = sim.director.onReveal.bind(sim.director);
-  sim.director.onReveal = (kind) => { if (kind !== 'retreat') reveals.push({ t: +sim.time.toFixed(1), kind }); return origReveal(kind); };
+  sim.director.onReveal = (kind) => {
+    if (kind !== 'retreat') { reveals.push({ t: +sim.time.toFixed(1), kind }); revealNow = true; }
+    return origReveal(kind);
+  };
   let lastThreat = 0, longestQuiet = 0, quietSince = null, nan = 0, introViolation = false;
   const hvStateSec = {};
   for (let t = 0; t < MINUTES * 60; t += DT) {
@@ -95,7 +99,7 @@ function runSession(name, behaviours, seed) {
     if (![hv.x, hv.z, sim.sf.x, sim.sf.z].every(Number.isFinite)) nan++;
     hvStateSec[hv.state] = (hvStateSec[hv.state] || 0) + DT;
     const intro = sim.state === 'intro';
-    let threatNow = false;
+    let threatNow = revealNow; revealNow = false;
     for (const e of sim.drainEvents()) {
       events.push({ t: e.t, type: e.type, k: e.k, pid: e.pid, on: e.on, by: e.by });
       if (intro && (e.type === 'chase' || e.type === 'hit')) introViolation = true;
@@ -110,7 +114,10 @@ function runSession(name, behaviours, seed) {
       if (p.state !== 'alive' && p.state !== 'downed') continue;
       const d = hv.state === 'dormant' ? 1e9 : Math.hypot(hv.x - p.x, hv.z - p.z);
       for (const [ring, R] of RINGS) if (d < R) { r.ringSec[ring] += DT; if (r.firstRing[ring] == null) r.firstRing[ring] = +sim.time.toFixed(1); }
-      if (d < T.INNER) threatNow = threatNow || d < T.CRITICAL;
+      // The owner's sole proximity warning is the freezing aura. Entering the
+      // inner ring is therefore a perceived threat interval even without a
+      // separate sound/event; count it when measuring genuinely safe gaps.
+      if (d < T.INNER) threatNow = true;
       if (hv.state !== 'dormant' && d < 80 && onScreen(world, p, hv.x, hv.y, hv.z)) { r.seenSec += DT; if (r.firstSeen == null) r.firstSeen = +sim.time.toFixed(1); }
       // "parked": within creep distance of this player with no hit landing
       if (d <= CONFIG.HV.CREEP_DISTANCE + 0.2) { r.parked += DT; r.parkedMax = Math.max(r.parkedMax, r.parked); } else r.parked = 0;
@@ -142,7 +149,11 @@ for (const [name, beh] of Object.entries(SCENARIOS)) for (let seed = 1; seed <= 
 console.log(`\n${results.length} sessions, ${MINUTES} min each, ${((Date.now() - t0) / 1000).toFixed(0)} s wall time\n`);
 
 const fmt = (v) => (v == null ? '—' : typeof v === 'number' ? (v >= 100 ? Math.round(v) : +v.toFixed(1)) : v);
-const mmss = (s) => (s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`);
+const mmss = (s) => {
+  if (s == null) return '—';
+  const total = Math.round(s);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+};
 for (const name of Object.keys(SCENARIOS)) {
   console.log(`## ${name}`);
   console.log(`seed | outcome | cold (${T.OUTER} m) | inner (${T.INNER} m) | first on screen | 1st chase | chases | HV hits | skunk hits | parked ≤2.6 m max | sig | reveals | longest quiet | threats per 5 min`);

@@ -13,6 +13,7 @@ export class MimicDirector {
     this.phrases = new Map();   // pid -> [{id, dur, t}]
     this.lastT = -999; this.byPlayer = new Map();
     this.checkT = 5; this.seq = 1;
+    this.huntCue = null;
   }
 
   addPhrase(pid, id, dur) {
@@ -28,6 +29,15 @@ export class MimicDirector {
   update(dt) {
     const sim = this.sim, now = sim.time;
     for (const [pid, arr] of this.phrases) this.phrases.set(pid, arr.filter((p) => now - p.t < M.PHRASE_TTL));
+    if (this.huntCue && now >= this.huntCue.at) {
+      const cue = this.huntCue; this.huntCue = null;
+      const listener = sim.players.get(cue.listener);
+      const phrase = (this.phrases.get(cue.owner) || []).find((p) => p.id === cue.phrase);
+      if (sim.director.chasing && sim.hv.target === cue.listener && playerActive(listener) && phrase) {
+        const pos = this.emitterAwayFromThreat(listener);
+        if (pos) this.emitPhrase(listener, cue.owner, phrase, pos, true);
+      }
+    }
     this.checkT -= dt;
     if (this.checkT > 0) return;
     this.checkT = M.CHECK_INTERVAL * this.rng.range(0.7, 1.3);
@@ -57,12 +67,39 @@ export class MimicDirector {
       const phrase = this.rng.pick(avail);
       const pos = this.emitterBehind(p);
       if (!pos) continue;
-      this.lastT = now; this.byPlayer.set(p.id, now);
-      this.dropPhrase(owner, phrase.id);
-      sim.emit({ type: 'mimic', mid: this.seq++, listener: p.id, owner, phrase: phrase.id, dur: phrase.dur, x: pos.x, y: pos.y, z: pos.z, decoy: pos.decoy });
-      sim.director.onVocal();
+      this.emitPhrase(p, owner, phrase, pos, false);
       break;
     }
+  }
+
+  // During some hunts, use a consenting teammate's captured phrase away from
+  // Helium Voice's true approach. The delay and chance make it a distraction,
+  // never a reliable instruction to turn exactly opposite the voice.
+  queueHuntDecoy(listenerId) {
+    const sim = this.sim, now = sim.time, listener = sim.players.get(listenerId);
+    if (!listener || this.huntCue || now - this.lastT < M.HUNT_MIN_COOLDOWN) return false;
+    const candidates = [];
+    for (const [owner, arr] of this.phrases) {
+      if (owner === listenerId) continue;
+      for (const phrase of arr) {
+        const age = now - phrase.t;
+        if (age > M.MIN_DELAY && age < M.PHRASE_TTL) candidates.push({ owner, phrase });
+      }
+    }
+    if (!candidates.length || this.rng() > M.HUNT_CHANCE) return false;
+    const pick = this.rng.pick(candidates);
+    this.huntCue = { listener: listenerId, owner: pick.owner, phrase: pick.phrase.id,
+      at: now + this.rng.range(...M.HUNT_DELAY) };
+    return true;
+  }
+
+  emitPhrase(listener, owner, phrase, pos, hunt) {
+    const sim = this.sim;
+    this.lastT = sim.time; this.byPlayer.set(listener.id, sim.time);
+    this.dropPhrase(owner, phrase.id);
+    sim.emit({ type: 'mimic', mid: this.seq++, listener: listener.id, owner, phrase: phrase.id,
+      dur: phrase.dur, x: pos.x, y: pos.y, z: pos.z, decoy: pos.decoy, hunt: !!hunt });
+    sim.director.onVocal();
   }
 
   // test hook (server only with HM_TEST=1): play one of owner's phrases to listener now
@@ -94,6 +131,23 @@ export class MimicDirector {
       const y = groundAt(w, x, z);
       const vis = w.lineOfSight(p.x, p.y + 1.6, p.z, x, y + 1.5, z, { brushK: 0.35 });
       const s = (1 - vis) * 2 + w.sampleGrid(w.gCover, x, z) + (w.trailDistAt(x, z) < 3 ? 0.4 : 0);
+      if (s > bestS) { bestS = s; best = { x, y: y + 1.5, z, decoy: true }; }
+    }
+    return best;
+  }
+
+  // Concealed point broadly opposite his true bearing from the hunted player.
+  emitterAwayFromThreat(p) {
+    const sim = this.sim, w = sim.world, hv = sim.hv, rng = this.rng;
+    const away = Math.atan2(p.x - hv.x, p.z - hv.z);
+    let best = null, bestS = -1e9;
+    for (let k = 0; k < 24; k++) {
+      const a = away + rng.range(-0.65, 0.65), d = rng.range(M.HUNT_DECOY_MIN, M.HUNT_DECOY_MAX);
+      const x = p.x + Math.sin(a) * d, z = p.z + Math.cos(a) * d;
+      if (!w.navWalkable(x, z)) continue;
+      const y = groundAt(w, x, z);
+      const vis = w.lineOfSight(p.x, p.y + 1.6, p.z, x, y + 1.5, z, { brushK: 0.35 });
+      const s = (1 - vis) * 2 + w.sampleGrid(w.gCover, x, z);
       if (s > bestS) { bestS = s; best = { x, y: y + 1.5, z, decoy: true }; }
     }
     return best;

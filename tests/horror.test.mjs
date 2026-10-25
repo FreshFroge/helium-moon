@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CONFIG } from '../shared/config.js';
-import { terrorAtDistance, horrorCues, distanceGain, creatureFootstepCue, teammateFootstepCue, skunkVocalCue } from '../shared/horror.js';
+import { terrorAtDistance, horrorCues, distanceGain, creatureFootstepCue, teammateFootstepCue, skunkVocalCue, huntTerrorTarget } from '../shared/horror.js';
 
 const cueAt = (meters) => horrorCues(terrorAtDistance(meters));
 const footstepAt = (creature, meters, speed) => {
@@ -36,6 +36,11 @@ test('freezing remains the sole proximity warning at every distance', () => {
     for (const key of ['drone','highTone','heartbeat','tremor','flicker']) assert.equal(cues[key], 0);
     assert.equal(cues.anomaly, false);
   }
+});
+
+test('the low hunt hum replaces the cold distance locator',()=>{
+  assert.ok(huntTerrorTarget(terrorAtDistance(8),false)>0.8);
+  assert.equal(huntTerrorTarget(terrorAtDistance(8),true),0);
 });
 
 test('frost intensifies during the final approach instead of plateauing at 25 metres',()=>{

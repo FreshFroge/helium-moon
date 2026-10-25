@@ -12,6 +12,10 @@ export function terrorAtDistance(distance, rings = CONFIG.TERROR) {
   return lerp(0.88, 1, (rings.CRITICAL - d) / rings.CRITICAL);
 }
 
+// Once the non-directional hunt hum begins, remove the cold distance readout.
+// The caller still smooths this target so frost fades as the hum rises.
+export function huntTerrorTarget(terror, huntHum) { return huntHum ? 0 : terror; }
+
 export function horrorCues(terror) {
   const tr = clamp(terror, 0, 1);
   return {

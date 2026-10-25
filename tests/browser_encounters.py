@@ -33,7 +33,7 @@ async def play(port):
                     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
                     const initial={seed:sim.seed,target:hv.target,awareness:hv.awareness.size};
                     let chased=false,aborted=false;
-                    for(let i=0;i<240 && p.health===2;i++){
+                    for(let i=0;i<1350 && p.health===2;i++){
                         game.advance(1,1/30,false);
                         chased ||= hv.state==='chase';
                         aborted ||= hv.state==='retreat'&&p.health===2;
@@ -42,9 +42,12 @@ async def play(port):
                     return {initial,chased,aborted,server:p.health,client:game.health,chasing:sim.director.chasing};
                 }''',[seed,flash])
                 assert first['initial']=={'seed':seed,'target':None,'awareness':0},first
-                assert first['chased'] and not first['aborted'],first
-                assert first['server']<2 and first['client']==first['server'] and not first['chasing'],first
-                print(f'  ok  normal first sighting reaches actual attack (seed {seed}, flashlight {flash}):',first,flush=True)
+                assert first['chased'] and first['client']==first['server'] and not first['chasing'],first
+                if flash:
+                    assert first['server']<2 or first['aborted'],first
+                else:
+                    assert first['server']<2 and not first['aborted'],first
+                print(f'  ok  normal first sighting becomes a long hunt, then hits or meets the close light counter (seed {seed}, flashlight {flash}):',first,flush=True)
             await page.evaluate('game.restart()')
             result=await page.evaluate('''async()=>{
                 const {pointAtDistance}=await import('/shared/math.js');
@@ -73,7 +76,7 @@ async def play(port):
                 // Owner rule (Oct 25): only a flashlight on him within 7 ft calls a hunt off.
                 // The player holds the light on him as he charges from 6 m.
                 let brokeAt=null,seenFar=false;
-                for(let i=0;i<90&&brokeAt==null;i++){
+                for(let i=0;i<1350&&brokeAt==null;i++){
                   game.advance(1,1/30,false);
                   if(hv.state==='chase'&&hv.dist(p)>3)seenFar=true;
                   if(hv.state==='retreat')brokeAt=hv.dist(p);

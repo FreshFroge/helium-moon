@@ -593,11 +593,33 @@ export class HeliumVoiceAI {
         if (this.huntSprintT > 2 && !this.huntSprintNoted) { this.huntSprintNoted = true; this.noteTactic(tp.id, 'sprint'); }
         // Cut-off: lost sight of them for RELOCATE_CUTOFF_UNSEEN s mid-hunt -> reappear ahead (once per hunt);
         // learned sprinters get cut off sooner
-        const cutAfter = this.counters(tp.id, 'sprint') ? C.LEARN_CUTOFF_UNSEEN : C.RELOCATE_CUTOFF_UNSEEN;
+        const cutBase = this.counters(tp.id, 'sprint') ? C.LEARN_CUTOFF_UNSEEN : C.RELOCATE_CUTOFF_UNSEEN;
+        const cutAfter = cutBase * (this.huntCutMul || 1);
         if (!this.huntRelocated && this.huntUnseenT >= cutAfter && this.dist(tp) > 25 && this.tryRelocate(tp, 'cutoff')) {
-          if (cutAfter < C.RELOCATE_CUTOFF_UNSEEN) this.usedCounter(tp.id, 'sprint');
+          if (cutBase < C.RELOCATE_CUTOFF_UNSEEN) this.usedCounter(tp.id, 'sprint');
           this.huntRelocated = true; this.huntUnseenT = 0; this.huntStall = null; this.replanT = 0;
           this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
+        }
+        // Once he reaches the player, prowl a 12-15 ft ring before the strike.
+        // The timer advances only while he is truly close; running makes him
+        // catch up. A player can still charge into the seven-foot light counter.
+        const pd = this.dist(tp), [prowlMin, prowlMax] = C.HUNT_PROWL_RANGE;
+        if (Number.isFinite(this.huntProwlFor) && this.huntProwlT < this.huntProwlFor && pd <= prowlMax + 1) {
+          this.huntProwlT += dt;
+          this.huntStall = null; // circling is intentional movement, never a stuck-hunt failure
+          this.huntOrbitAt = (this.huntOrbitAt || 0) - dt;
+          if (!this.path || this.huntOrbitAt <= 0) {
+            const bearing = Math.atan2(this.x - tp.x, this.z - tp.z);
+            const a = pd < prowlMin ? bearing : bearing + this.huntOrbitDir * this.rng.range(0.45, 0.8);
+            const r = pd < prowlMin ? prowlMax : this.rng.range(prowlMin, prowlMax);
+            const x = tp.x + Math.sin(a) * r, z = tp.z + Math.cos(a) * r;
+            if (this.world.navWalkable(x, z) && this.openingClear(x, z)) this.planTo(x, z, 'direct');
+            this.huntOrbitAt = this.rng.range(0.9, 1.6);
+          }
+          anim.run = 0.2; anim.still = 0.35;
+          if (this.path) this.followPath(dt, C.WALK * 1.15);
+          else this.stop(dt);
+          break;
         }
         // hearing keeps the chase going when sight is lost (sprinting is loud)
         if (this.stimulus && this.stimulus.pid === tp.id && sim.time - this.stimulus.t < 0.2) this.lastSeenChase = { x: this.stimulus.x, z: this.stimulus.z, t: sim.time - 0.5 };
@@ -610,6 +632,10 @@ export class HeliumVoiceAI {
         this.replanT -= dt;
         if (this.replanT <= 0) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = this.dist(tp) < 15 ? 0.3 : 0.7; }
         const d = this.dist(tp);
+        if (sim.time >= (this.huntPaceAt || 0)) {
+          this.huntPace = this.rng.range(...C.HUNT_PACE);
+          this.huntPaceAt = sim.time + this.rng.range(...C.HUNT_PACE_INTERVAL);
+        }
         const burst = d < 12 ? C.BURST : C.CHASE;
         if (d < 7 && this.world._straightWalkable([this.x, this.z], [tp.x, tp.z])) {
           // close enough to lunge straight at them
@@ -621,7 +647,10 @@ export class HeliumVoiceAI {
           // spawn/deep-water limits still apply.
           this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1; this.freeLunge = true;
         }
-        this.followPath(dt, burst * dir.chaseSpeedMul() * (1 + .12 * escalation));
+        // Variable approach cadence prevents a flat, learnable chase speed.
+        // Inside seven metres he never draws the final strike out with a slow beat.
+        const tempo = d < 7 ? Math.max(1, this.huntPace || 1) : (this.huntPace || 1);
+        this.followPath(dt, burst * tempo * dir.chaseSpeedMul() * (1 + .12 * escalation));
         this.freeLunge = false;
         if (d < 4) anim.reach = 1;
         if (!this.windup && sim.time < (this.missPauseUntil ?? -1)) { this.stop(dt); anim.still = 1; break; }
@@ -734,6 +763,11 @@ export class HeliumVoiceAI {
       return false;
     }
     this.closingOn = null; this.trackT = 0; this.huntStall = null; this.huntUnseenT = 0; this.huntRelocated = false; this.huntSprintT = 0; this.huntSprintNoted = false; this.counterSaid = null;
+    this.huntPace = this.rng.range(...C.HUNT_PACE);
+    this.huntPaceAt = this.sim.time + this.rng.range(...C.HUNT_PACE_INTERVAL);
+    this.huntCutMul = this.rng.range(...C.HUNT_CUTOFF_JITTER);
+    this.huntProwlFor = this.rng.range(...C.HUNT_PROWL_TIME); this.huntProwlT = 0;
+    this.huntOrbitDir = this.rng() < 0.5 ? -1 : 1; this.huntOrbitAt = 0;
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time }; this.windup = null; this.lingerUntil = null;
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
@@ -787,7 +821,10 @@ export class HeliumVoiceAI {
     if (sim.time - (this.relocateT ?? -1e9) < lerp(C.RELOCATE_COOLDOWN[0], C.RELOCATE_COOLDOWN[1], esc)) return false;
     const spot = this.observationSpot(tp, 'ahead', C.RELOCATE_AHEAD[0], C.RELOCATE_AHEAD[1]);
     if (!spot) return false;
-    const [x, z] = spot, y = groundAt(this.world, x, z);
+    // Validate and place the same tenth-metre position sent in the event. A
+    // previously safe point could round across a narrow screen/cover boundary.
+    const x = +spot[0].toFixed(1), z = +spot[1].toFixed(1), y = groundAt(this.world, x, z);
+    if (!this.world.navWalkable(x, z) || !this.openingClear(x, z)) return false;
     for (const p of sim.playerList) {
       if (!playerActive(p)) continue;
       if (Math.hypot(p.x - x, p.z - z) < C.RELOCATE_MIN_DIST) return false;
@@ -802,7 +839,7 @@ export class HeliumVoiceAI {
     if (this.place(x, z) === false) return false;
     this.relocateT = sim.time; this.speed = 0;
     this.yaw = this.lookYaw = Math.atan2(tp.x - x, tp.z - z);
-    sim.emit({ type: 'hv_relocate', reason, pid: tp.id, x: +x.toFixed(1), z: +z.toFixed(1), fx: +fx.toFixed(1), fz: +fz.toFixed(1) });
+    sim.emit({ type: 'hv_relocate', reason, pid: tp.id, x, z, fx: +fx.toFixed(1), fz: +fz.toFixed(1) });
     return true;
   }
 

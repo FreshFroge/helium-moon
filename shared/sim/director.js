@@ -15,8 +15,12 @@ export class Director {
     this.lastChase = -999; this.lastAttack = -999; this.lastReveal = -999; this.lastVocal = -999; this.lastSkunk = -999;
     // first deliberate reveal is scheduled 20-45 s after the dread period actually ends (see update)
     this.nextReveal = null;
-    this.revealKinds = ['watcher', 'crossing', 'skunk'];
+    this.revealPendingUntil = 0;
+    this.revealKinds = ['watcher', 'crossing'];
     this.recentKinds = [];
+    this.glimpsePressure = 0;
+    this.huntDueAt = 0;
+    this.chaseGapMul = 1;
     this.chasing = false;
     this.focus = null;
   }
@@ -47,12 +51,16 @@ export class Director {
   // the player the monsters should pay most attention to: the isolated, the quiet, the one in front
   focusPlayer() { return this.focus ? this.sim.players.get(this.focus) : null; }
 
-  wantsPresence() { return !this.inDread() && this.phase !== 'relax' && (this.presenceT > this._esc(this.D.PRESENCE_SAFE) || this.phase === 'peak'); }
+  wantsPresence() {
+    const safe = this._esc(this.D.PRESENCE_SAFE) / (1 + this.glimpsePressure * 0.25);
+    return !this.inDread() && this.phase !== 'relax' && (this.presenceT > safe || this.phase === 'peak');
+  }
 
   allowChase(p) {
     const t = this.sim.time;
     if (this.phase === 'relax' || this.sim.state === 'intro' || this.inDread()) return false;
-    const chaseGap = this.extraction ? Math.min(35, this._esc(this.D.CHASE_COOLDOWN)) : this._esc(this.D.CHASE_COOLDOWN);
+    const baseGap = this._esc(this.D.CHASE_COOLDOWN) * this.chaseGapMul;
+    const chaseGap = this.extraction ? Math.min(30, baseGap) : baseGap;
     if (t - this.lastChase < chaseGap || t - this.lastAttack < this._esc(this.D.ATTACK_COOLDOWN)) return false;
     return true;
   }
@@ -60,7 +68,8 @@ export class Director {
   wantsChase(p, d) {
     if (!this.allowChase(p)) return false;
     const iso = p.isolation || 0;
-    const chance = this.aggression() * (d < 20 ? 1.4 : d < 35 ? 0.8 : 0.3) * (iso > 25 ? 1.4 : 1) * (this.phase === 'peak' ? 1.3 : 1);
+    const chance = this.aggression() * (d < 20 ? 1.4 : d < 35 ? 0.8 : 0.3) * (iso > 25 ? 1.4 : 1)
+      * (this.phase === 'peak' ? 1.3 : 1) * (1 + this.glimpsePressure * 0.55);
     return this.rng() < chance * 0.14;   // evaluated every tick -> per-second hazard ~2.8*chance (owner: 2-3x more active)
   }
 
@@ -78,10 +87,31 @@ export class Director {
   }
 
   onVocal() { this.lastVocal = this.sim.time; }
-  onChaseStart(p) { this.chasing = true; this.lastChase = this.sim.time; this.intensity += 0.6; this.safeT = 0; this.sim.emit({ type: 'chase', pid: p.id, on: true }); }
+  onChaseStart(p) {
+    this.chasing = true; this.lastChase = this.sim.time; this.intensity += 0.6; this.safeT = 0;
+    this.glimpsePressure = 0;
+    this.huntDueAt = 0;
+    this.chaseGapMul = this.rng.range(...this.D.CHASE_COOLDOWN_JITTER);
+    this.sim.emit({ type: 'chase', pid: p.id, on: true });
+    this.sim.mimic?.queueHuntDecoy(p.id);
+  }
   onChaseEnd(caught) { this.chasing = false; this.sim.emit({ type: 'chase', on: false }); this.enter('relax'); }
   onAttack(p) { this.lastAttack = this.sim.time; this.intensity += 1; this.chasing = false; this.sim.emit({ type: 'chase', on: false }); this.enter('relax'); }
-  onReveal(kind) { if (kind !== 'retreat') { this.lastReveal = this.sim.time; this.recentKinds.push(kind); if (this.recentKinds.length > 3) this.recentKinds.shift(); } this.intensity += 0.25; this.safeT = 0; }
+  onReveal(kind) {
+    if (kind !== 'retreat') {
+      this.lastReveal = this.sim.time;
+      this.recentKinds.push(kind); if (this.recentKinds.length > 3) this.recentKinds.shift();
+      if (kind !== 'skunk') this.glimpsePressure = Math.min(3, this.glimpsePressure + 1);
+      if (kind !== 'skunk' && this.glimpsePressure >= this.D.GLIMPSES_BEFORE_HUNT && !this.huntDueAt)
+        this.huntDueAt = this.sim.time + this.rng.range(...this.D.GLIMPSE_HUNT_DELAY);
+      // Cool down from what the player actually perceived. A requested reveal
+      // can spend tens of seconds travelling and still time out behind cover;
+      // that must not buy a full quiet interval for an encounter that never happened.
+      this.nextReveal = this.sim.time + this._escRange(this.D.REVEAL_GAP);
+      this.revealPendingUntil = 0;
+    }
+    this.intensity += 0.25; this.safeT = 0;
+  }
   onSkunk() { this.lastSkunk = this.sim.time; this.intensity += 0.4; this.safeT = 0; }
 
   enter(phase) { this.phase = phase; this.phaseT = 0; this.phaseLen = phase === 'relax' ? this._escRange(this.D.RELAX_LEN) : phase === 'peak' ? this.rng.range(50, 90) : this._escRange(this.D.BUILD_LEN); }
@@ -124,18 +154,40 @@ export class Director {
     else if (this.phase === 'build' && this.phaseT > this.phaseLen && !this.chasing) this.enter('peak');
     else if (this.phase === 'peak' && this.phaseT > this.phaseLen && !this.chasing) this.enter(this.intensity > 1 ? 'relax' : 'build');
     if (this.intensity > 2.4 && this.phase !== 'relax' && !this.chasing) this.enter('relax');   // owner: more active -> tolerates more before forcing a break
+    // Harmless sightings must not teach players that appearances are
+    // always safe. After a variable delay, ask the real AI to close for a hunt;
+    // startChase still requires physical travel and all ordinary safeguards.
+    if (this.huntDueAt && sim.time >= this.huntDueAt && !this.chasing && !this.inDread() && this.phase !== 'relax') {
+      const p = sim.hv.focusPlayer?.() || this.focusPlayer();
+      if (p && this.allowChase(p)) {
+        sim.hv.startChase(p);
+        if (sim.hv.state === 'chase' || sim.hv.closingOn?.pid === p.id) this.huntDueAt = 0;
+        else this.huntDueAt = sim.time + 8;
+      }
+    }
     // deliberate reveals - rare, varied, never the same twice in a row
     if (sim.state === 'play' || sim.state === 'extract') {
       if (this.nextReveal === null && !this.inDread()) this.nextReveal = sim.time + this.rng.range(20, 45);
-      if (this.nextReveal !== null && sim.time > this.nextReveal && !this.chasing && this.phase !== 'relax' && !this.inDread()) {
+      if (this.nextReveal !== null && sim.time > this.nextReveal && sim.time >= this.revealPendingUntil
+          && !this.chasing && this.phase !== 'relax' && !this.inDread()) {
         const p = sim.hv.focusPlayer?.() || this.focusPlayer();
         if (p) {
           let kinds = this.revealKinds.filter((k) => k !== this.recentKinds[this.recentKinds.length - 1]);
-          if (this.presenceT > 90) kinds = kinds.filter(k => k !== 'skunk');
-          const kind = this.rng.pick(kinds);
+          if (!kinds.length) kinds = this.revealKinds;
+          // A skunk appearance is occasional variety. When the night owes the
+          // players presence, Helium Voice resolves it himself.
+          // One draw keeps the rest of the seeded AI stream stable. Remap the
+          // non-skunk part of that draw across Helium Voice's available forms.
+          const roll = this.rng(), last = this.recentKinds[this.recentKinds.length - 1];
+          const skunk = this.presenceT <= 90 && last !== 'skunk' && roll < this.D.SKUNK_REVEAL_CHANCE;
+          const hi = Math.min(kinds.length - 1, Math.floor(Math.max(0, roll - this.D.SKUNK_REVEAL_CHANCE)
+            / (1 - this.D.SKUNK_REVEAL_CHANCE) * kinds.length));
+          const kind = skunk ? 'skunk' : kinds[hi];
           const ok = kind === 'skunk' ? sim.sf.requestEmerge(p) : sim.hv.requestReveal(kind, p);
-          this.nextReveal = sim.time + (ok ? this._escRange(this.D.REVEAL_GAP) : 20);
-          if (ok) this.lastReveal = sim.time;
+          if (ok) {
+            this.revealPendingUntil = sim.time + this.D.REVEAL_RESOLVE;
+            this.nextReveal = this.revealPendingUntil;
+          } else this.nextReveal = sim.time + this.rng.range(...this.D.REVEAL_RETRY);
         }
       }
     }

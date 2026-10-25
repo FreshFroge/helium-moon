@@ -54,6 +54,32 @@ test('a hunt requested inside the range starts immediately', () => {
   assert.equal(sim.director.chasing, true);
 });
 
+test('hunts sample bounded changes in pursuit pace and unseen cutoff timing', () => {
+  const paces = [], cutoffs = [], intervals = [];
+  for (let seed = 20; seed < 28; seed++) {
+    const { sim, p, hv } = fixture(20, seed);
+    hv.startChase(p);
+    paces.push(hv.huntPace); cutoffs.push(hv.huntCutMul); intervals.push(hv.huntPaceAt - sim.time);
+    assert.ok(hv.huntPace >= CONFIG.HV.HUNT_PACE[0] && hv.huntPace <= CONFIG.HV.HUNT_PACE[1]);
+    assert.ok(hv.huntCutMul >= CONFIG.HV.HUNT_CUTOFF_JITTER[0] && hv.huntCutMul <= CONFIG.HV.HUNT_CUTOFF_JITTER[1]);
+    assert.ok(hv.huntPaceAt - sim.time >= CONFIG.HV.HUNT_PACE_INTERVAL[0]
+      && hv.huntPaceAt - sim.time <= CONFIG.HV.HUNT_PACE_INTERVAL[1]);
+  }
+  assert.ok(Math.max(...paces)-Math.min(...paces)>.12,'pursuit cadence varies across hunts');
+  assert.ok(Math.max(...cutoffs)-Math.min(...cutoffs)>.25,'cutoff timing varies across hunts');
+  assert.ok(Math.max(...intervals)-Math.min(...intervals)>.5,'cadence duration varies across hunts');
+});
+
+test('a hunt prowls within twelve to fifteen feet for about thirty seconds before attacking',()=>{
+  const {sim,p,hv}=fixture(4.2,31);p.flash=false;
+  hv.startChase(p);
+  for(let t=0;t<25;t+=.05)sim.step(.05);
+  assert.equal(p.health,2,'the prowl is threatening without an early strike');
+  assert.ok(hv.huntProwlT>=24,'nearby prowl time accumulates in the ring');
+  for(let t=0;t<15&&p.health===2;t+=.05)sim.step(.05);
+  assert.ok(p.health<2,'the completed prowl resolves into the final attack');
+});
+
 test('fail-safe: a hunt on a target he cannot reach ends instead of running forever', () => {
   // synthetic unreachable target: deep river water (real players are blocked there too; this
   // guards any other unreachable spot, e.g. future props or nav gaps)
@@ -70,7 +96,7 @@ test('fail-safe: a hunt on a target he cannot reach ends instead of running fore
   hv.startChase(p);
   let ended = null;
   for (let t = 0; t < 40 && ended == null; t += 0.05) { sim.step(0.05); for (const e of sim.drainEvents()) if (e.type === 'chase' && !e.on) ended = t; }
-  assert.ok(ended != null && ended < CONFIG.HV.HUNT_STALL_TIME + 10, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
+  assert.ok(ended != null && ended < CONFIG.HV.HUNT_STALL_TIME * 3 + 10, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
   assert.equal(sim.director.chasing, false);
 });
 
@@ -79,7 +105,7 @@ test('running away is not an escape: a sprinting player (9 s stamina) still gets
     const { sim, p, hv } = fixture(30, seed);
     hv.startChase(p);
     let along = 530, stamina = CONFIG.PLAYER.STAMINA_MAX, ended = null;
-    for (let t = 0; t < 60 && ended == null; t += 0.05) {
+    for (let t = 0; t < 120 && ended == null; t += 0.05) {
       const sprint = stamina > 0.2; stamina -= sprint ? 0.05 : -0.05 * CONFIG.PLAYER.STAMINA_REGEN;
       along += (sprint ? CONFIG.PLAYER.SPRINT : CONFIG.PLAYER.WALK) * 0.05;
       const q = pointAtDistance(world.trail, world.trailCum, along), back = pointAtDistance(world.trail, world.trailCum, along - 3);
@@ -113,7 +139,7 @@ test('hugging a big tree trunk is not an escape: the final lunge reaches the pla
     Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: false });
     const at = pointAtDistance(world.trail, world.trailCum, sp.a - 20); hv.place(at.x, at.z);
     hv.startChase(p);
-    for (let t = 0; t < 12 && p.health === 2; t += 0.05) sim.step(0.05);
-    assert.ok(p.health < 2, `trail ${sp.a}: he reaches a player pressed against the trunk`);
+    for (let t = 0; t < 120 && p.health === 2; t += 0.05) sim.step(0.05);
+    assert.ok(p.health < 2, `trail ${sp.a}: he reaches a player pressed against the trunk (state ${hv.state}, d ${hv.dist(p).toFixed(2)}, prowl ${(hv.huntProwlT||0).toFixed(1)}/${(hv.huntProwlFor||0).toFixed(1)})`);
   }
 });

@@ -24,7 +24,7 @@ function encounter(creature, separation=6) {
 for(const creature of ['hv','sf']) test(`${creature} actually closes distance and damages a stationary player`,()=>{
   const {sim,p,actor}=encounter(creature);
   const events=[];const initial=Math.hypot(actor.x-p.x,actor.z-p.z);
-  for(let t=0;t<8 && p.health===2;t+=0.05){sim.step(.05);events.push(...sim.drainEvents());}
+  for(let t=0;t<45 && p.health===2;t+=0.05){sim.step(.05);events.push(...sim.drainEvents());}
   assert.ok(p.health<2,`${creature} must reach a real damaging attack`);
   assert.ok(events.some(e=>e.type==='hit'&&e.by===creature));
   if(creature==='sf') assert.ok(events.some(e=>e.type==='sf_vocal'&&e.k==='growl'),'ambush announces its windup at the server tick rate');
@@ -34,7 +34,7 @@ for(const creature of ['hv','sf']) test(`${creature} actually closes distance an
 test('a close flashlight encounter remains dangerous during the director cooldown',()=>{
   const {sim,p}=encounter('hv',3);
   sim.director.enter('relax');sim.director.lastChase=sim.time;
-  for(let t=0;t<6 && p.health===2;t+=.05)sim.step(.05);
+  for(let t=0;t<45 && p.health===2;t+=.05)sim.step(.05);
   assert.ok(p.health<2,'standing within arm reach cannot exploit a flashlight/cooldown immunity');
 });
 
@@ -46,10 +46,11 @@ for(const flash of [true,false]) test(`first sighting reaches a real attack with
     Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash});
     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
     assert.equal(hv.target,null);assert.equal(hv.awareness.size,0);
-    let retreatBeforeHit=false;
-    for(let t=0;t<8 && p.health===2;t+=.05){sim.step(.05);if(hv.state==='retreat'&&p.health===2)retreatBeforeHit=true;}
-    assert.ok(p.health<2,`seed ${seed}: natural first sighting must lead to a damaging attack`);
-    assert.equal(retreatBeforeHit,false,`seed ${seed}: a close first-sighting chase cannot abort into retreat`);
+    let retreatBeforeHit=false,chased=false;
+    for(let t=0;t<50 && p.health===2&&!retreatBeforeHit;t+=.05){sim.step(.05);chased ||= hv.state==='chase';if(hv.state==='retreat'&&p.health===2)retreatBeforeHit=true;}
+    assert.ok(chased,`seed ${seed}: natural first sighting must become a hunt`);
+    if(flash) assert.ok(p.health<2||retreatBeforeHit,`seed ${seed}: the hunt attacks or is stopped by the close flashlight counter`);
+    else { assert.ok(p.health<2,`seed ${seed}: the unlit hunt must resolve into a damaging attack`); assert.equal(retreatBeforeHit,false); }
     assert.equal(sim.director.chasing,false,'a completed hit closes the director chase');
   }
 });
@@ -59,9 +60,9 @@ test('acquisition switches from a downed teammate to the living target',()=>{
   sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.sf.update=()=>{};sim.mimic.update=()=>{};
   old.state='downed';hv.target=old.id;
   const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
-  Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash:true});
+  Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash:false});
   hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
-  for(let t=0;t<8&&p.health===2;t+=.05)sim.step(.05);
+  for(let t=0;t<45&&p.health===2;t+=.05)sim.step(.05);
   assert.ok(p.health<2,'the living observer becomes the actual attack target');
 });
 

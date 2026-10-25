@@ -78,8 +78,11 @@ export const CONFIG = {
     // player's position every HUNT_TRACK_EVERY s. A hunt still ends when he lands a hit,
     // the target is downed/dead, or the target reaches the spawn area (he can't enter).
     // The client's hunt hum plays only within HUNT_HUM_RANGE of him.
-    HUNT_START_RANGE: 35, HUNT_CLOSE_TIMEOUT: 45,
+    HUNT_START_RANGE: 42, HUNT_CLOSE_TIMEOUT: 45,
     HUNT_BREAK_LIT_DIST: 2.13, HUNT_TRACK_EVERY: 2.5,
+    HUNT_PACE: [0.88, 1.18], HUNT_PACE_INTERVAL: [0.9, 2.3],
+    HUNT_CUTOFF_JITTER: [0.65, 1.25],
+    HUNT_PROWL_RANGE: [3.66, 4.57], HUNT_PROWL_TIME: [26, 34], // 12-15 ft for about 30 s before the final rush
     HUNT_LUNGE_DIST: 4,   // within this (clear line), the final lunge uses real collision, not the 2 m nav grid
     HUNT_STALL_TIME: 8,   // fail-safe: stuck (moved <1.5 m in 8 s, not in attack range) ends a hunt
     HUNT_HUM_RANGE: 50,
@@ -126,6 +129,8 @@ export const CONFIG = {
     CHECK_INTERVAL: 6, BASE_CHANCE: 0.08,          // per check, scaled by conditions
     MIN_DELAY: 2, MAX_DELAY: 55,                   // phrase age when replayed
     BEHIND_MIN: 15, BEHIND_MAX: 35,
+    HUNT_CHANCE: 0.58, HUNT_MIN_COOLDOWN: 45, HUNT_DELAY: [0.6, 2.0],
+    HUNT_DECOY_MIN: 16, HUNT_DECOY_MAX: 30,
     PHRASE_MIN: 0.9, PHRASE_MAX: 4.0, MAX_PHRASES: 6, PHRASE_TTL: 120,
     PITCH: 1.5,
   },
@@ -142,10 +147,15 @@ export const CONFIG = {
     ESCALATE_AGGRESSION: 0.35,// added to base aggression at full escalation
     // owner, Oct 25 midday: "far more active, like 2-3x" -> cooldowns/phase lengths roughly halved
     CHASE_COOLDOWN: [16, 8],  // s between chases: start -> full escalation
+    CHASE_COOLDOWN_JITTER: [0.65, 1.18], // bounded clusters/lulls keep hunt timing uncertain
     ATTACK_COOLDOWN: [14, 7],
     RELAX_LEN: [[16, 28], [8, 14]],   // relax phase length range: start -> full escalation
     BUILD_LEN: [[45, 80], [22, 40]],
     REVEAL_GAP: [[26, 45], [15, 30]],
+    REVEAL_RETRY: [6, 12], // failed/unseen plans retry soon; only perceived encounters earn the full gap
+    REVEAL_RESOLVE: 48,    // maximum time reserved for a requested appearance before another may be planned
+    SKUNK_REVEAL_CHANCE: 0.18, // Helium Voice remains the main source of deliberate appearances
+    GLIMPSES_BEFORE_HUNT: 1, GLIMPSE_HUNT_DELAY: [10, 28],
     PRESENCE_SAFE: [12, 4],  // s of safety before he deliberately comes closer
     VOCAL_MUL: [2, 3.5],
   },

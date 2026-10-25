@@ -9,7 +9,7 @@ import { NOTES } from '../../shared/sim/objectives.js';
 import { HV_STATES } from '../../shared/sim/heliumVoice.js';
 import { SF_STATES } from '../../shared/sim/skunk.js';
 import { clamp, lerp, smoothstep, pointAtDistance } from '../../shared/math.js';
-import { terrorAtDistance, horrorCues } from '../../shared/horror.js';
+import { terrorAtDistance, horrorCues, huntTerrorTarget } from '../../shared/horror.js';
 import { Renderer } from '../render/renderer.js';
 import { TextureBank } from '../render/textures.js';
 import { G } from '../render/shaderlib.js';
@@ -744,7 +744,7 @@ export class Game {
     let d = 1e9;
     if (hs && !(hs[7] & 8)) d = Math.hypot(hs[0] - pl.pos.x, hs[1] - pl.pos.y, hs[2] - pl.pos.z);
     this.hvDist = d;
-    let target = terrorAtDistance(d);
+    let target = huntTerrorTarget(terrorAtDistance(d), this._huntHum());
     if (this.myState === 'dead' || this.ended) target = 0;
     this.terror = target > this.terror ? Math.min(target, this.terror + dt * T.SMOOTH_IN) : Math.max(target, this.terror - dt * T.SMOOTH_OUT);
     const tr = this.terror;
