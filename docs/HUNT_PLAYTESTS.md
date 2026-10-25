@@ -71,8 +71,11 @@ their shoulder while running, which can also put the light on him.
   while closing in, hide and then resume the approach (up to 3 times)" gave
   **fewer** hunts (11 vs 15) and more abandoned approaches (19 of 27). Each
   resumed approach gives watchful players another chance to spot him.
-  Shortening the director's cooldown, or approaching from a flank instead of
-  from behind, are the remaining options.
+  An "ambush" variant was also tried and reverted (Oct 25, 08:50 UTC): get
+  ahead through cover and wait, concealed, for them to walk into range. It
+  produced 17 hunts versus 21 for the current approach from behind, and a
+  similar share of approaches were spotted (25 of 40 versus 29 of 52).
+  Shortening the director's cooldown is the main option left.
 - **Teach the counter:** the bots *know* the 7-ft trick, but real players
   won't. A hint in the kiosk memo or a found note ("it won't stand the light up
   close") would help.
