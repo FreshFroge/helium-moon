@@ -11,6 +11,9 @@ const SPECIES_BARK = ['oak', 'sycamore', 'cottonwood', 'elm', 'hackberry', 'elm'
 const BASE_HEIGHT = { oak: 18, sycamore: 22, cottonwood: 24, elm: 16, hackberry: 12, snag: 11, cedar: 9, sapling: 5 };
 const LEAF_TINT = { oak: 0xb4bea2, ash: 0xaebd9e, aspen: 0xc4b488, cedar: 0x88998c, bush: 0xa2b094 };
 const VARIANTS = 3;
+// From preset.treeShareLod on, every variant of a species draws variant 0's mesh (one
+// draw per species instead of three; rotation, lean and scale keep instances varied).
+// Low/Medium share from LOD1, High/Ultra only at the far LOD2.
 const CHUNK = 48;
 
 // One reused {start, count} per attribute: three.js only reads the range during upload
@@ -24,7 +27,7 @@ export function setRange(attr, n) {
 
 export class TreeSystem {
   constructor(world, bank, preset) {
-    this.world = world; this.preset = preset;
+    this.world = world; this.preset = preset; this.shareLod = preset.treeShareLod ?? 2;
     this.group = new THREE.Group(); this.group.name = 'trees';
     this.barkMats = {}; this.leafMats = {};
     for (const b of ['oak', 'sycamore', 'cottonwood', 'elm', 'hackberry', 'cedar']) this.barkMats[b] = this._barkMat(bank, b);
@@ -52,8 +55,7 @@ export class TreeSystem {
     this.n = n;
     this.archOf = new Uint16Array(n);
     this.mats = new Float32Array(n * 16);
-    // far LOD: every variant of a species shares variant 0's LOD2 mesh (one draw per
-    // species instead of three; at LOD2 distances the variants are indistinguishable)
+    // shared LODs (>= SHARED_LOD): every variant of a species uses variant 0's mesh
     this.farArchOf = new Uint16Array(n);
     this.farMats = new Float32Array(n * 16);
     this.pos = new Float32Array(n * 3);
@@ -79,7 +81,7 @@ export class TreeSystem {
     const caps = [preset.maxTrees * 0.25, preset.maxTrees, 1e9];
     for (const a of this.arch) {
       for (let l = 0; l < 3; l++) {
-        const cnt = l < 2 ? a.instances : (a.farInstances || 0);
+        const cnt = l < this.shareLod ? a.instances : (a.farInstances || 0);
         if (cnt === 0) { a.meshes[l] = null; continue; }
         const cap = Math.max(4, Math.min(cnt, Math.ceil(caps[l])));
         const lod = a.lods[l];
@@ -160,7 +162,7 @@ export class TreeSystem {
     const cx = camera.position.x, cz = camera.position.z;
     const mats = this.mats, pos = this.pos, archOf = this.archOf, farMats = this.farMats, farArchOf = this.farArchOf;
     let drawn = 0;
-    const sightOn = SIGHTLINE.on;
+    const sightOn = SIGHTLINE.on, SHARED_LOD = this.shareLod;
     for (let ci = 0; ci < chunks.length; ci++) {   // indexed + sqrt: no per-frame garbage
       const c = chunks[ci];
       const ex = (c.cx + 0.5) * CHUNK - cx, ez = (c.cz + 0.5) * CHUNK - cz;
@@ -177,10 +179,13 @@ export class TreeSystem {
         if (!inView && d > shadowR) continue;
         if (sightOn && blocksSight(pos[i * 3], pos[i * 3 + 2])) continue;
         let l = d < d0 ? 0 : d < d1 ? 1 : 2;
-        let mm = l < 2 ? arch[archOf[i]].meshes[l] : null;
-        if (mm && mm.count >= mm.cap) { l++; mm = l < 2 ? arch[archOf[i]].meshes[l] : null; if (mm && mm.count >= mm.cap) { l = 2; mm = null; } }
-        let srcM = mats;
-        if (l === 2) { mm = arch[farArchOf[i]].meshes[2]; srcM = farMats; if (mm.count >= mm.cap) continue; }
+        let mm = null, srcM = mats;
+        for (; l < 3; l++) {   // overflowing LOD sets spill to the next (coarser) one
+          const shared = l >= SHARED_LOD;
+          mm = (shared ? arch[farArchOf[i]] : arch[archOf[i]]).meshes[l]; srcM = shared ? farMats : mats;
+          if (mm && mm.count < mm.cap) break;
+        }
+        if (l >= 3 || !mm) continue;
         const arr = mm.bark.instanceMatrix.array;
         const o = mm.count * 16, src = i * 16;
         for (let j = 0; j < 16; j++) arr[o + j] = srcM[src + j];

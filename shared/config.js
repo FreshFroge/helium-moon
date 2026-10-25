@@ -139,8 +139,8 @@ export const CONFIG = {
 };
 
 export const QUALITY_PRESETS = {
-  low:    { label: 'Low',    renderScale: 0.7,  shadowMap: 1024, shadowDist: 40, treeLod0: 18, treeLod1: 45, treeFar: 220, grassDist: 22, bushDist: 40, msaa: 0, spotShadow: false, fogSteps: 6,  volumetric: false, maxTrees: 1600 },
-  medium: { label: 'Medium', renderScale: 0.85, shadowMap: 2048, shadowDist: 55, treeLod0: 26, treeLod1: 80, treeFar: 300, grassDist: 32, bushDist: 55, msaa: 2, spotShadow: true,  fogSteps: 8,  volumetric: true,  maxTrees: 2600 },
-  high:   { label: 'High',   renderScale: 1.0,  shadowMap: 2048, shadowDist: 70, treeLod0: 34, treeLod1: 100, treeFar: 380, grassDist: 42, bushDist: 70, msaa: 4, spotShadow: true,  fogSteps: 10, volumetric: true,  maxTrees: 3800 },
-  ultra:  { label: 'Ultra',  renderScale: 1.0,  shadowMap: 4096, shadowDist: 90, treeLod0: 45, treeLod1: 130, treeFar: 480, grassDist: 55, bushDist: 90, msaa: 4, spotShadow: true,  fogSteps: 14, volumetric: true,  maxTrees: 5200 },
+  low:    { label: 'Low',    renderScale: 0.7,  shadowMap: 1024, shadowDist: 40, treeLod0: 18, treeLod1: 45, treeFar: 220, grassDist: 22, bushDist: 40, msaa: 0, spotShadow: false, fogSteps: 6,  volumetric: false, maxTrees: 1600, treeShareLod: 1 },
+  medium: { label: 'Medium', renderScale: 0.85, shadowMap: 2048, shadowDist: 55, treeLod0: 26, treeLod1: 80, treeFar: 300, grassDist: 32, bushDist: 55, msaa: 2, spotShadow: true,  fogSteps: 8,  volumetric: true,  maxTrees: 2600, treeShareLod: 1 },
+  high:   { label: 'High',   renderScale: 1.0,  shadowMap: 2048, shadowDist: 70, treeLod0: 34, treeLod1: 100, treeFar: 380, grassDist: 42, bushDist: 70, msaa: 4, spotShadow: true,  fogSteps: 10, volumetric: true,  maxTrees: 3800, treeShareLod: 2 },
+  ultra:  { label: 'Ultra',  renderScale: 1.0,  shadowMap: 4096, shadowDist: 90, treeLod0: 45, treeLod1: 130, treeFar: 480, grassDist: 55, bushDist: 90, msaa: 4, spotShadow: true,  fogSteps: 14, volumetric: true,  maxTrees: 5200, treeShareLod: 2 },
 };
