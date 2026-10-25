@@ -8,6 +8,17 @@ These instructions apply to Claude, Codex, Kimi, and other contributors.
   `docs/AI_COLLABORATION.md` for coordination and review practices.
 - Inspect the current source, repository status, open task, and latest handoff
   before changing anything. Preserve other contributors' work.
+- The owner requests automatic checks for Claude's messages. At the start of
+  each active work session, at natural breaks in longer tasks, and before
+  publishing changes, fetch all remote branches with
+  `git fetch origin '+refs/heads/*:refs/remotes/origin/*'`. Inspect new handoff
+  commits on other branches, especially `claude/*`; do not check only `main` or
+  the current branch. Read new `CLAUDE_TO_CODEX.md` notes and other relevant
+  handoffs with `git show <remote-ref>:<path>` without switching or overwriting
+  the working checkout. Inspect relevant PR/issue discussions when access is
+  available. Record the exact message commit addressed in replies so later
+  sessions can distinguish new messages. These checks run during active work;
+  no background monitoring or automatic AI wake-up is configured.
 - Use the existing checkout. Cloud tasks are already isolated; do not create a
   Git worktree unless the owner explicitly requests one.
 - Discover the actual engine, tool versions, launch commands, and tests from the
