@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../../shared/math.js';
 
-const _e = new THREE.Euler(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q2 = new THREE.Quaternion();
+const _e = new THREE.Euler(), _aq = new THREE.Quaternion(), _aq2 = new THREE.Quaternion(), _sq = new THREE.Quaternion(), _v3 = new THREE.Vector3(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q2 = new THREE.Quaternion();
 const _chain = [], _wpQ = new THREE.Quaternion(), _wpV = new THREE.Vector3();   // scratch for wq()/wp() (not re-entrant)
 
 class Rig {
@@ -43,8 +43,8 @@ class Rig {
   }
   aim(bone, dir, twist = 0) {
     const P = bone.parent && bone.parent.isBone ? this.wq(bone.parent, _q2) : _q2.identity();
-    const W = new THREE.Quaternion().setFromUnitVectors(bone.userData.bindDir, _v.copy(dir).normalize());
-    if (twist) W.premultiply(new THREE.Quaternion().setFromAxisAngle(_v2.copy(dir).normalize(), twist));
+    const W = _aq.setFromUnitVectors(bone.userData.bindDir, _v.copy(dir).normalize());
+    if (twist) W.premultiply(_aq2.setFromAxisAngle(_v2.copy(dir).normalize(), twist));
     bone.quaternion.copy(P.invert()).multiply(W);
   }
   ik2(a, l1, l2, target, hint) {
@@ -87,8 +87,8 @@ export class HeliumAnimator {
   // complete segment, not the short first bone, so the solved ankle really lands
   // on its target instead of floating or cutting through the ground.
   _aimSegment(bone, bindDir, dir) {
-    const parent = bone.parent && bone.parent.isBone ? this.rig.wq(bone.parent) : new THREE.Quaternion();
-    const aim = new THREE.Quaternion().setFromUnitVectors(bindDir, dir.clone().normalize());
+    const parent = bone.parent && bone.parent.isBone ? this.rig.wq(bone.parent, _sq) : _sq.identity();
+    const aim = _aq.setFromUnitVectors(bindDir, _v3.copy(dir).normalize());
     bone.quaternion.copy(parent.invert()).multiply(aim);
   }
 
