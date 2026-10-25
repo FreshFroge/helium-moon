@@ -1,0 +1,122 @@
+{
+ "low": {
+  "trailhead_kiosk": {
+   "calls": 602,
+   "triangles": 1024377,
+   "programs": 48,
+   "geometries": 504,
+   "textures": 62
+  },
+  "deep_forest_trail": {
+   "calls": 525,
+   "triangles": 1021349,
+   "programs": 48,
+   "geometries": 639,
+   "textures": 63
+  },
+  "forest_side_view": {
+   "calls": 511,
+   "triangles": 1743123,
+   "programs": 48,
+   "geometries": 762,
+   "textures": 63
+  },
+  "river_bend": {
+   "calls": 532,
+   "triangles": 837883,
+   "programs": 48,
+   "geometries": 793,
+   "textures": 63
+  }
+ },
+ "medium": {
+  "trailhead_kiosk": {
+   "calls": 732,
+   "triangles": 2191153,
+   "programs": 48,
+   "geometries": 504,
+   "textures": 65
+  },
+  "deep_forest_trail": {
+   "calls": 664,
+   "triangles": 2041707,
+   "programs": 48,
+   "geometries": 660,
+   "textures": 65
+  },
+  "forest_side_view": {
+   "calls": 643,
+   "triangles": 3869129,
+   "programs": 48,
+   "geometries": 807,
+   "textures": 65
+  },
+  "river_bend": {
+   "calls": 630,
+   "triangles": 1710095,
+   "programs": 48,
+   "geometries": 845,
+   "textures": 65
+  }
+ },
+ "high": {
+  "trailhead_kiosk": {
+   "calls": 744,
+   "triangles": 3264223,
+   "programs": 48,
+   "geometries": 504,
+   "textures": 64
+  },
+  "deep_forest_trail": {
+   "calls": 653,
+   "triangles": 2712023,
+   "programs": 48,
+   "geometries": 660,
+   "textures": 64
+  },
+  "forest_side_view": {
+   "calls": 651,
+   "triangles": 5790075,
+   "programs": 48,
+   "geometries": 807,
+   "textures": 64
+  },
+  "river_bend": {
+   "calls": 684,
+   "triangles": 2762249,
+   "programs": 48,
+   "geometries": 845,
+   "textures": 64
+  }
+ },
+ "ultra": {
+  "trailhead_kiosk": {
+   "calls": 747,
+   "triangles": 5162105,
+   "programs": 48,
+   "geometries": 504,
+   "textures": 65
+  },
+  "deep_forest_trail": {
+   "calls": 681,
+   "triangles": 3861847,
+   "programs": 48,
+   "geometries": 678,
+   "textures": 65
+  },
+  "forest_side_view": {
+   "calls": 649,
+   "triangles": 9118477,
+   "programs": 48,
+   "geometries": 837,
+   "textures": 65
+  },
+  "river_bend": {
+   "calls": 696,
+   "triangles": 5004585,
+   "programs": 48,
+   "geometries": 890,
+   "textures": 65
+  }
+ }
+}
