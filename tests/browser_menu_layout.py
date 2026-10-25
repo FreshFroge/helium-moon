@@ -1,5 +1,6 @@
 """Exercise real menu DOM/UI/CSS without initializing the 3D world."""
 import os
+from pathlib import Path
 from playwright.async_api import async_playwright
 import browser_playthrough as harness
 
@@ -10,12 +11,12 @@ async def play(port):
             page=await browser.new_page()
             await page.route('**/client/main.js',lambda route:route.fulfill(body='',content_type='text/javascript'))
             await page.goto(f'http://localhost:{port}/')
-            await page.evaluate('''async()=>{
+            await page.evaluate('''async(archive)=>{
                 const {UI}=await import('/client/ui/ui.js'),{Settings}=await import('/client/core/settings.js');
-                window.HM_BUILD='test-build';window.ui=new UI(new Settings());ui.game={net:null};
+                if(!archive)window.HM_BUILD='test-build';window.ui=new UI(new Settings());ui.game={net:null};
                 document.querySelector('#loading').classList.add('hidden');ui.showMenu(true);
-            }''')
-            assert await page.locator('.build-id').text_content()=='Build test-build'
+            }''',bool(os.environ.get('HM_EXPECT_BUILD')))
+            assert await page.locator('.build-id').text_content()=='Build '+os.environ.get('HM_EXPECT_BUILD','test-build')
             for width,height in [(1440,900),(1024,768),(720,600),(390,844),(844,390)]:
                 await page.set_viewport_size({'width':width,'height':height})
                 for action in ['settings','controls','credits','multi']:
@@ -46,5 +47,6 @@ async def play(port):
         finally:
             await browser.close()
 if __name__=='__main__':
+    if os.environ.get('HM_TEST_REPO'):harness.ROOT=Path(os.environ['HM_TEST_REPO'])
     harness.play=play
     harness.main()

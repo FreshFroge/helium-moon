@@ -1,6 +1,7 @@
 // DOM user interface: main menu, settings (graphics, audio, microphone + mimicry
 // consent, controls/keybinds), multiplayer lobby, HUD, notes, pause and end screens.
 import { CONFIG, QUALITY_PRESETS } from '../../shared/config.js';
+import { BUILD_COMMIT } from '../build.js';
 import { BINDING_LABELS, DEFAULT_BINDINGS } from '../core/settings.js';
 import { WSTransport, defaultServerUrl } from '../net/transport.js';
 
@@ -25,9 +26,10 @@ export class UI {
       inventory: $('#inventory'), debug: $('#debug'), fade: $('#fade'), click: $('#click-to-play'),
     };
     this._extraDom();
-    if (typeof window.HM_BUILD === 'string' && window.HM_BUILD) {
+    const build = window.HM_BUILD || BUILD_COMMIT;
+    if (typeof build === 'string' && build && !build.startsWith('$Format:')) {
       const version=document.createElement('span');version.className='build-id';
-      version.textContent='Build '+window.HM_BUILD.slice(0,12);
+      version.textContent='Build '+build.slice(0,12);
       $('#menu-foot').append(version);
     }
     $('#menu-main').addEventListener('click', (e) => { const a = e.target.closest('button')?.dataset.act; if (a) this._menuAct(a); });
