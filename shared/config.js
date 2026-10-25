@@ -92,6 +92,8 @@ export const CONFIG = {
   },
 
   // ---------------------------------------------------------------- session
+  // Creature no-go zones (owner, Oct 25 2026): never in the spawn area (see shared/sim/zones.js)
+  ZONES: { SPAWN_RADIUS: 40, SPAWN_MARGIN: 12, SPAWN_PLAYERS: 6 },
   // Session pacing (owner, Oct 25 2026): dread builds longer before he shows himself, then
   // he grows steadily more aggressive as the night goes on.
   DIRECTOR: {

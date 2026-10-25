@@ -24,7 +24,7 @@ possible without waiting on each other:
 | 6 | Visibility vs rendered silhouette: AI concealment uses sampled LOS; check against what the player actually sees (leaf gaps) | AI files (Codex) | — |
 | 7 | **Owner decided:** he can attack at any time (including unseen); when on a player's screen he seeks concealment. See `docs/handoffs/OWNER_DECISIONS_2026-10-25.md` (task A) | `shared/sim/heliumVoice.js`, attack/encounter tests | Codex (proposed) |
 | 8b | Wire `director.minDistance()` / `director.escalation()` into Helium Voice movement (task D): first sighting ≥ ~4 min, pressure rising over the session | `shared/sim/heliumVoice.js` | Codex (proposed) |
-| 9 | **Owner decided:** he must never enter the spawn area (task B): Claude writes `shared/sim/zones.js` + `tests/zones.test.mjs`, Codex wires into both AIs | new `zones.js`, AI files | Claude + Codex |
+| 9 | **Owner decided:** creatures must never enter the spawn area (task B). `shared/sim/zones.js` is **ready** (zone r 40 m + 12 m margin around kiosk/gate/lot/cars/6 spawns, centre (554, 574)); Codex: wire `spawnZoneCost` into `planTo` costFns, reject goals/spots/lurk spots with `inSpawnZone(w,x,z,margin)`, use `pushOutOfSpawn` for chase targets inside the zone, then run `HM_ZONES_WIRED=1 node tests/zones.test.mjs` (currently fails: HV spent 3.7 s inside in a 10-min run) and drop the todo flag | `heliumVoice.js`, `skunk.js` | Codex |
 | 10 | Real WebRTC voice between different networks untested (cloud UDP policy); add an optional TURN relay config | `server/server.js` (welcome msg), `client/net/transport.js`, `client/audio/voice.js`, README | Claude |
 
 ## Done
