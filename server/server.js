@@ -89,7 +89,7 @@ function startGame(room) {
   if (room.timer) clearInterval(room.timer);
   const sim = new GameSim(world, { seed: (Math.random() * 2 ** 31) | 0, log });
   for (const m of room.members.values()) sim.addPlayer(m.id, m.name);
-  room.sim = sim; room.state = 'game'; room.tick = 0;
+  room.sim = sim; room.state = 'game'; room.tick = 0; room.mimicOk = new Map();
   broadcast(room, { t: 'start', info: sim.info() });
   log(`room ${room.code}: game started with ${room.members.size} players (seed ${sim.seed})`);
   let last = Date.now(), acc = 0;
@@ -97,6 +97,8 @@ function startGame(room) {
     const now = Date.now(); acc += Math.min(0.25, (now - last) / 1000); last = now;
     while (acc >= TICK) { sim.step(TICK); acc -= TICK; room.tick++; }
     const ev = sim.drainEvents();
+    for (const e of ev) if (e.type === 'mimic') room.mimicOk.set(e.mid, { owner: e.owner, t: Date.now() });
+    if (room.mimicOk.size > 32) for (const [k, v] of room.mimicOk) if (Date.now() - v.t > 15000) room.mimicOk.delete(k);
     if (ev.length) broadcast(room, { t: 'ev', ev });
     if (room.tick % SNAP_EVERY === 0) broadcast(room, { t: 'snap', s: sim.snapshot() });
     if (sim.state === 'won' || sim.state === 'lost') {
@@ -105,6 +107,31 @@ function startGame(room) {
       setTimeout(() => { if (room.state === 'game' && room.sim === sim) { room.state = 'ended'; broadcast(room, lobbyInfo(room)); } }, 1500);
     }
   }, 1000 * TICK);
+}
+
+// Fixed-window rate limit per connection and message kind. Generous for real play
+// (inputs at 20 Hz, ICE candidate bursts), but stops one client from flooding a lobby.
+const LIMITS = { in: [80, 1000], act: [30, 1000], chat: [6, 5000], sig: [300, 10000], voice_state: [10, 10000], bin: [4, 10000], lobby: [20, 10000] };
+function allow(member, kind) {
+  const [max, per] = LIMITS[kind] || [60, 1000], now = Date.now();
+  const b = member.rate[kind] || (member.rate[kind] = { n: 0, t: now });
+  if (now - b.t > per) { b.n = 0; b.t = now; }
+  return ++b.n <= max;
+}
+
+// Mimicry audio is only relayed when it answers a mimic event this server issued
+// to that same player in the last 15 s, once per event. Without this, a modified
+// client could make every teammate's game play arbitrary audio.
+const MIMIC_RELAY_MAX = 320000;   // 8 s of 16 kHz int16 plus header
+function mimicRelayAllowed(room, member, data) {
+  if (!room || !room.mimicOk || data.length < 8 || data.length > MIMIC_RELAY_MAX) return false;
+  const hl = data.readUInt32LE(0);
+  if (hl < 2 || hl > 2048 || 4 + hl > data.length) return false;
+  let head; try { head = JSON.parse(data.subarray(4, 4 + hl).toString('utf8')); } catch (e) { return false; }
+  const ok = head && head.k === 'mimic' && room.mimicOk.get(head.mid);
+  if (!ok || ok.owner !== member.id || Date.now() - ok.t > 15000) return false;
+  room.mimicOk.delete(head.mid);
+  return true;
 }
 
 function debugCmd(room, member, m) {
@@ -129,17 +156,21 @@ function leave(member) {
 }
 
 attachWebSocket(server, '/ws', (conn, req) => {
-  const member = { id: 'p' + (nextId++), name: 'Visitor', conn, room: null, ready: false, alive: true };
+  const member = { id: 'p' + (nextId++), name: 'Visitor', conn, room: null, ready: false, alive: true, rate: {} };
   send(conn, { t: 'welcome', id: member.id, version: VERSION, maxPlayers: CONFIG.NET.MAX_PLAYERS, iceServers: ICE_SERVERS });
   conn.on('message', (data, binary) => {
     if (binary) {
       // mimicry audio relay: [u32 header length][json header][pcm payload]
-      const room = member.room; if (!room || data.length > 600000 || data.length < 8) return;
+      const room = member.room;
+      if (!allow(member, 'bin') || !mimicRelayAllowed(room, member, data)) return;
       for (const m of room.members.values()) if (m !== member) m.conn.send(data);
       return;
     }
     let m; try { m = JSON.parse(data); } catch (e) { return; }
     const room = member.room;
+    if (!m || typeof m.t !== 'string') return;
+    const kind = ['create', 'join', 'leave', 'start', 'restart', 'to_lobby', 'hello'].includes(m.t) ? 'lobby' : m.t;
+    if (!allow(member, kind)) return;
     switch (m.t) {
       case 'hello': member.name = String(m.name || 'Visitor').replace(/[^\p{L}\p{N} _.'-]/gu, '').slice(0, 20) || 'Visitor'; break;
       case 'create': {

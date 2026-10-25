@@ -114,10 +114,24 @@ try {
   const meB = B.snap.pl.find((p) => p[0] === B.id);
   const dist = Math.hypot(mimic.x - meB[1], mimic.z - meB[3]);
   ok(dist > 8 && dist < 50, `mimic source ${dist.toFixed(1)} m from the listener`);
-  const buf = new Uint8Array(4000); buf.set([10, 0, 0, 0], 0);
-  B.ws.send(buf);
+  const clip = (mid, n = 4000) => { const head = new TextEncoder().encode(JSON.stringify({ k: 'mimic', mid, x: 0, y: 0, z: 0, sr: 16000 })); const b = new Uint8Array(4 + head.length + n); new DataView(b.buffer).setUint32(0, head.length, true); b.set(head, 4); return b; };
+  A.ws.send(clip(mimic.mid));                 // not the owner of this mimic event
+  B.ws.send(clip(mimic.mid + 999));           // owner, but an event the server never issued
+  const junk = new Uint8Array(4000); junk.set([10, 0, 0, 0], 0); B.ws.send(junk);
+  await sleep(300);
+  ok(A.bin.length === 0 && B.bin.length === 0, 'unsolicited / forged / non-owner audio is not relayed');
+  B.ws.send(clip(mimic.mid));
   await sleep(300);
   ok(A.bin.length === 1 && B.bin.length === 0, 'mimic audio relayed to teammates, not echoed back');
+  B.ws.send(clip(mimic.mid));
+  await sleep(300);
+  ok(A.bin.length === 1, 'each mimic event relays its audio only once');
+  // chat flood is capped
+  const before = A.msgs.filter((m) => m.t === 'chat').length;
+  for (let i = 0; i < 30; i++) B.send({ t: 'chat', text: 'spam ' + i });
+  await sleep(400);
+  const relayed = A.msgs.filter((m) => m.t === 'chat').length - before;
+  ok(relayed > 0 && relayed <= 6, `chat flood rate-limited (${relayed} of 30 relayed)`);
   B.send({ t: 'act', a: 'mimic_off' });
 
   // downed -> revive by teammate
