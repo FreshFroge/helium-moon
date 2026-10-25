@@ -20,12 +20,7 @@ possible without waiting on each other:
 | # | Issue / improvement | Area / likely files | Claimed |
 |---|---|---|---|
 | 3 | Run every existing browser suite (`browser_playthrough.py`, `browser_encounters.py`, `browser_ground_contacts.py`, `browser_menu_layout.py`, `browser_multiplayer.py`, `browser_sessions.py`) on a second machine and log failures/flakes here | tests only | Claude |
-| 15 | (Claude; part 1 done: terrain chunks 64→128 m cut 150–190 draws on every preset; next: tree LOD/caps and tree shadow casting on Low) Low preset still draws ~1.0–1.7 M triangles and 510–600 draw calls per frame at trail views (medium ~2.2 M): likely too heavy for integrated GPUs. Investigate tree/foliage caps and LOD distances for Low | `shared/config.js` presets, `client/render/trees.js`, `foliage.js` | — |
-| 6 | Visibility vs rendered silhouette: AI concealment uses sampled LOS; check against what the player actually sees (leaf gaps) | AI files + new browser silhouette probe | Codex |
-| 7 | **Owner decided:** he can attack at any time (including unseen); when on a player's screen he seeks concealment. See `docs/handoffs/OWNER_DECISIONS_2026-10-25.md` (task A) | `shared/sim/heliumVoice.js`, attack/encounter tests | Codex (proposed) |
-| 8b | Wire `director.minDistance()` / `director.escalation()` into Helium Voice movement (task D): first sighting ≥ ~4 min, pressure rising over the session | `shared/sim/heliumVoice.js` | Codex (proposed) |
-| 9 | **Owner decided:** creatures must never enter the spawn area (task B). `shared/sim/zones.js` is **ready** (zone r 40 m + 12 m margin around kiosk/gate/lot/cars/6 spawns, centre (554, 574)); Codex: wire `spawnZoneCost` into `planTo` costFns, reject goals/spots/lurk spots with `inSpawnZone(w,x,z,margin)`, use `pushOutOfSpawn` for chase targets inside the zone, then run `HM_ZONES_WIRED=1 node tests/zones.test.mjs` (currently fails: HV spent 3.7 s inside in a 10-min run) and drop the todo flag | `heliumVoice.js`, `skunk.js` | Codex |
-| 10 | Real WebRTC voice between different networks untested (cloud UDP policy); add an optional TURN relay config | `server/server.js` (welcome msg), `client/net/transport.js`, `client/audio/voice.js`, README | Claude |
+| 15 | (Claude; part 1 done: terrain chunks 64→128 m cut 150–190 draws on every preset; next: tree LOD/caps and tree shadow casting on Low) Low preset still draws ~1.0–1.7 M triangles and 510–600 draw calls per frame at trail views (medium ~2.2 M): likely too heavy for integrated GPUs. Investigate tree/foliage caps and LOD distances for Low | `shared/config.js` presets, `client/render/trees.js`, `foliage.js` | Claude |
 
 ## Done
 
@@ -45,3 +40,7 @@ possible without waiting on each other:
 | 12 | Restart/quit cancel unsent chat and release movement focus; failing-before actual multiplayer fixture now passes | Codex; browser_sessions.py |
 | 13 | Ground-contact screenshot receives a separate 120 s artifact timeout; contact assertions unchanged, local browser pass; second-machine confirmation pending | Codex; browser_ground_contacts.py |
 | 4 | Pickup fixture stability: collision settling prevented a transient prompt from being mistaken for a stable approach; 12 seeds / 24 pickups pass, full gameplay passes | Codex; browser_pickup_glints.py and browser_playthrough.py |
+| 6 | Align configured standing/crouched camera origins and audit actual rig silhouettes against world depth at three low-preset trail sites, with positive render controls | Codex; camera_perception.test.mjs / browser_silhouette.py; broader pose/quality coverage remains limited |
+| 7 | Unseen attacks allowed, on-screen pursuit seeks cover outside contact; owner clarification task A | Codex; Node and actual-browser hits/escapes; reviewed by Claude at abbe980 |
+| 8b | Director hooks drive movement; opening paths preserve separation; unseen repositioning no longer keeps director in recovery | Codex; 16-session route check plus controlled 0-to-3 chase before/after profile; review requested |
+| 9 | Both creatures stay outside spawn: goals, full/fallback routes, direct lunges and body-padded movement segments; protected focus fallback | Codex; mandatory ten-minute zones test, no TODO, full npm suite |

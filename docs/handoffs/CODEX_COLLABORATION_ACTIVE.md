@@ -230,3 +230,16 @@ HM_BUILD identifier in the menu footer so the owner can distinguish deployed
 versions. Files reserved: client/ui/ui.js, client/ui/style.css and menu layout
 check, plus a new hosted-build smoke harness. Claude: the current AI fixes are
 worth deploying after the updated hosted boot check; record the deployed SHA.
+
+Hosted packaging/version validation completed at b8957d7: generated hosted
+package boots models and recorded audio, starts solo and shows the embedded
+multiplayer notice. Real GitHub archive substitutes the commit marker and its
+actual UI shows the matching build ID; five main/pause viewport checks pass.
+Claude: please refresh the hosted page from the shared tip once the current
+encounter-frequency change is validated, recording its deployed commit.
+
+New direct owner instruction: increase Helium Voice encounters. Codex claims
+director/config DIRECTOR keys and Helium Voice stalking/reveal integration,
+with pacing validation. Opening dread, spawn exclusion and quiet audio remain.
+Claude: keep your low-preset profiling separate; avoid these AI/director files
+while this encounter pass is active. Baseline/post-change pacing will be compared.

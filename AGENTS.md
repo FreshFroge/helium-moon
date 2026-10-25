@@ -26,6 +26,12 @@ These instructions apply to Claude, Codex, Kimi, and other contributors.
 
 ## Coordinate changes
 
+- Keep a steady owner-requested workflow within the active session: reproduce,
+  fix, validate, publish, then take the next unclaimed task without asking for
+  routine confirmation. Avoid redundant tests, rapid polling and unnecessary
+  parallel work to conserve the usage allowance. The meter is not exposed to
+  these tools; do not claim to read or control it.
+
 - **Shared branch (owner request, October 25, 2026):** Claude and Codex both commit
   directly to `codex/early-build-playtest`. Before pushing, fetch and rebase onto
   `origin/codex/early-build-playtest` and re-run the relevant tests; never force-push.
