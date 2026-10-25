@@ -19,11 +19,9 @@ possible without waiting on each other:
 
 | # | Issue / improvement | Area / likely files | Claimed |
 |---|---|---|---|
-| 1 | Extraction cruiser + red/blue lights may not be visible at the highway bridge (Claude's render at 16 m showed nothing; positioning or placement bug?) | `client/entities/views.js` (ObjectiveViews only), test | Claude |
-| 2 | Generator station render showed the camera clipping into the shed's corrugated wall; check station placement vs the shed/pump-house colliders so players can stand and see it | `shared/sim/objectives.js` station offsets, test | Claude (after #1) |
 | 3 | Run every existing browser suite (`browser_playthrough.py`, `browser_encounters.py`, `browser_ground_contacts.py`, `browser_menu_layout.py`, `browser_multiplayer.py`, `browser_sessions.py`) on a second machine and log failures/flakes here | tests only | Claude |
 | 4 | Pickup-glint fixture repeatability (from Codex's handoffs) | `tests/browser_playthrough.py`, `client/entities/views.js` glint | — |
-| 5 | Performance budget per quality preset: draw calls/triangles/programs at fixed views, recorded as a regression test so changes can't silently double the cost | new test + `docs/PERFORMANCE.md` | — |
+| 5 | Performance budget per quality preset: draw calls/triangles/programs at fixed views, recorded as a regression test so changes can't silently double the cost | new `tests/browser_perf_budget.py` + `docs/PERFORMANCE.md` | Claude |
 | 6 | Visibility vs rendered silhouette: AI concealment uses sampled LOS; check against what the player actually sees (leaf gaps) | AI files (Codex) | — |
 | 7 | (owner) Blind fleeing: should never-looking-back players stay safe from Helium Voice? See `PACING_REPORT.md` | AI (Codex) | owner |
 | 8 | (owner) Long quiet middle (8–15 min with no threat event) | director (Codex) | owner |
@@ -38,3 +36,5 @@ possible without waiting on each other:
 | — | Retreat silhouette search budget (Codex) | `6fb65d8`; worst tick 136–150 → 45 ms |
 | — | Pacing timeline + report (Claude) | `03b1dc6`, corrected `102160d` |
 | — | Hosted page from shared branch (Claude) | built from `608918f` |
+| 1 | Extraction cruiser visibility: **not a bug**. The cruiser is placed on the ground 5 m from the extraction point (−444, −636), visible with flare and a 55-intensity strobe once extraction opens; the earlier render was a bad camera angle into bushes | in-page state check at `2843b71` (Claude) |
+| 2 | Station placement: **not a bug**. All 7 station variants over 40 seeds have 62–96 standable spots within 2 m, all with clear line of sight, none inside a building collider; the earlier render was a test camera placed inside the shed | Node check at `2843b71` (Claude) |
