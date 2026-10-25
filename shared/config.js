@@ -136,7 +136,10 @@ export const CONFIG = {
     COLLAPSE_MIN: 1.2, COLLAPSE_GONE_AFTER: 0.3, COLLAPSE_AWAY: [35, 70], COLLAPSE_MAX: 25,
     // In the grass (rare ambush): while closing in he may instead lie flat beside the trail
     // ahead (LIE_AHEAD m along it, LIE_OFF m off it) and unfold when they come within LIE_WAKE.
-    LIE_CHANCE: 0.3, LIE_COOLDOWN: 240, LIE_AHEAD: [55, 75], LIE_OFF: [1.6, 3.2], LIE_WAKE: 4.5, LIE_TIMEOUT: 60, RISE_TIME: 1.1,
+    // A lie may only occupy dense grass/cover: it must read as a shape in the undergrowth,
+    // never a body laid on bare trail dirt.
+    LIE_CHANCE: 0.3, LIE_COOLDOWN: 240, LIE_AHEAD: [55, 75], LIE_OFF: [3.8, 6.2], LIE_WAKE: 6.5, LIE_TIMEOUT: 60, RISE_TIME: 1.1,
+    LIE_MIN_GRASS: 3, LIE_MIN_COVER: 0.28,
   },
   SF: {
     MODEL_SCALE: 0.6,               // keep the creature low and partially concealed in undergrowth

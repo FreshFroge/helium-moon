@@ -57,6 +57,13 @@ export class HeliumView {
     });
     this.root = this.char.root; this.root.visible = false;
     scene.add(this.root);
+    // While prone in foliage, dull the material so a flashlight catches a vague shape rather
+    // than a bright human-shaped target.  Restore the exact authored colours before he rises.
+    this.lieMaterials = [];
+    for (const mesh of Object.values(this.char.meshes)) {
+      const material = mesh.material;
+      if (material?.color) this.lieMaterials.push({ material, color: material.color.clone() });
+    }
     this.anim = new HeliumAnimator(this.char);
     this.head = this.char.bones.head;
     this.pos = new THREE.Vector3(); this.state = 0; this.flags = 8; this.speed = 0; this.yaw = 0;
@@ -87,6 +94,8 @@ export class HeliumView {
     this.moved = prev.distanceTo(this.pos);
     // whole-body tip about his feet: goes limp (falls forward), lying flat, the plank rise
     const collapse = !!(flags & 256), prone = !!(flags & 512), rise = !!(flags & 1024);
+    const concealedLie = prone && !rise;
+    for (const entry of this.lieMaterials) entry.material.color.copy(entry.color).multiplyScalar(concealedLie ? 0.42 : 1);
     if (rise) { this.riseT = (this.riseT ?? 0) + step; } else this.riseT = null;
     let tipTo = 0;
     if (collapse || prone) tipTo = Math.PI / 2 * 0.97;

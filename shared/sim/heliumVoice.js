@@ -987,16 +987,21 @@ export class HeliumVoiceAI {
     this.lieTryAt = sim.time + 2;
     const info = w.trailInfo(tp.x, tp.z), here = pointAtDistance(w.trail, w.trailCum, info.along);
     const sgn = tp.moveDir[0] * Math.sin(here.dir) + tp.moveDir[1] * Math.cos(here.dir) >= 0 ? 1 : -1;
-    let best = null, bestG = -1;
-    for (let k = 0; k < 10; k++) {
+    let best = null, bestScore = -Infinity;
+    // Search broadly enough that declining an exposed patch simply cancels the scare.
+    // A visible lie is worse than no lie: its purpose is a delayed double-take.
+    for (let k = 0; k < 24; k++) {
       const along = info.along + sgn * rng.range(C.LIE_AHEAD[0], C.LIE_AHEAD[1]);
       if (along < 0 || along > w.trailLength) continue;
       const q = pointAtDistance(w.trail, w.trailCum, along), side = rng() < 0.5 ? -1 : 1, off = rng.range(C.LIE_OFF[0], C.LIE_OFF[1]);
       const left = q.dir - Math.PI / 2, x = q.x + Math.sin(left) * off * side, z = q.z + Math.cos(left) * off * side;
       if (!w.navWalkable(x, z) || !this.openingClear(x, z) || !this.outsideSpawn(x, z)) continue;
       if (!this.unseenSpot(x, z)) continue;
-      const g = this.grassAt(x, z);
-      if (g > bestG) { bestG = g; best = [x, z, q]; }
+      const grass = this.grassAt(x, z), cover = w.sampleGrid(w.gCover, x, z);
+      if (grass < C.LIE_MIN_GRASS || cover < C.LIE_MIN_COVER) continue;
+      // Prefer dense grass and brush, then a little extra distance from the trail.
+      const score = grass * 1.6 + cover * 5 + off * 0.2;
+      if (score > bestScore) { bestScore = score; best = [x, z, q]; }
     }
     if (!best) return false;
     const [x, z, q] = best, fx = this.x, fz = this.z;
