@@ -12,9 +12,10 @@ async def play(port):
             await page.goto(f'http://localhost:{port}/')
             await page.evaluate('''async()=>{
                 const {UI}=await import('/client/ui/ui.js'),{Settings}=await import('/client/core/settings.js');
-                window.ui=new UI(new Settings());ui.game={net:null};
+                window.HM_BUILD='test-build';window.ui=new UI(new Settings());ui.game={net:null};
                 document.querySelector('#loading').classList.add('hidden');ui.showMenu(true);
             }''')
+            assert await page.locator('.build-id').text_content()=='Build test-build'
             for width,height in [(1440,900),(1024,768),(720,600),(390,844),(844,390)]:
                 await page.set_viewport_size({'width':width,'height':height})
                 for action in ['settings','controls','credits','multi']:

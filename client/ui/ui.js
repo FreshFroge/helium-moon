@@ -25,6 +25,11 @@ export class UI {
       inventory: $('#inventory'), debug: $('#debug'), fade: $('#fade'), click: $('#click-to-play'),
     };
     this._extraDom();
+    if (typeof window.HM_BUILD === 'string' && window.HM_BUILD) {
+      const version=document.createElement('span');version.className='build-id';
+      version.textContent='Build '+window.HM_BUILD.slice(0,12);
+      $('#menu-foot').append(version);
+    }
     $('#menu-main').addEventListener('click', (e) => { const a = e.target.closest('button')?.dataset.act; if (a) this._menuAct(a); });
     $('#pause').addEventListener('click', (e) => { const a = e.target.closest('nav button')?.dataset.act; if (a) this._pauseAct(a); });
     $('#end').addEventListener('click', (e) => { const a = e.target.closest('button')?.dataset.act; if (a) this._endAct(a); });

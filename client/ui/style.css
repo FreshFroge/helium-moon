@@ -34,7 +34,7 @@ code { font-family: var(--mono); font-size: 0.9em; color: var(--accent2); }
 .menu-list button::before { content: ''; position: absolute; left: -22px; top: 50%; width: 10px; height: 1px; background: var(--accent); opacity: 0; transition: opacity 0.2s, width 0.2s; }
 .menu-list button:hover, .menu-list button.active { color: #fff; transform: translateX(4px); }
 .menu-list button:hover::before, .menu-list button.active::before { opacity: 1; width: 14px; }
-.menu-foot { position: absolute; left: clamp(20px, 7vw, 110px); bottom: 28px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--dim); text-transform: uppercase; }
+.menu-foot { display: flex; flex-wrap: wrap; gap: 6px 20px; position: absolute; left: clamp(20px, 7vw, 110px); bottom: 28px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--dim); text-transform: uppercase; }
 
 .menu-panel { position: absolute; right: clamp(16px, 5vw, 80px); top: 50%; transform: translateY(-50%); width: min(560px, calc(100vw - 32px)); max-height: 82vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); padding: 26px 30px 30px; backdrop-filter: blur(6px); }
 .menu-panel h2 { font-family: var(--serif); font-weight: 400; font-size: 30px; margin: 0 0 14px; letter-spacing: 0.04em; }
