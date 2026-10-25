@@ -343,6 +343,8 @@ export class Game {
       // unseen relocation: his footsteps simply stop for a moment (the tell), then
       // resume from wherever he is now. No visual effect, by design.
       case 'hv_relocate': this._hvQuietUntil = performance.now() + 2500; break;
+      // "the forest holds its breath" (docs/SCARE_RESEARCH.md C1): he is closing in near here
+      case 'hush': if (this._near(pos, 80)) { this._hushUntil = performance.now() + 7000; this._hushRelease = 4 + Math.random() * 5; } break;
       case 'chase':
         this.chasing = !!e.on;
         break;
@@ -401,6 +403,15 @@ export class Game {
     return this._humOn;
   }
 
+  // 1 while the wildlife around this player is holding its breath: for a few seconds after a
+  // hush, and for as long as he stays close or a hunt is on. Released slowly (audio side).
+  _hush() {
+    if (!this._hushUntil || this.mode !== 'playing') return 0;
+    const now = performance.now(), close = this.hv && this.hv.pos.distanceTo(this.player.pos) < 45;
+    if (now < this._hushUntil || this.chasing || close) { if (now >= this._hushUntil) this._hushUntil = now + 1500; return 1; }
+    this._hushUntil = 0; return 0;
+  }
+
   _near(p, d) { return p && Math.hypot(p.x - this.player.pos.x, p.z - this.player.pos.z) < d; }
 
   _canSee(p) {
@@ -456,7 +467,7 @@ export class Game {
     else this._menuCamera(dt);
     this.env.update(gameplayDt, this.camera, 0);
     this.audio.setListener(this.camera);
-    this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, hunt: this._huntHum(), huntNear: this.hv ? clamp(1 - this.hv.pos.distanceTo(this.player.pos) / 40, 0, 1) : 0, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
+    this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, hunt: this._huntHum(), hush: this._hush(), hushRelease: this._hushRelease || 6, huntNear: this.hv ? clamp(1 - this.hv.pos.distanceTo(this.player.pos) / 40, 0, 1) : 0, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
     const meP = this.player.pos;
     this.voice.update(dt, {
       ptt: this.mode === 'playing' && !this.input.textFocus && this.input.down('talk'), inGame: this.mode === 'playing',

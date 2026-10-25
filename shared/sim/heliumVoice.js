@@ -475,6 +475,7 @@ export class HeliumVoiceAI {
               this.closeReplanT = 2.5;
             }
             this.followPath(dt, (d > 60 ? C.RELOCATE : C.STALK * 1.3) * (1 + .15 * escalation));
+            this.maybeHush(tp, d);
             break;
           }
         }
@@ -674,6 +675,20 @@ export class HeliumVoiceAI {
     this.closeCommitted = true;
     this.sim.director.onChaseStart(p);
     this.vocal('scream', true);
+  }
+
+  // "The forest holds its breath" (SCARE_RESEARCH C1): once per closing-in attempt, inside
+  // HUSH_DIST, the wildlife around the hunted player goes quiet. Silence is a threat signal
+  // that isn't a warning sound. A deterministic hash (not this.rng) skips ~HUSH_SKIP of
+  // attempts, so this cosmetic cue never changes his decisions.
+  maybeHush(tp, d) {
+    const co = this.closingOn;
+    if (!co || d > C.HUSH_DIST || this.hushFor === co.t) return;
+    this.hushFor = co.t;
+    let h = Math.imul((co.t * 1000) | 0, 2654435761) ^ (this.sim.seed | 0);
+    h = Math.imul(h ^ (h >>> 15), 2246822519); h ^= h >>> 13;
+    if (((h >>> 0) % 1000) / 1000 < C.HUSH_SKIP) return;
+    this.sim.emit({ type: 'hush', pid: tp.id, x: +this.x.toFixed(1), z: +this.z.toFixed(1) });
   }
 
   // Unseen relocation ("teleport", owner Oct 25; OWNER_DECISIONS_2026-10-25b): he vanishes

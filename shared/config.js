@@ -86,6 +86,10 @@ export const CONFIG = {
     // per hunt), or while closing in on a player more than RELOCATE_AHEAD_TRIGGER m away.
     RELOCATE_COOLDOWN: [150, 60], RELOCATE_AHEAD: [35, 60], RELOCATE_MIN_DIST: 12,
     RELOCATE_CUTOFF_UNSEEN: 4, RELOCATE_AHEAD_TRIGGER: 70,
+    // "The forest holds its breath" (docs/SCARE_RESEARCH.md C1): when he closes in on a
+    // player inside HUSH_DIST, the night ambience around them goes quiet. Skipped on about
+    // HUSH_SKIP of approaches so silence is never a guaranteed tell.
+    HUSH_DIST: 55, HUSH_SKIP: 0.25,
   },
   SF: {
     MODEL_SCALE: 0.6,               // keep the creature low and partially concealed in undergrowth

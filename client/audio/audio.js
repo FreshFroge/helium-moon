@@ -284,9 +284,15 @@ export class AudioEngine {
     Object.assign(this.state, st);
     const terr = st.terror || 0;
     const cues = horrorCues(terr);
-    // Background insects remain independent of enemy proximity.
+    // Background insects stay independent of enemy *distance*. They only fall silent when he
+    // is actually closing in on someone nearby ("the forest holds its breath", SCARE_RESEARCH
+    // C1): ~2 s to near-silence, then a slow, uneven return once the threat has passed.
     const insects = cues.insects * (st.menu ? 0.6 : 1);
-    this.setLoopGain(this.loops.crickets, 0.27 * insects, 0.6);
+    const hushed = st.hush ? 1 : 0;
+    if (this.hushLevel === undefined) this.hushLevel = 0;
+    if (hushed !== this.hushLevel) { this.hushLevel = hushed; this.setLoopGain(this.loops.crickets, 0.27 * insects * (hushed ? 0.06 : 1), hushed ? 0.6 : (st.hushRelease || 6)); }
+    else if (!hushed) this.setLoopGain(this.loops.crickets, 0.27 * insects, this.hushReleaseT > t ? (st.hushRelease || 6) : 0.6);
+    if (hushed) this.hushReleaseT = t + 4 * (st.hushRelease || 6);
     const rd = w ? w.riverDistAt(L.x, L.z) : 100;
     this.setLoopGain(this.loops.river, 0.55 * Math.pow(clamp(1 - rd / 75, 0, 1), 2), 0.5);
     this.setLoopGain(this.loops.wind, 0.36 + 0.14 * Math.sin(t * 0.13), 0.8);
