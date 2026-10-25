@@ -49,8 +49,6 @@ export class HeliumVoiceAI {
   place(x, z) { if (!this.outsideSpawn(x,z)) return false; this.x = x; this.z = z; this.y = groundAt(this.world, x, z); this.path = null; this.finalGoal = null; }
 
   setState(s, info) {
-    // lost them: sometimes he calls out ("Where are you?"), as a person would (voiceLines.js)
-    if (s === 'search' && (this.state === 'stalk' || this.state === 'chase')) this.say('lost_target');
     this.state = s; this.stateT = 0; this.path = null; this.goal = null; this.finalGoal = null;
     if (s !== 'chase') this.closeCommitted = false;
     if (info) Object.assign(this, info);
@@ -407,7 +405,7 @@ export class HeliumVoiceAI {
     // out of his sight, light off, still and quiet for HIDE_TIME s - he loses them and goes limp.
     const lostBy = this.state === 'chase' && !this.grab && tp ? this.updateHide(dt, tp) : null;
     if (lostBy) {
-      this.say('lost_target'); this.noteTactic(lostBy.id, 'hide');
+      this.noteTactic(lostBy.id, 'hide');
       sim.emit({ type: 'hv_lost', pid: lostBy.id, x: +this.x.toFixed(2), y: +this.y.toFixed(2), z: +this.z.toFixed(2) });
       const grace = C.HIDE_GRACE[sim.playerList.filter(playerActive).length <= 1 ? 0 : 1];
       lostBy.hideGraceUntil = sim.time + grace;
@@ -434,7 +432,6 @@ export class HeliumVoiceAI {
           const cover = this.world.sampleGrid ? this.world.sampleGrid(this.world.gCover, this.x, this.z) : 0;
           const peek = od > 12 && cover > 0.3 ? 1 + (this.rng() < 0.5 ? 1 : 0) : 0;
           this.freeze = { start: sim.time, end: sim.time + this.rng.range(r[0], r[1]) * (deliberate ? 0.8 : 1), pid: observer.p.id, peek, seen: sim.time };
-          this.say('watched');
         }
         this.freeze.seen = sim.time;
         if (sim.time < this.freeze.end) {
@@ -610,6 +607,7 @@ export class HeliumVoiceAI {
         // Looking back at him (owner): each fresh look freezes him for a beat, then he comes on
         // upright with dead arms. Unwatched he runs low, on all fours (operated).
         const seenByTarget = this.observers.some((o) => o.p.id === tp.id);
+        const hiding = (this.hide?.t || 0) > 0;
         if (seenByTarget && !this.lbWatched && sim.time >= this.lbNext && d > C.LOOKBACK_MIN_DIST) {
           this.lbUntil = sim.time + this.rng.range(C.LOOKBACK_FREEZE[0], C.LOOKBACK_FREEZE[1]);
           this.lbNext = this.lbUntil + C.LOOKBACK_GAP;
@@ -633,31 +631,6 @@ export class HeliumVoiceAI {
           if (cutBase < C.RELOCATE_CUTOFF_UNSEEN) this.usedCounter(tp.id, 'sprint');
           this.huntRelocated = true; this.huntUnseenT = 0; this.huntStall = null; this.replanT = 0;
           this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
-        }
-        // Once he reaches the player, prowl a 12-15 ft ring before the strike.
-        // The timer advances only while he is truly close; running makes him
-        // catch up. A player can still charge into the seven-foot light counter.
-        const pd = this.dist(tp), [prowlMin, prowlMax] = C.HUNT_PROWL_RANGE;
-        // Puppet: the final rush comes when they are not looking - at the end of the prowl he
-        // keeps circling (up to HUNT_PROWL_WAIT s) while they watch him
-        const prowlEnd = (this.huntProwlFor ?? 0) + (seenByTarget ? C.HUNT_PROWL_WAIT : 0);
-        const hiding = (this.hide?.t || 0) > 0;
-        if (!hiding && Number.isFinite(this.huntProwlFor) && this.huntProwlT < prowlEnd && pd <= prowlMax + 1) {
-          this.huntProwlT += dt;
-          this.huntStall = null; // circling is intentional movement, never a stuck-hunt failure
-          this.huntOrbitAt = (this.huntOrbitAt || 0) - dt;
-          if (!this.path || this.huntOrbitAt <= 0) {
-            const bearing = Math.atan2(this.x - tp.x, this.z - tp.z);
-            const a = pd < prowlMin ? bearing : bearing + this.huntOrbitDir * this.rng.range(0.45, 0.8);
-            const r = pd < prowlMin ? prowlMax : this.rng.range(prowlMin, prowlMax);
-            const x = tp.x + Math.sin(a) * r, z = tp.z + Math.cos(a) * r;
-            if (this.world.navWalkable(x, z) && this.openingClear(x, z)) this.planTo(x, z, 'direct');
-            this.huntOrbitAt = this.rng.range(0.9, 1.6);
-          }
-          anim.run = 0.2; anim.still = 0.35; if (!watched) anim.low = 1;
-          if (this.path) this.followPath(dt, C.WALK * 1.15);
-          else this.stop(dt);
-          break;
         }
         // hearing keeps the chase going when sight is lost (sprinting is loud)
         if (this.stimulus && this.stimulus.pid === tp.id && sim.time - this.stimulus.t < 0.2) this.lastSeenChase = { x: this.stimulus.x, z: this.stimulus.z, t: sim.time - 0.5 };
@@ -841,15 +814,11 @@ export class HeliumVoiceAI {
     this.huntPace = this.rng.range(...C.HUNT_PACE);
     this.huntPaceAt = this.sim.time + this.rng.range(...C.HUNT_PACE_INTERVAL);
     this.huntCutMul = this.rng.range(...C.HUNT_CUTOFF_JITTER);
-    this.huntProwlFor = this.rng.range(...C.HUNT_PROWL_TIME); this.huntProwlT = 0;
-    this.huntOrbitDir = this.rng() < 0.5 ? -1 : 1; this.huntOrbitAt = 0;
     this.hide = { t: 0 };
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time }; this.windup = null; this.lingerUntil = null; this.grab = null; this.lbWatched = false; this.lbNext = this.sim.time + 0.4;
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
     this.sim.director.onChaseStart(p);
-    // usually the nonverbal cry; sometimes his own voice: "There you are." (Codex voice direction)
-    if (this.say('hunt_start', { force: true })) { this.vocalT = this.sim.time; this.sim.director.onVocal(); } else this.vocal('scream', true);
   }
 
   // ---- the grab (owner, Puppet rework): replaces the swing. Survive two; the third kills.
@@ -867,7 +836,6 @@ export class HeliumVoiceAI {
     }
     this.grab = { kind, phase: 'reach', t: sim.time, pid: tp.id, around };
     this.anim.grab = 1;
-    this.vocalT = sim.time; sim.director.onVocal();   // the scream rides on the hv_attack event
     sim.emit({ type: 'hv_attack', phase: 'reach', kind, pid: tp.id, x: +this.x.toFixed(2), z: +this.z.toFixed(2) });
   }
 
@@ -901,7 +869,6 @@ export class HeliumVoiceAI {
       g.stand = [px + Math.sin(a) * C.GRAB_STAND, pz + Math.cos(a) * C.GRAB_STAND];
       sim.emit({ type: 'hv_attack', phase: 'grab', kind: g.kind, pid: tp.id, dur: g.dur,
         x: +this.x.toFixed(2), z: +this.z.toFixed(2), px: +px.toFixed(2), pz: +pz.toFixed(2) });
-      this.say('hit', { force: true });
       return;
     }
     this.stop(dt);
@@ -1063,7 +1030,7 @@ export class HeliumVoiceAI {
   usedCounter(pid, kind) {
     const k = pid + ':' + kind;
     if ((this.counterSaid ||= new Set()).has(k)) return;
-    this.counterSaid.add(k); this.say('repeated_counter');
+    this.counterSaid.add(k);
   }
 
   // "The forest holds its breath" (SCARE_RESEARCH C1): once per closing-in attempt, inside
@@ -1205,18 +1172,12 @@ export class HeliumVoiceAI {
     const r = this.rng;
     const rate = dir.vocalRate(this.state, d);
     if (r() > rate * dt) return;
-    if (this.state === 'stalk' || this.state === 'watch') kind = r.pick(d < 30 ? ['whisper', 'breath', 'giggle', 'inhale', 'hum'] : ['whisper', 'hum', 'fragment', 'laugh']);
-    else if (this.state === 'roam' || this.state === 'search') kind = r.pick(d > 70 ? ['call', 'call', 'cry', 'fragment'] : ['hum', 'fragment', 'laugh', 'whisper']);
-    else if (this.state === 'retreat') kind = r.pick(['giggle', 'laugh', 'breath']);
+    if (this.state === 'stalk' || this.state === 'watch') kind = r.pick(['breath', 'inhale', 'hum']);
+    else if (this.state === 'roam' || this.state === 'search') kind = 'hum';
+    else if (this.state === 'retreat') kind = 'breath';
     else if (this.state === 'freeze') kind = r.chance(0.5) ? 'inhale' : null;
-    // spoken words go out as server-chosen lines (his recorded + cloned voice): calls from
-    // far off ("Hello?", "Where are you?"), mumbled ordinary chatter closer in
-    if ((kind === 'call' || kind === 'fragment' || kind === 'laugh') && this.say(d > 45 ? 'lost_target' : 'chatter')) { this.vocalT = sim.time; dir.onVocal(); return; }
     if (kind) this.vocal(kind);
   }
-
-  // a spoken line in his own voice (server-chosen id; see shared/sim/voiceLines.js)
-  say(context, opts) { return this.sim.voice ? this.sim.voice.say(context, { x: this.x, y: this.y + EYE, z: this.z }, opts) : null; }
 
   vocal(kind, force = false) {
     const sim = this.sim;

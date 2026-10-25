@@ -391,12 +391,11 @@ export class Game {
       // a real animal: deer bolting from the brush or an owl lifting off (SCARE_RESEARCH X4)
       case 'wildlife': if (this.wildlife && this._near(pos, 90)) this.wildlife.spawn(e, this.player.pos); break;
       case 'hv_vocal': if (this._near(pos, CONFIG.HV.FOOTSTEP_MAX_DISTANCE) && this._canSee(pos)) { A.hvVocal(e.k, e.s, pos); this.voice.suppress(2); } break;
-      case 'hv_line': A.hvLine(e.id, pos, e.seq || 0); this.voice.suppress(2.5); break;
-      // the grab (Puppet rework): he screams as he reaches, takes hold, lets go
+      case 'hv_line': break;
+      // the grab is silent apart from body contact and nearby environmental sound
       case 'hv_attack': {
         const at = { x: e.x, y: this.world.heightAt(e.x, e.z) + 1.7, z: e.z }, k = e.seq || 0;
         if (e.phase === 'reach' || e.phase === 'windup') {
-          A.hvScream(at, k);
           if (this._near(at, 12)) { this.player.shake = Math.max(this.player.shake, 0.6); this.voice.suppress(3); }
         } else if (e.phase === 'grab') {
           A.at('cloth' + (k % 2), at, { bus: 'mon', gain: 1.4, ref: 2, reverb: 0.05 });

@@ -71,14 +71,12 @@ test('hunts sample bounded changes in pursuit pace and unseen cutoff timing', ()
   assert.ok(Math.max(...intervals)-Math.min(...intervals)>.5,'cadence duration varies across hunts');
 });
 
-test('a hunt prowls within twelve to fifteen feet for about thirty seconds before attacking',()=>{
+test('a hunt does not circle within twelve to fifteen feet before attacking',()=>{
   const {sim,p,hv}=fixture(4.2,31);p.flash=false;
   hv.startChase(p);
-  for(let t=0;t<25;t+=.05)sim.step(.05);
-  assert.equal(p.health,MAXH,'the prowl is threatening without an early strike');
-  assert.ok(hv.huntProwlT>=24,'nearby prowl time accumulates in the ring');
-  for(let t=0;t<15&&p.health===MAXH;t+=.05)sim.step(.05);
-  assert.ok(p.health<MAXH,'the completed prowl resolves into the final attack');
+  for(let t=0;t<12&&p.health===MAXH;t+=.05)sim.step(.05);
+  assert.ok(p.health<MAXH,'a close hunt commits to its attack instead of orbiting the target');
+  assert.equal(hv.huntProwlT,undefined,'no close-range prowl timer remains');
 });
 
 test('fail-safe: a hunt on a target he cannot reach ends instead of running forever', () => {
@@ -97,8 +95,7 @@ test('fail-safe: a hunt on a target he cannot reach ends instead of running fore
   hv.startChase(p);
   let ended = null;
   for (let t = 0; t < 60 && ended == null; t += 0.05) { sim.step(0.05); for (const e of sim.drainEvents()) if (e.type === "chase" && !e.on) ended = t; }
-  // the Puppet prowl (+ its wait for them to look away) comes first, then the fail-safe
-  assert.ok(ended != null && ended < CONFIG.HV.HUNT_PROWL_TIME[1] + CONFIG.HV.HUNT_PROWL_WAIT + CONFIG.HV.HUNT_STALL_TIME + 6, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
+  assert.ok(ended != null && ended < CONFIG.HV.HUNT_STALL_TIME + 8, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
   assert.equal(sim.director.chasing, false);
 });
 

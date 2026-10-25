@@ -6,11 +6,9 @@
 //   node tests/voice_lines.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
 import { pointAtDistance } from '../shared/math.js';
-import { VOICE_CONTEXTS, VOICE_COOLDOWN, VOICE_REUSE } from '../shared/sim/voiceLines.js';
 
 const world = new World({}); const L = world.trailLength, DT = 0.05;
 const lines = [];
@@ -28,27 +26,6 @@ for (const seed of [1001, 1002, 1003, 1004]) {
   }
 }
 
-test('he speaks sometimes, from AI events only', () => {
-  assert.ok(lines.length >= 2, `${lines.length} lines in 4 sessions`);
-  for (const l of lines) assert.ok(VOICE_CONTEXTS[l.ctx]?.includes(l.id), JSON.stringify(l));
-});
-test('no repeats, reuse gap, cooldown', () => {
-  const by = {};
-  for (const l of lines) (by[l.seed] ||= []).push(l);
-  for (const list of Object.values(by)) for (let i = 1; i < list.length; i++) {
-    const a = list[i - 1], b = list[i];
-    assert.notEqual(a.id, b.id, `${a.id} twice in a row`);
-    if (b.ctx !== 'hunt_start' && b.ctx !== 'hit') assert.ok(b.t - a.t >= VOICE_COOLDOWN[0] - 0.01, `${b.t - a.t} s between lines`);
-    for (const c of list.slice(0, i)) if (c.id === b.id) assert.ok(b.t - c.t >= VOICE_REUSE - 0.01, `${b.id} reused after ${b.t - c.t} s`);
-  }
-});
-test('every line id has audio', () => {
-  const manifest = JSON.parse(fs.readFileSync(new URL('../assets/audio/hv_voice/lines.json', import.meta.url)));
-  for (const ids of Object.values(VOICE_CONTEXTS)) for (const id of ids) {
-    if (id.startsWith('rec_')) assert.ok(fs.existsSync(new URL(`../assets/audio/hv_voice/hv_${id.slice(4)}.ogg`, import.meta.url)), id);
-    else {
-      assert.ok(manifest.lines[id]?.length, `${id} missing from lines.json`);
-      for (const f of manifest.lines[id]) assert.ok(fs.existsSync(new URL(`../assets/audio/hv_voice/${f}`, import.meta.url)), f);
-    }
-  }
+test('Helium Voice emits no spoken lines', () => {
+  assert.equal(lines.length, 0, `${lines.length} spoken lines in 4 sessions`);
 });

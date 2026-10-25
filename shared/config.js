@@ -92,8 +92,6 @@ export const CONFIG = {
     HIDE_TIME: 6, HIDE_STILL: 0.6, HIDE_NOISE: 6, HIDE_MIN_DIST: 2.5, HIDE_LEARNED: 1.5, HIDE_GRACE: [45, 25],
     HUNT_PACE: [0.88, 1.18], HUNT_PACE_INTERVAL: [0.9, 2.3],
     HUNT_CUTOFF_JITTER: [0.65, 1.25],
-    HUNT_PROWL_RANGE: [3.66, 4.57], HUNT_PROWL_TIME: [26, 34], // 12-15 ft for about 30 s before the final rush
-    HUNT_PROWL_WAIT: 6,   // Puppet: at the end of the prowl he waits (<= this long) for them to look away before rushing
     HUNT_LUNGE_DIST: 4,   // within this (clear line), the final lunge uses real collision, not the 2 m nav grid
     HUNT_STALL_TIME: 8,   // fail-safe: stuck (moved <1.5 m in 8 s, not in attack range) ends a hunt
     HUNT_HUM_RANGE: 50,
