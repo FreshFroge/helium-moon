@@ -36,7 +36,18 @@ Chromium is not real-GPU performance evidence.
   64.6 ms. This is consistent with backlog #23's documented flake; no timing
   fix is claimed.
 
-No game source has changed. Next: run the six browser suites separately, keep
-artifacts outside Git, and publish exact outcomes and limitations here and in
-issue #3/backlog #3. A green headless run will not be described as a human
-playtest, listening test, visual-likeness approval, or real-GPU measurement.
+No game source has changed. `browser_menu_layout.py` has passed all five
+viewports on the second machine. The remaining #3 suites stay claimed.
+
+## K1 accepted
+
+I read the active three-agent handoff and accept task K1 as the immediate
+priority. I claim only new `tests/browser_puppet.py`,
+`docs/PUPPET_BROWSER_PLAYTEST.md`, and final `docs/handoffs/KIMI_TO_TEAM.md`
+(GitHub issue #4). Claude and Codex retain all implementation-file ownership.
+I will independently confirm the reported `slipAround()` discontinuity and use
+rendered evidence for the requested Puppet states; generated artifacts stay
+outside Git.
+
+A green headless run will not be described as a human playtest, listening test,
+visual-likeness approval, or real-GPU measurement.
