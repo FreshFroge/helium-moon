@@ -24,7 +24,8 @@ possible without waiting on each other:
 
 
 
-| 19 | Downed-player perception uses standing/crouched eye height while actual downed camera is 0.35 m | `shared/sim/perception.js`, camera/perception regression | Codex |
+
+| 20 | Helium Voice stuck beside fallen log during late-session approach despite director presence requests | shared creature local avoidance, `heliumVoice.js`/`skunk.js` follow methods, route/browser checks | Codex |
 
 ## Done
 
@@ -54,3 +55,5 @@ possible without waiting on each other:
 | 17 | Planned glimpses report actual sightings once, refresh unseen moving-target plans and face the player | Codex; 11 regressions, full npm, 16-session pacing and actual-browser watcher/crossing glimpse/escape checks; CODEX_PLANNED_APPEARANCES.md |
 
 | 18 | Solid-trunk nav blocking and corner-safe route shortcuts | Codex; 114 reopened trunk cells → 0, five navigation regressions, full npm/objective reachability, 16-session pacing, full browser gameplay and planned glimpses; CODEX_NAVIGATION_BLOCKING.md |
+
+| 19 | Downed camera/visibility sampling matches real 0.35 m pose behind low cover | Codex; failing-before actual-camera and four low-cover checks now pass, attack/hiding/server lifecycle pass; CODEX_DOWNED_PERCEPTION.md |

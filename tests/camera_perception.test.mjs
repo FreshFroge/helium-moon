@@ -15,3 +15,11 @@ for(const crouch of [false,true]){
     `AI eye origin must match the real settled ${crouch?'crouched':'standing'} camera`);
 }
 console.log('  ok  authoritative eye origin matches actual standing/crouched camera');
+
+controller.downed=1;
+for(const crouch of [false,true]){
+  controller.crouch=crouch?1:0;controller._camera(0,0);
+  assert.ok(Math.abs(camera.position.y-controller.pos.y-eyeHeight({state:'downed',crouch}))<1e-6,
+    'authoritative eye origin must match the actual downed camera');
+}
+console.log('  ok  authoritative eye origin matches actual downed camera');

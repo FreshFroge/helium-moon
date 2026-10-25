@@ -3,7 +3,7 @@
 import { CONFIG } from '../config.js';
 import { clamp, angleDiff } from '../math.js';
 
-export const eyeHeight = (p) => (p.crouch ? CONFIG.PLAYER.CROUCH_HEIGHT : CONFIG.PLAYER.HEIGHT) - 0.1;
+export const eyeHeight = (p) => p.state==='downed' ? .35 : (p.crouch ? CONFIG.PLAYER.CROUCH_HEIGHT : CONFIG.PLAYER.HEIGHT) - 0.1;
 export const playerAlive = (p) => p.state === 'alive' || p.state === 'downed';
 export const playerActive = (p) => p.state === 'alive';
 export const playerFwd = (p) => [-Math.sin(p.yaw), -Math.cos(p.yaw)];
@@ -72,7 +72,8 @@ export function sightOf(world, m, eh, lookYaw, p, cfg) {
     const a = Math.atan2(dx, dz); // monster convention: facing = (sin yaw, cos yaw)
     if (Math.abs(angleDiff(lookYaw, a)) > (cfg.SIGHT_FOV_DEG * Math.PI / 360)) return 0;
   }
-  const los = world.lineOfSight(m.x, m.y + eh, m.z, p.x, p.y + (p.crouch ? 0.8 : 1.2), p.z, { brushK: 0.26 });
+  const targetHeight=p.state==='downed' ? eyeHeight(p) : (p.crouch ? .8 : 1.2);
+  const los = world.lineOfSight(m.x, m.y + eh, m.z, p.x, p.y + targetHeight, p.z, { brushK: 0.26 });
   return los * Math.pow(1 - d / range, 0.5);
 }
 
