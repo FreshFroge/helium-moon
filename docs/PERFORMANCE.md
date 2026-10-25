@@ -78,3 +78,9 @@ Same profiler, Low, no rendering: **96 → 63 KB/frame.**
   a hole-sifting heap, and cheaper cost functions. Over 3 × 12 min of play, plan
   p99 went from 16.4 to 4.2 ms and ticks over 25 ms from 7 to 1. That matters in
   single-player, where the sim shares the main thread.
+- Sim allocations (Node sampling profiler, 4000 ticks): **138 → 21 KB per tick.**
+  `queryColliders` de-duplicated with a `Set` that re-grew its hash table on
+  every call, and its output array was cleared with `length = 0`, which dropped
+  the backing store. It now uses per-query stamp arrays and in-place writes,
+  with the same results in the same order. That garbage was triggering old-space
+  collections of 250–400 MB in `sim.test`.

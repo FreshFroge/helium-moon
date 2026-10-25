@@ -794,15 +794,24 @@ export class World {
   }
 
   queryColliders(x, z, r, out = []) {
-    out.length = 0;
+    // overwrite in place and trim once at the end (length = 0 would drop the backing store)
+    let n = 0;
     const cell = this.colCell;
-    const seen = this._seen || (this._seen = new Set()); seen.clear();
+    // de-duplicate with a per-query stamp instead of a Set: Set.clear()+add re-grew its
+    // hash table on every call (~115 KB of garbage per sim tick)
+    if (!this._colStamp) { this._colStamp = [new Uint32Array(this.circles.length), new Uint32Array(this.segs.length), new Uint32Array(this.boxes.length)]; this._colSeq = 0; }
+    const st = this._colStamp, seq = ++this._colSeq;
     for (let gz = Math.floor((z - r) / cell); gz <= Math.floor((z + r) / cell); gz++)
       for (let gx = Math.floor((x - r) / cell); gx <= Math.floor((x + r) / cell); gx++) {
         const a = this.colGrid.get(gx * 73856093 ^ gz * 19349663);
         if (!a) continue;
-        for (const ref of a) if (!seen.has(ref)) { seen.add(ref); out.push(ref); }
+        for (let k = 0; k < a.length; k++) {
+          const ref = a[k], kind = ref < 100000 ? 0 : ref < 200000 ? 1 : 2, idx = ref - kind * 100000;
+          if (st[kind][idx] === seq) continue;
+          st[kind][idx] = seq; out[n++] = ref;
+        }
       }
+    if (out.length !== n) out.length = n;
     return out;
   }
 
