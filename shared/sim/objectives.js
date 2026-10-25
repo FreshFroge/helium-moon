@@ -63,7 +63,7 @@ export class Objectives {
     this.items.push({ id: 'fuel', kind: 'fuel', name: 'Gas can', ...fuelSpot, holder: null });
     const fuseSpot = take((s) => s.label !== 'kiosk' && s.label !== 'car');
     this.items.push({ id: 'fuse', kind: 'fuse', name: 'Orange fuse kit', ...fuseSpot, holder: null });
-    for (let k = 0; k < 5; k++) { const s = take((s) => s.label === 'trail') || take(() => true); if (s) this.items.push({ id: 'bat' + k, kind: 'battery', name: 'Batteries', ...s, holder: null }); }
+    for (let k = 0; k < 5; k++) { const s = take((s) => s.label === 'trail') || take(() => true); if (s) this.items.push({ id: 'bat' + k, kind: 'battery', name: 'Spare lighter', ...s, holder: null }); }
     // notes: the maintenance memo always sits on the kiosk; three of the others are scattered
     const kiosk = w.structures.find((o) => o.type === 'kiosk');
     const kp = stationAt('kiosk', 0, 0.45);

@@ -303,12 +303,10 @@ export class ObjectiveViews {
       const lab = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.08), new THREE.MeshStandardMaterial({ map: makeTextTexture([{ text: 'FUSE KIT', font: 'bold 44px Inter' }], { w: 256, h: 96, bg: '#efe9db', fg: '#222' }) }));
       lab.rotation.x = -Math.PI / 2; lab.position.y = 0.111; g.add(lab);
     } else if (it.kind === 'battery') {
-      for (let k = 0; k < 2; k++) {
-        const c = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.06, 10), k ? X.black : X.gold);
-        c.rotation.z = Math.PI / 2; c.position.set(0, 0.018, k * 0.04 - 0.02); g.add(c);
-        const c2 = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.03, 10), k ? X.gold : X.black);
-        c2.rotation.z = Math.PI / 2; c2.position.set(0.045, 0.018, k * 0.04 - 0.02); g.add(c2);
-      }
+      // a spare disposable lighter lying on its side
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.012, 0.068), new THREE.MeshStandardMaterial({ color: 0x1d5c8c, roughness: 0.45 }));
+      body.position.y = 0.006; g.add(body);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.011, 0.012), X.grey); top.position.set(0, 0.006, 0.04); g.add(top);
     } else if (it.kind === 'note') {
       const n = NOTES.find((q) => q.id === it.note);
       const lines = (n ? n.text : '').split('\n').slice(0, 7).map((t) => ({ text: t.length > 34 ? t.slice(0, 33) + '…' : t, font: 'italic 19px "Cormorant Garamond", Georgia, serif', lh: 1.4 }));
@@ -374,16 +372,17 @@ export class ObjectiveViews {
   }
 
   update(dt, time, flash) {
-    // retro-reflective glints when the beam sweeps across an item
+    // glints: an item's shiny parts catch your lighter's flame when you are close and facing it
+    const R = flash?.range || 32;
     for (const it of this.items.values()) {
       if (it.held) continue;
       let k = 0;
       if (flash && flash.on) {
         const dx = it.def.x - flash.pos.x, dy = it.y + 0.15 - flash.pos.y, dz = it.def.z - flash.pos.z;
         const d = Math.hypot(dx, dy, dz);
-        if (d < 32 && d > 0.6) {
+        if (d < R && d > 0.6) {
           const c = (dx * flash.dir.x + dy * flash.dir.y + dz * flash.dir.z) / d;
-          k = clamp((c - 0.93) / 0.05, 0, 1) * clamp(1 - d / 32, 0, 1) * flash.k;
+          k = clamp((c - (flash.range ? 0.5 : 0.93)) / (flash.range ? 0.4 : 0.05), 0, 1) * clamp(1 - d / R, 0, 1) * flash.k;
           k *= 0.55 + 0.45 * Math.sin(time * 9 + it.def.x);
         }
       }

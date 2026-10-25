@@ -109,7 +109,7 @@ test('nearby enemies do not damage through an occluding wall',()=>{
   assert.equal(p.health,MAXH);
 });
 
-for (const separation of [6,10]) for (const state of ['prowl','investigate']) test(`skunk at ${separation} m commits to a close ambush from ${state} under a flashlight`,()=>{
+for (const separation of [3,6]) for (const state of ['prowl','investigate']) test(`skunk at ${separation} m commits to a close ambush from ${state} in the lighter's light`,()=>{
   const {sim,p,actor}=encounter('sf',separation);
   p.flash=true;
   p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));

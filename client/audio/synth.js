@@ -256,6 +256,34 @@ export function choke(seed) {
   return fade(normalize(filter(v, 'lp', 900, 0.7, SR), 0.6), SR, 0.02, 0.2);
 }
 
+// the lighter (owner: the flashlight is a small lighter now)
+// flint wheel: a fast ratchety scratch; `catch` adds the soft whump of the flame taking
+export function lighterStrike(seed, catchFlame = true) {
+  const r = rngFor(seed), out = new Float32Array(N(catchFlame ? 0.55 : 0.25));
+  const grains = r.int(9, 14);
+  for (let k = 0; k < grains; k++) {
+    const s0 = N(k * 0.006 + r.range(0, 0.004)), len = N(0.004);
+    const nz = filter(noise(len, r), 'bp', r.range(3000, 6500), 1.2, SR);
+    for (let i = 0; i < len; i++) out[s0 + i] += nz[i] * (1 - k / grains) * r.range(0.5, 1);
+  }
+  const sp = N(0.05), spark = filter(noise(sp, r), 'hp', 5000, 0.7, SR);
+  for (let i = 0; i < sp; i++) out[N(0.06) + i] += spark[i] * Math.exp(-i / SR * 70) * 0.5;
+  if (catchFlame) {
+    const len = N(0.4), body = filter(filter(noise(len, r), 'lp', 900, 0.7, SR), 'hp', 80, 0.7, SR);
+    for (let i = 0; i < len; i++) out[N(0.09) + i] += body[i] * env(i / SR, 0.03, 0.12) * 0.9;
+  }
+  return fade(normalize(out, 0.8), SR, 0.001, 0.05);
+}
+// letting go of the gas button: a small click and the flame's last breath
+export function lighterRelease(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(0.25));
+  const len = N(0.012), c = filter(noise(len, r), 'bp', 2200, 2, SR);
+  for (let i = 0; i < len; i++) out[i] += c[i] * Math.exp(-i / SR * 300);
+  const pf = N(0.15), puff = filter(noise(pf, r), 'lp', 700, 0.7, SR);
+  for (let i = 0; i < pf; i++) out[N(0.01) + i] += puff[i] * env(i / SR, 0.01, 0.04) * 0.5;
+  return fade(normalize(out, 0.6), SR, 0.001, 0.05);
+}
+
 export function coyotes(seed) {
   const r = rngFor(seed), dur = 5.5, out = new Float32Array(N(dur));
   for (let v = 0; v < 4; v++) {

@@ -85,11 +85,11 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(set.fov, window.innerWidth / window.innerHeight, 0.06, 2600);
     this.scene.add(this.camera);
     this.player = new PlayerController(world, this.camera, set);
-    this.flashlight = new Flashlight(this.scene, preset);
+    this.flashlight = new Flashlight(this.scene, preset, this.camera);
     this.remoteLights = [];
     for (let i = 0; i < REMOTE_LIGHTS; i++) {
-      const L = new THREE.SpotLight(0xfff1dc, 0, 40, THREE.MathUtils.degToRad(26), 0.3, 1.6);
-      this.scene.add(L); this.scene.add(L.target); this.remoteLights.push(L);
+      const L = new THREE.PointLight(0xffa54d, 0, CONFIG.FLASHLIGHT.RANGE, 2);   // teammates' lighters
+      this.scene.add(L); this.remoteLights.push(L);
     }
     this.input = new Input(this.canvas, set);
     this.input.onLockChange = (locked) => this._onLockChange(locked);
@@ -463,7 +463,7 @@ export class Game {
         const it = this.info.layout.items.find((i) => i.id === e.id);
         this.objViews.setHeld(e.id, true);
         if (e.pid === this.myId) {
-          if (e.kind === 'battery') { this.flashlight.addBattery(CONFIG.FLASHLIGHT.BATTERY_PICKUP); A.ui('clink', 0.6); this.ui.toast('Fresh batteries.', 2000); }
+          if (e.kind === 'battery') { this.flashlight.addBattery(CONFIG.FLASHLIGHT.BATTERY_PICKUP); A.ui('clink', 0.6); this.ui.toast('A spare lighter. More fuel.', 2000); }
           else if (e.kind === 'note') { A.ui('paper', 0.8); const n = NOTES.find((q) => q.id === e.note); if (n) { this.notesRead.push(n.id); this.reading = n; this.ui.showNote(n); } }
           else { A.ui('clink', 0.7); this.ui.toast(e.kind === 'fuel' ? 'Picked up the gas can.' : 'Picked up the fuse kit.', 3000); }
         } else if (it && e.kind !== 'battery') this.ui.toast(`${this._name(e.pid)} found ${e.kind === 'note' ? 'a note' : it.name.toLowerCase()}.`, 3000);
@@ -583,7 +583,7 @@ export class Game {
     const vis = (this._mt % 70) < 52;
     this.hv.update(dt, [fx, w.heightAt(fx, fz), fz, Math.atan2(p.x - fx, p.z - fz), Math.atan2(p.x - fx, p.z - fz), 0, 0, vis ? 4 : 12, 0.25, 0, 10]);
     this.sf.update(dt, null);
-    this.flashlight.light.intensity = 0;
+    this.flashlight.light.intensity = 0; this.flashlight.model.visible = false;
     for (const L of this.remoteLights) L.intensity = 0;
     this.terror = 0.12; this.cold = 0; this.fear = 0;
     G.uTerror.value = 0.1; G.uCold.value = 0;
@@ -599,7 +599,7 @@ export class Game {
     const typing = inp.textFocus;
     if (active && !typing) {
       if (inp.hitCode('Escape') && !inp.locked) this.pause(true);
-      if (inp.hit('flashlight') && this.myState === 'alive' && !this._grab) { this.flashlight.toggle(); A.ui(this.flashlight.on ? 'clickOn' : 'clickOff', 0.5); }
+      if (inp.hit('flashlight') && this.myState === 'alive' && !this._grab) { const r = this.flashlight.toggle(this.rushK || 0); A.ui(r === 'on' ? 'lighterOn' : r === 'off' ? 'lighterOff' : 'lighterSpark', 0.55); }
       if (inp.hit('chat') && this.net.networked) this.ui.openChat((text) => { if (text) this.net.send({ t: 'chat', text }); });
       if (inp.hitCode('F3')) this.ui.toggleDebug();
       if (this.settings.devMode) {
@@ -679,13 +679,13 @@ export class Game {
     fl.update(dt, this.camera, this.terror, { walkBob, gas: this.gasFx, off: dead, rush: this._rush(dt) });
     this.wildlife.update(dt, this.camera.position, { on: fl.on && fl.light.intensity > 5, pos: fl.light.position, dir: fl.dir, k: fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY });
     this.objViews.update(dt, this.sessionT, {
-      on: fl.on, pos: fl.light.position, dir: fl.dir,
+      on: fl.on, pos: fl.light.position, dir: fl.dir, range: CONFIG.FLASHLIGHT.RANGE * 2,
       k: fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY,
     });
     this.breath.update(dt);
     // eye/camera adaptation: a beam landing on something close floods the view, so exposure drops
     const lit = fl.on && fl.light.intensity > 5 && !dead;
-    const expT = lit ? clamp(Math.pow(this._beamDistance() / 7.5, 1.3), 0.16, 1) : 1;
+    const expT = lit ? 0.85 : 1;   // a small flame near your eyes: a little less dark-adapted, no beam to flood the view
     this.exposure += (expT - this.exposure) * (1 - Math.exp(-dt * (expT < this.exposure ? 5 : 1.1)));
     const sawAnomaly = this.anomaly.update(dt, this.camera, this.terror);
     if (sawAnomaly && !this._anomShown) { this._anomShown = true; }
@@ -744,9 +744,7 @@ export class Game {
         const hp = a.handPos(this._v2 || (this._v2 = new THREE.Vector3()));
         const cp = Math.cos(a.pitch);
         L.position.copy(hp);
-        L.target.position.set(hp.x - Math.sin(a.lightYaw) * cp * 10, hp.y + Math.sin(a.pitch) * 10, hp.z - Math.cos(a.lightYaw) * cp * 10);
-        L.target.updateMatrixWorld();
-        L.intensity = CONFIG.FLASHLIGHT.INTENSITY * 0.8;
+        L.intensity = CONFIG.FLASHLIGHT.INTENSITY * (0.82 + 0.1 * Math.sin(performance.now() * 0.023 + lightIdx * 2) + 0.06 * Math.sin(performance.now() * 0.041));
       }
     }
     for (; lightIdx < this.remoteLights.length; lightIdx++) this.remoteLights[lightIdx].intensity = 0;
@@ -771,7 +769,7 @@ export class Game {
   _grabStart(e) {
     const pl = this.player;
     // his hand closes on you and your light dies: it clicks off and stays off until you turn it back on
-    if (this.flashlight.on) { this.flashlight.on = false; this.audio.ui('clickOff', 0.7); }
+    if (this.flashlight.on) { this.flashlight.on = false; this.audio.ui('lighterOff', 0.7); }
     this._grab = { kind: e.kind, t: 0, dur: e.dur || 1.6, from: { x: pl.pos.x, z: pl.pos.z }, to: { x: e.px ?? pl.pos.x, z: e.pz ?? pl.pos.z } };
     pl.vel.set(0, 0, 0);
     pl.shake = Math.max(pl.shake, e.kind === 'final' ? 1 : 0.75);
@@ -1046,7 +1044,7 @@ export class Game {
       u.uFlashPos.value.copy(fl.light.position);
       u.uFlashDir.value.copy(fl.dir);
       u.uFlashCos.value.set(Math.cos(fl.light.angle), Math.cos(fl.light.angle * (1 - fl.light.penumbra)));
-      u.uFlashI.value = fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY;
+      u.uFlashI.value = 0;   // no beam in the haze: it's a lighter
       u.uFlashRange.value = fl.light.distance;
       const playing = this.mode === 'playing' || this.mode === 'ended';
       u.uExposure.value = playing ? this.exposure : 1;

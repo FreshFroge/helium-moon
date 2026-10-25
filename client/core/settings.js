@@ -12,7 +12,7 @@ export const DEFAULT_BINDINGS = {
 export const BINDING_LABELS = {
   forward: 'Move forward', back: 'Move back', left: 'Strafe left', right: 'Strafe right',
   sprint: 'Sprint', crouch: 'Crouch', crouchAlt: 'Crouch (alt)', jump: 'Jump', interact: 'Interact / revive',
-  flashlight: 'Flashlight', inventory: 'Objectives & notes', chat: 'Text chat', talk: 'Push to talk',
+  flashlight: 'Lighter', inventory: 'Objectives & notes', chat: 'Text chat', talk: 'Push to talk',
 };
 
 const DEFAULTS = {

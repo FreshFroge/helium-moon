@@ -73,7 +73,7 @@ export class HeliumVoiceAI {
     const d = this.sim.director?.minDistance?.() || 0;
     // Stay beyond the simulation's lit visibility range, while still entering
     // the outer cold ring. This does not hide the rendered character.
-    return d > 0 ? Math.max(d, CONFIG.FLASHLIGHT.RANGE + 18) : 0;
+    return d > 0 ? Math.max(d, 70) : 0;   // was flashlight range + 18 (70 m); kept when the light became a lighter
   }
   openingClear(x, z) {
     const distance = this.openingDistance();

@@ -4,8 +4,8 @@ import { CONFIG } from '../config.js';
 import { clamp, angleDiff } from '../math.js';
 
 export const eyeHeight = (p) => p.state==='downed' ? .35 : (p.crouch ? CONFIG.PLAYER.CROUCH_HEIGHT : CONFIG.PLAYER.HEIGHT) - 0.1;
-export const playerAlive = (p) => p.state === 'alive' || p.state === 'downed';
-export const playerActive = (p) => p.state === 'alive';
+export const playerAlive = (p) => !!p && (p.state === 'alive' || p.state === 'downed');
+export const playerActive = (p) => !!p && p.state === 'alive';
 export const playerFwd = (p) => [-Math.sin(p.yaw), -Math.cos(p.yaw)];
 
 // Match the perspective camera, including pitch, vertical FOV and aspect ratio.
@@ -20,7 +20,7 @@ export function onScreen(world, p, x, y, z, h = 1.9, radius = 0.36) {
     const tx = x + cy * side, tz = z - sy * side;
     const dx = tx - p.x, dy = y + height - ey, dz = tz - p.z;
     const depth = -sy * cp * dx + sp * dy - cy * cp * dz;
-    if (depth < 0.06 || Math.hypot(dx, dy, dz) > (p.flash ? CONFIG.FLASHLIGHT.RANGE + 8 : 28)) continue;
+    if (depth < 0.06 || Math.hypot(dx, dy, dz) > (p.flash ? Math.max(28, CONFIG.FLASHLIGHT.RANGE + 8) : 28)) continue;
     const right = cy * dx - sy * dz, up = sy * sp * dx + cp * dy + cy * sp * dz;
     if (Math.abs(right) > depth * tanX || Math.abs(up) > depth * tanY) continue;
     if (world.lineOfSight(p.x, ey, p.z, tx, y + height, tz, { brushK: 0.3 }) > 0.2) return true;
@@ -46,7 +46,8 @@ export function observedBy(world, p, x, y, z, h) {
   const out = { vis: 0, lit: false, cos: cosA, d };
   if (cosA < 0.56) return out; // outside ~56 deg horizontal half FOV
   const flashOn = p.flash && p.state === 'alive';
-  const lit = flashOn && cosA > 0.86 && d < CONFIG.FLASHLIGHT.RANGE * 0.95;
+  // the lighter lights whatever is close round you, in front or to the side (no beam)
+  const lit = flashOn && cosA > 0.2 && d < CONFIG.FLASHLIGHT.RANGE * 0.95;
   const range = lit ? CONFIG.FLASHLIGHT.RANGE + 8 : 14 + 30 * openness(world, x, z);
   if (d > range) return out;
   const ey = p.y + eyeHeight(p);

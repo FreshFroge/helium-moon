@@ -40,9 +40,12 @@ export const CONFIG = {
     // Teammates remain locatable nearby without sounding like another threat.
     REMOTE_STEP_FADE_START: 4, REMOTE_STEP_MAX_DISTANCE: 11, REMOTE_STEP_GAIN: 0.45,
   },
+  // The player's light is a small lighter now (owner, Oct 25 2026): omni, lights only RANGE m
+  // round you, no beam. BATTERY_* is its fuel; a strike fails STRIKE_FAIL of the time (more
+  // when he is coming for you). Kept under the old name so the sim's `flash` flag is unchanged.
   FLASHLIGHT: {
-    BATTERY_SECONDS: 540, BATTERY_PICKUP: 0.55, LOW: 0.18,
-    ANGLE_DEG: 30, RANGE: 52, INTENSITY: 260,
+    BATTERY_SECONDS: 600, BATTERY_PICKUP: 0.55, LOW: 0.18,
+    ANGLE_DEG: 90, RANGE: 6.5, INTENSITY: 9, STRIKE_FAIL: 0.15,
   },
 
   // ---------------------------------------------------------------- Helium Voice terror radius

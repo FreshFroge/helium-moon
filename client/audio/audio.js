@@ -63,6 +63,7 @@ export class AudioEngine {
     add('hurt', () => S.hurt(9, false)); add('down', () => S.hurt(10, true));
     // real-animal false alarms (wildlife.js)
     for (let i = 0; i < 3; i++) add('swing' + i, () => S.swing(70 + i));
+    add('lighterOn', () => S.lighterStrike(280, true)); add('lighterSpark', () => S.lighterStrike(281, false)); add('lighterOff', () => S.lighterRelease(282));
     // the Puppet: joints, crawl, knuckles, the collapse and the grab
     for (let i = 0; i < 4; i++) { add('pop' + i, () => S.jointPop(200 + i)); add('crawl' + i, () => S.crawlPatter(210 + i)); }
     for (let i = 0; i < 3; i++) { add('knuckle' + i, () => S.knuckleWood(220 + i)); }

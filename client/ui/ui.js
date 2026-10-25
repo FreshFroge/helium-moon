@@ -99,7 +99,7 @@ export class UI {
         <tr><td>${k('crouch')} / ${k('crouchAlt')}</td><td>Crouch — quieter; crouch still in thick brush to hide</td></tr>
         <tr><td>${k('jump')}</td><td>Jump</td></tr>
         <tr><td>${k('interact')}</td><td>Interact · hold to repair / revive</td></tr>
-        <tr><td>${k('flashlight')}</td><td>Flashlight</td></tr>
+        <tr><td>${k('flashlight')}</td><td>Lighter (flick on / let go)</td></tr>
         <tr><td>${k('inventory')}</td><td>Objectives, notes &amp; temperature (hold)</td></tr>
         <tr><td>${k('talk')}</td><td>Push to talk (multiplayer voice)</td></tr>
         <tr><td>${k('chat')}</td><td>Text chat (multiplayer)</td></tr>
@@ -417,7 +417,7 @@ export class UI {
     const m = Math.floor(d.time / 60), sec = String(Math.floor(d.time % 60)).padStart(2, '0');
     el.innerHTML = `<h3>Objectives</h3>${d.objectives.map((l) => `<div class="obj ${l.done ? 'done' : ''}"><span class="box">${l.done ? '✓' : ''}</span><div><div>${esc(l.text)}</div>${l.sub ? `<div class="sub">${esc(l.sub)}</div>` : ''}</div></div>`).join('')}
       <div class="inv-grid"><div><span class="dim">Team carries</span><br>${d.team.fuel ? 'Gas can' : '<span class="dim">—</span>'}${d.team.fuse ? '<br>Fuse kit' : ''}</div>
-      <div><span class="dim">Flashlight</span><br>${Math.round(d.battery * 100)}%</div><div><span class="dim">Air temperature</span><br>${d.temp.toFixed(1)}°C</div><div><span class="dim">Time</span><br>${m}:${sec}</div></div>
+      <div><span class="dim">Lighter fuel</span><br>${Math.round(d.battery * 100)}%</div><div><span class="dim">Air temperature</span><br>${d.temp.toFixed(1)}°C</div><div><span class="dim">Time</span><br>${m}:${sec}</div></div>
       <h3>Notes</h3>${d.notes.length ? d.notes.map((n) => `<details><summary>${esc(n.title)}</summary><p>${esc(n.text).replace(/\n/g, '<br>')}</p></details>`).join('') : '<p class="dim">None yet.</p>'}`;
     el.classList.remove('hidden');
   }
