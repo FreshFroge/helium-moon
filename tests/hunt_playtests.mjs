@@ -39,13 +39,17 @@ const world = new World({});
 const L = world.trailLength;
 const POIS = Object.values(world.poi).sort((a, b) => a.along - b.along);
 
-// 10 playtests: team size, seed
-const PLAN = [
+// Default 10-playtest mix; larger owner-requested runs extend it with balanced
+// 1/2/3/4-player teams and unique deterministic seeds.
+const BASE_PLAN = [
   { team: 1, seed: 2001 }, { team: 1, seed: 2002 }, { team: 1, seed: 2003 }, { team: 1, seed: 2004 },
   { team: 2, seed: 2005 }, { team: 2, seed: 2006 }, { team: 2, seed: 2007 },
   { team: 3, seed: 2008 }, { team: 3, seed: 2009 },
   { team: 4, seed: 2010 },
-].slice(0, +(process.env.HUNT_SESSIONS || 10)).map((cfg, i) => ({ ...cfg, n: i + 1 }))
+];
+const SESSION_COUNT = +(process.env.HUNT_SESSIONS || 10);
+const PLAN = Array.from({ length: SESSION_COUNT }, (_, i) => BASE_PLAN[i] || ({ team: 1 + (i % 4), seed: 2001 + i }))
+  .map((cfg, i) => ({ ...cfg, n: i + 1 }))
   .filter((cfg) => !process.env.HUNT_ONLY || cfg.n === +process.env.HUNT_ONLY);
 const REC = process.env.HUNT_RECORD ? { path: process.env.HUNT_RECORD, win: (process.env.HUNT_WINDOW || '0,99999').split(',').map(Number), frames: [] } : null;
 
@@ -53,8 +57,8 @@ const PERSONAS = {
   // travel: 'walk' never sprints between objectives (quiet, keeps stamina to flee);
   // 'bursts' jogs in sprint bursts on legs over 80 m when stamina is full;
   // 'max' sprints whenever stamina allows (fast, loud, often empty when hunted)
-  // standGround: during a hunt, once they SEE him within 12 m they stop, face him and hold
-  // the flashlight on him (the owner's 7-ft counter, Oct 25); others keep running.
+  // standGround: during a hunt, once they see him close they stop and aim at the Puppet's
+  // overhead control long enough to try cutting his strings; others keep running.
   cautious: { glance: [9, 16], workLook: 5, fleeLook: true, travel: 'walk', standGround: true },
   steady: { glance: [18, 32], workLook: 9, fleeLook: true, travel: 'bursts', standGround: false },
   rusher: { glance: null, workLook: 0, fleeLook: false, travel: 'max', standGround: false },
@@ -209,15 +213,16 @@ class Bot {
       if (d < 0.45) this.route.shift();
     }
     if (!sprint) { this.sprintRest -= DT; if (this.sprintRest <= 0) this.stamina = Math.min(P.STAMINA_MAX, this.stamina + P.STAMINA_REGEN * DT); }
-    // stand ground: face him with the light while he charges (the 7-ft flashlight counter)
+    // Stand ground and aim at the Puppet's overhead control while he charges.
     const huntOnMe = sim.director.chasing && hv.target === this.id;
-    if (this.P.standGround && this.fleeing && huntOnMe && hvd < 12 && (this.noticeHow === 'saw him' || onScreen(world, p, hv.x, hv.y, hv.z))) {
+    const control = huntOnMe && hv.controlPos?.();
+    if (this.P.standGround && this.fleeing && control && hvd < 18 && (this.noticeHow === 'saw him' || onScreen(world, p, hv.x, hv.y, hv.z))) {
       mvx = 0; mvz = 0; sprint = false; this.activity = 'standing ground with the flashlight';
-      this.standing = true;
-    } else this.standing = false;
+      this.standing = true; this.controlAiming = true;
+    } else { this.standing = false; this.controlAiming = false; }
     const nx = p.x + mvx, nz = p.z + mvz;
     // --- gaze
-    let yaw = p.yaw;
+    let yaw = p.yaw, pitch = 0;
     if (Math.hypot(mvx, mvz) > 1e-4) yaw = Math.atan2(-mvx, -mvz);
     let use = null, revive = null;
     if (atGoal && g) {
@@ -231,7 +236,10 @@ class Bot {
         if (this.lookT < 0) { use = null; yaw += this.workYaw ??= rng.range(1.6, 3.1) * (rng() < 0.5 ? -1 : 1); } else this.workYaw = null;
       }
     }
-    if (this.standing) yaw = faceYaw(p.x, p.z, hv.x, hv.z);
+    if (this.controlAiming && control) {
+      yaw = faceYaw(p.x, p.z, control.x, control.z);
+      pitch = Math.atan2(control.y - (p.y + 1.6), Math.hypot(control.x - p.x, control.z - p.z));
+    } else if (this.standing) yaw = faceYaw(p.x, p.z, hv.x, hv.z);
     else if (this.fleeing && this.P.fleeLook) {        // look back over the shoulder while running
       this.fleeLookT -= DT;
       if (this.fleeLookT <= -0.6) this.fleeLookT = rng.range(2.5, 4);
@@ -244,7 +252,7 @@ class Bot {
       if (this.glancing > 0) { this.glancing -= DT; yaw += this.glanceYaw; }
     }
     const noise = sprint ? 1 : Math.hypot(mvx, mvz) > 1e-4 ? 0.45 : 0.12;
-    sim.input(this.id, { x: nx, y: world.heightAt(nx, nz), z: nz, yaw, pitch: 0, crouch: false, sprint, flash: true, noise, voice: 0, hidden: false, use, revive, viewFov: 75, viewAspect: 16 / 9 });
+    sim.input(this.id, { x: nx, y: world.heightAt(nx, nz), z: nz, yaw, pitch, crouch: false, sprint, flash: true, noise, voice: 0, hidden: false, use, revive, viewFov: 75, viewAspect: 16 / 9 });
   }
 }
 
@@ -261,7 +269,9 @@ function playtest(n, { team, seed }) {
   sim._bots = bots;
   const hunts = [], timeline = [];
   let open = null, prevHv = sim.hv.state, hvPrevNonChase = 'roam';
-  const ctx = { reveals: 0, sfHits: 0, hvHitsOutsideHunts: 0, vocals: 0, sig: 0, approaches: [] };
+  const ctx = { reveals: 0, sfHits: 0, hvHitsOutsideHunts: 0, vocals: 0, sig: 0, approaches: [],
+    cuts: 0, freezes: 0, collapses: 0, grabs: 0, relocations: {}, unannouncedMax: 0, unannouncedAt: null };
+  let prevX = sim.hv.x, prevZ = sim.hv.z;
   let approach = null;   // he is closing in on someone for a hunt (beyond HUNT_START_RANGE)
   const origReveal = sim.director.onReveal.bind(sim.director);
   sim.director.onReveal = (k) => { if (k !== 'retreat') { ctx.reveals++; timeline.push({ t: +sim.time.toFixed(1), what: `planned glimpse (${k})` }); } return origReveal(k); };
@@ -271,6 +281,12 @@ function playtest(n, { team, seed }) {
     sim.step(DT);
     const hv = sim.hv;
     const evs = sim.drainEvents();
+    const relocated = evs.some((e) => e.type === 'hv_relocate');
+    const step = Math.hypot(hv.x - prevX, hv.z - prevZ);
+    if (!relocated && step > ctx.unannouncedMax) {
+      ctx.unannouncedMax = step; ctx.unannouncedAt = { t: +sim.time.toFixed(2), state: hv.state, x: +hv.x.toFixed(1), z: +hv.z.toFixed(1) };
+    }
+    prevX = hv.x; prevZ = hv.z;
     pending = evs;
     if (REC && sim.time >= REC.win[0] && sim.time <= REC.win[1]) REC.frames.push({ t: +sim.time.toFixed(2), snap: sim.snapshot(), ev: evs, hvState: hv.state });
     for (const e of evs) {
@@ -296,6 +312,11 @@ function playtest(n, { team, seed }) {
       }
       if (e.type === 'hv_vocal') ctx.vocals++;
       if (e.type === 'hv_sig') ctx.sig++;
+      if (e.type === 'hv_cut') { ctx.cuts++; if (open) open.cutBy = e.pid; }
+      if (e.type === 'hv_freeze') ctx.freezes++;
+      if (e.type === 'hv_collapse') ctx.collapses++;
+      if (e.type === 'hv_attack' && e.phase === 'grab') ctx.grabs++;
+      if (e.type === 'hv_relocate') ctx.relocations[e.reason || 'unknown'] = (ctx.relocations[e.reason || 'unknown'] || 0) + 1;
       if (e.type === 'pickup') timeline.push({ t: e.t, what: `${e.pid} picked up ${e.id === 'note_memo' ? 'the memo' : e.kind === 'note' ? 'a note' : e.kind}` });
       if (e.type === 'objective') timeline.push({ t: e.t, what: `${e.pid} completed: ${e.name}` });
       if (e.type === 'extract_open') timeline.push({ t: e.t, what: 'extraction open' });
@@ -316,8 +337,7 @@ function playtest(n, { team, seed }) {
         delete open._closing;
         const tpState = tp?.state;
         const hit = open.hits.find((h) => h.pid === open.pid);
-        const flasher = hv.litBy && hv.litBy.ob.d <= CONFIG.HV.HUNT_BREAK_LIT_DIST + 0.05 ? hv.litBy : null;
-        if (flasher && !hit) open.endReason = `flashed off at ${flasher.ob.d.toFixed(1)} m by ${flasher.p.id === open.pid ? 'the target' : 'teammate ' + flasher.p.id}`;
+        if (open.cutBy && !hit) open.endReason = `strings cut by ${open.cutBy === open.pid ? 'the target' : 'teammate ' + open.cutBy}`;
         else if (hit) open.endReason = hit.type === 'dead' ? 'caught: killed' : hit.type === 'downed' ? 'caught: downed' : 'caught: hit (wounded)';
         else if (tpState === 'dead' || tpState === 'downed') open.endReason = `target ${tpState} (other cause)`;
         else if (tp && inSpawnZone(world, tp.x, tp.z, 8)) open.endReason = 'target reached the spawn area (he can\'t follow)';

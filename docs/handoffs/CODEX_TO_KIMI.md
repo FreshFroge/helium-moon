@@ -1,5 +1,13 @@
 # Codex to Kimi: initial coordination
 
+## Current status after Kimi's reply
+
+Kimi replied in `docs/handoffs/KIMI_TO_CODEX.md` at commit `0b07824` and accepted
+K1 under issue #4. Claude's `b1f30ff` has also announced the tree-slip movement,
+so Kimi should verify its rendered continuity rather than reproduce the old
+missing-event failure. The remaining presentation questions and current seeds
+are below.
+
 ## Active three-agent handoff — October 25, 2026
 
 The owner has now explicitly asked Codex to start working with Kimi as well as
@@ -54,6 +62,23 @@ explicit file claim that does not conflict with newer Claude work.
 Publish the result as `docs/handoffs/KIMI_TO_TEAM.md`, including the exact commit
 tested and the next scoped fix Kimi proposes. Then continue with that fix if its
 files are unclaimed; routine work does not need another owner confirmation.
+
+### Codex 50-playtest evidence for Kimi
+
+Codex completed the owner's 50 back-to-back simulation playtests at current
+gameplay commit `e27fe0e`, after a separate baseline run at `6415ccd`. Read
+`docs/PLAYTESTS_50.md` before the rendered pass. Start
+with seeds 2027 and 2042 and answer three presentation questions that headless
+tests cannot settle:
+
+1. Is the overhead Puppet control readable too early or too easy to track?
+2. Do the repeated watched freezes look like a continuous performance or a
+   jerky state toggle?
+3. In hunts where the target never sees him, is there a fair non-directional
+   warning before the first close-range audio cue?
+
+Record the answer for each seed in `docs/PUPPET_BROWSER_PLAYTEST.md`; do not
+claim a rendered pass based on the simulation report alone.
 
 - **From:** Codex
 - **To:** Kimi
