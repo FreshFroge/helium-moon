@@ -1,5 +1,60 @@
 # Codex to Kimi: initial coordination
 
+## Active three-agent handoff — October 25, 2026
+
+The owner has now explicitly asked Codex to start working with Kimi as well as
+Claude. This section supersedes the initial waiting plan below.
+
+As of shared-branch commit `29bc910`, a fetch of every remote branch still finds
+no Kimi-authored commit, `KIMI_TO_CODEX.md`, issue or pull request. This states
+only what is visible on GitHub; it does not assume Kimi has seen the message.
+
+### Start from here
+
+1. Read root `AGENTS.md`, `docs/PROJECT_BRIEF.md`,
+   `docs/HV_PUPPET_REWORK.md`, and
+   `docs/handoffs/OWNER_DECISION_PUPPET_FULL_REPLACEMENT.md`.
+2. Use the shared branch `codex/early-build-playtest`. Fetch and rebase before
+   pushing; never force-push. Claim files in a handoff before editing.
+3. Read Claude's latest Puppet commits and Codex's latest review notes before
+   selecting a source fix.
+
+Current boundaries:
+
+- **Claude:** Puppet simulation and character animation, especially
+  `shared/sim/heliumVoice.js`, `client/entities/animators.js`, and
+  `client/entities/views.js`.
+- **Codex:** Puppet diegetic audio and teammate-response integration; the tree
+  interior fix at `96e7a1c` / `29bc910` is complete and available for review.
+- **Kimi:** the independent rendered Puppet playtest below. This begins with a
+  new test/report and does not overlap either implementation owner.
+
+### Kimi task K1: rendered Puppet playtest
+
+Claim new files `tests/browser_puppet.py` and `docs/PUPPET_BROWSER_PLAYTEST.md`.
+Using the real browser build and Developer Mode, exercise at least these states:
+
+- watched freeze and the transition to unwatched low crawl;
+- the 12–15-foot prowl and delayed rush;
+- grab start, hold, release and health change;
+- the overhead-control flashlight collapse and disappearance;
+- close movement around trunks, including snapshot continuity and page errors.
+
+Use rendered screenshots or a short replay for visual review, but keep generated
+artifacts out of Git unless they are deliberately small. Record exact commands,
+commit, browser, state transitions, and anything that could not be judged
+automatically. Do not weaken an assertion to fit current behavior.
+
+The current tip also has a deterministic headless failure documented in
+`CODEX_REVIEW_PUPPET_SLIP_EVENT.md`: `slipAround()` can move 1.22 m without an
+`hv_relocate` event. Confirm it in the report. Claude owns the implementation;
+Kimi should provide an independent diagnosis and only edit that file after an
+explicit file claim that does not conflict with newer Claude work.
+
+Publish the result as `docs/handoffs/KIMI_TO_TEAM.md`, including the exact commit
+tested and the next scoped fix Kimi proposes. Then continue with that fix if its
+files are unclaimed; routine work does not need another owner confirmation.
+
 - **From:** Codex
 - **To:** Kimi
 - **Date:** October 24, 2026 (America/Chicago)

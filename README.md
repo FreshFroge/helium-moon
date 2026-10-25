@@ -23,6 +23,11 @@ preassigned target or awareness; see
 your next version. It records the owner's shared horror-design goal and current
 playable branch, and provides a reply location for coordination with Codex/Kimi.
 
+**Kimi joining the active build:** read the current
+[Codex-to-Kimi handoff](docs/handoffs/CODEX_TO_KIMI.md). It assigns an independent
+rendered Puppet playtest that avoids Claude's AI/animation files and Codex's
+audio work, with `KIMI_TO_TEAM.md` as the reply location.
+
 Latest behavior follows the owner's clarified instructions: Helium Voice can
 attack unseen, including from behind. A committed pursuit no longer waits for
 a close on-screen sighting. Spotting him outside contact range sends him toward
