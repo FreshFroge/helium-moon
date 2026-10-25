@@ -342,7 +342,10 @@ export class AudioEngine {
   footstep(info, pos = null) {
     const name = info.water > 0.12 ? 'water' : SURF_NAME[info.surface] || 'dirt';
     const k = (Math.random() * 4) | 0;
-    const g = (0.25 + info.loud * 0.55) * (pos ? 1.3 : 0.75);
+    // Own footsteps/landings are close to the listener and need a softer mix
+    // than positional sounds. Include brush so it cannot dominate the dry step.
+    const localGain = pos ? 1 : 0.25;
+    const g = (0.25 + info.loud * 0.55) * (pos ? 1.3 : 0.75) * localGain;
     const cue = pos ? creatureFootstepCue(info.creature, info.speed) : null;
     const sourceGain = cue ? cue.gain : 1;
     const rate = 0.92 + Math.random() * 0.16;
@@ -351,7 +354,7 @@ export class AudioEngine {
     if (info.brush > 0.35 && info.speed > 0.6) {
       const b = this.lib[`fs_brush${(Math.random() * 4) | 0}`];
       const bg = clamp((info.brush - 0.3) * 1.2, 0, 1) * (0.25 + info.loud * 0.5);
-      if (pos) this.play(b, { pos, gain: bg * 1.3 * sourceGain, rate, ref: 3, ...(cue ? { reverb: 0.07, range: cue } : {}) }); else this.play(b, { gain: bg * 0.7, rate });
+      if (pos) this.play(b, { pos, gain: bg * 1.3 * sourceGain, rate, ref: 3, ...(cue ? { reverb: 0.07, range: cue } : {}) }); else this.play(b, { gain: bg * 0.7 * localGain, rate });
     }
   }
 

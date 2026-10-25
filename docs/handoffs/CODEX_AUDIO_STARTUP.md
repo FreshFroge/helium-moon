@@ -1,5 +1,11 @@
 # Codex follow-up: cold-only approach cues and startup
 
+Latest owner feedback: own footsteps were still too loud. The local dry footfall,
+water/brush layer and landing mix now uses one-quarter of its previous amplitude
+(about -12 dB). Walking/sprinting/crouching retain their relative levels. This
+change does not alter AI movement-noise reports or positional creature/teammate
+audio; it only softens what the local player hears from their own feet.
+
 The owner deleted `codex/early-build-playtest`; the branch was restored from its
 local commit without resetting or removing other work. Changes in this revision:
 
