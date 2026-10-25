@@ -919,7 +919,9 @@ export class HeliumVoiceAI {
     if (!tp.flash && (tp.moveSpeed || 0) < C.HIDE_STILL && !tp.sprint && noiseRadius(tp, C) <= C.HIDE_NOISE) {
       // A deployed blanket removes the need for hard cover, but only while the player is
       // crouched, motionless, dark and quiet; moving or leaving the light on exposes them.
-      return (tp.covered || this.trunkShield(tp) || sightOf(this.world, this, EYE, this.lookYaw, tp, C) < 0.02)
+      // sight is tested toward them, not along wherever his head happens to point: otherwise looking
+      // away while they paused counted as 'hidden' and he collapsed mid-chase
+      return (tp.covered || this.trunkShield(tp) || sightOf(this.world, this, EYE, Math.atan2(tp.x - this.x, tp.z - this.z), tp, C) < 0.02)
         && !this.observers.some((o) => o.p.id === tp.id && o.ob?.lit);
     }
     return false;
