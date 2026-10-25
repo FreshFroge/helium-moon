@@ -30,6 +30,11 @@ That cut 150–190 draws per frame on every preset (Low at the forest view:
 Trees are now the dominant cost: ~90% of triangles (0.94 M main pass on Low,
 2.28 M on High, plus the shadow pass). They're the next target.
 
+Low LOD1 distance 60 → 45 m (`QUALITY_PRESETS.low.treeLod1`): −280k triangles at the
+forest view (1.84 → 1.56 M), −54k on the trail. 640×360 Low renders before/after differ
+in only 1.4–2.8% of pixels (>16/255), mostly film grain. Low now: 341–407 draw calls,
+0.82–1.05 M triangles on trail views, 1.56 M looking into the trees.
+
 ## Previous baseline (`abbe980`, 64 m terrain chunks)
 
 | preset | draw calls | triangles: trail views | triangles: looking into the trees | programs |

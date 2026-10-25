@@ -1,59 +1,59 @@
 {
  "low": {
   "trailhead_kiosk": {
-   "calls": 415,
-   "triangles": 1113913,
+   "calls": 407,
+   "triangles": 1054217,
    "programs": 48,
    "geometries": 317,
-   "textures": 61
+   "textures": 62
   },
   "deep_forest_trail": {
-   "calls": 381,
-   "triangles": 1056119,
+   "calls": 369,
+   "triangles": 1001769,
    "programs": 48,
    "geometries": 352,
-   "textures": 61
+   "textures": 62
   },
   "forest_side_view": {
-   "calls": 354,
-   "triangles": 1842247,
+   "calls": 341,
+   "triangles": 1561867,
    "programs": 48,
    "geometries": 390,
-   "textures": 61
+   "textures": 62
   },
   "river_bend": {
-   "calls": 349,
-   "triangles": 892985,
+   "calls": 347,
+   "triangles": 824435,
    "programs": 48,
    "geometries": 398,
-   "textures": 61
+   "textures": 62
   }
  },
  "medium": {
   "trailhead_kiosk": {
-   "calls": 545,
-   "triangles": 2257713,
+   "calls": 549,
+   "triangles": 2257873,
    "programs": 48,
    "geometries": 317,
    "textures": 64
   },
   "deep_forest_trail": {
-   "calls": 499,
-   "triangles": 2119115,
+   "calls": 485,
+   "triangles": 2118695,
    "programs": 48,
    "geometries": 357,
    "textures": 64
   },
   "forest_side_view": {
-   "calls": 473,
-   "triangles": 3972665,
+   "calls": 474,
+   "triangles": 3972667,
    "programs": 48,
    "geometries": 398,
    "textures": 64
   },
   "river_bend": {
-   "calls": 445,
-   "triangles": 1758675,
+   "calls": 446,
+   "triangles": 1758889,
    "programs": 48,
    "geometries": 413,
    "textures": 64
@@ -65,58 +65,58 @@
    "triangles": 3330783,
    "programs": 48,
    "geometries": 317,
-   "textures": 63
+   "textures": 64
   },
   "deep_forest_trail": {
-   "calls": 505,
-   "triangles": 2790275,
+   "calls": 484,
+   "triangles": 2789591,
    "programs": 48,
    "geometries": 357,
-   "textures": 63
+   "textures": 64
   },
   "forest_side_view": {
    "calls": 483,
    "triangles": 5893999,
    "programs": 48,
    "geometries": 398,
-   "textures": 63
+   "textures": 64
   },
   "river_bend": {
-   "calls": 496,
-   "triangles": 2810681,
+   "calls": 508,
+   "triangles": 2811009,
    "programs": 48,
    "geometries": 413,
-   "textures": 63
+   "textures": 64
   }
  },
  "ultra": {
   "trailhead_kiosk": {
-   "calls": 561,
-   "triangles": 5208763,
+   "calls": 563,
+   "triangles": 5208949,
    "programs": 48,
    "geometries": 317,
-   "textures": 64
+   "textures": 65
   },
   "deep_forest_trail": {
-   "calls": 512,
-   "triangles": 3951639,
+   "calls": 510,
+   "triangles": 3951399,
    "programs": 48,
    "geometries": 364,
-   "textures": 64
+   "textures": 65
   },
   "forest_side_view": {
-   "calls": 483,
-   "triangles": 9251889,
+   "calls": 487,
+   "triangles": 9252049,
    "programs": 48,
    "geometries": 410,
-   "textures": 64
+   "textures": 65
   },
   "river_bend": {
-   "calls": 509,
-   "triangles": 5097385,
+   "calls": 510,
+   "triangles": 5097215,
    "programs": 48,
    "geometries": 426,
-   "textures": 64
+   "textures": 65
   }
  }
 }
