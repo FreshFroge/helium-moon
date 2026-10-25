@@ -256,6 +256,21 @@ export class AudioEngine {
     hg.connect(this.bus.amb); hg.connect(this.revIn);
     const tin = ctx.createOscillator(); tin.type = 'sine'; tin.frequency.value = 6900; const tg = ctx.createGain(); tg.gain.value = 0; tin.connect(tg); tg.connect(this.master); tin.start();
     this.drone = { g: dg, lp: dlp, high: hg, tin: tg, oscs };
+    // HUNT HUM (owner, Oct 25): a Hereditary-style sub-bass pressure that swells only
+    // while Helium Voice is actively hunting someone. 31/33 Hz sines beat at 2 Hz (felt
+    // more than heard); 62/93 Hz harmonics carry it on laptop/phone speakers; a slow
+    // 0.11 Hz "breathing" swell; filtered sub rumble. Silent outside hunts.
+    const hh = ctx.createGain(); hh.gain.value = 0;
+    const hlp = ctx.createBiquadFilter(); hlp.type = 'lowpass'; hlp.frequency.value = 140; hlp.Q.value = 0.9;
+    const swell = ctx.createGain(); swell.gain.value = 0.75;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.11; const lfoG = ctx.createGain(); lfoG.gain.value = 0.25;
+    lfo.connect(lfoG); lfoG.connect(swell.gain); lfo.start(); oscs.push(lfo);
+    for (const [f, a] of [[31, 0.55], [33, 0.55], [62, 0.28], [93.5, 0.12]]) { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f; const og = ctx.createGain(); og.gain.value = a; o.connect(og); og.connect(swell); o.start(); oscs.push(o); }
+    const rs = ctx.createBufferSource(); rs.buffer = nb; rs.loop = true; rs.playbackRate.value = 0.5;
+    const rlp = ctx.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 55; rlp.Q.value = 0.7;
+    const rg = ctx.createGain(); rg.gain.value = 0.9; rs.connect(rlp); rlp.connect(rg); rg.connect(swell); rs.start();
+    swell.connect(hlp); hlp.connect(hh); hh.connect(this.bus.amb);
+    this.huntHum = { g: hh, lp: hlp, level: 0 };
     // objective loops are created on demand
   }
 
@@ -287,6 +302,11 @@ export class AudioEngine {
     this.drone.lp.frequency.setTargetAtTime(120 + 260 * terr, t, 0.5);
     this.drone.high.gain.setTargetAtTime(0.004 * cues.highTone, t, 1.2);
     this.drone.tin.gain.setTargetAtTime(0.006 * (st.gas || 0), t, 0.6);
+    // hunt hum: slow 3 s build when a hunt starts, abrupt 0.25 s cut when it ends (the
+    // silence after is part of the scare). Opens its filter as he closes in.
+    const hunt = st.hunt ? 1 : 0, hm = this.huntHum;
+    if (hunt !== hm.level) { hm.level = hunt; hm.g.gain.cancelScheduledValues(t); hm.g.gain.setTargetAtTime(hunt ? 0.14 : 0, t, hunt ? 1.1 : 0.08); }
+    if (hunt) hm.lp.frequency.setTargetAtTime(110 + 120 * clamp(st.huntNear || 0, 0, 1), t, 0.6);
     const muffle = Math.max(st.gas || 0, (st.downed || 0) * 0.6);
     this.hear.frequency.setTargetAtTime(lerp(20000, 650, muffle), t, 0.3);
     if (!st.inGame) return;

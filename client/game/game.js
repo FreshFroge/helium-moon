@@ -444,7 +444,7 @@ export class Game {
     else this._menuCamera(dt);
     this.env.update(gameplayDt, this.camera, 0);
     this.audio.setListener(this.camera);
-    this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
+    this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, hunt: this.chasing && this.mode === 'playing', huntNear: this.hv ? clamp(1 - this.hv.pos.distanceTo(this.player.pos) / 40, 0, 1) : 0, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
     const meP = this.player.pos;
     this.voice.update(dt, {
       ptt: this.mode === 'playing' && !this.input.textFocus && this.input.down('talk'), inGame: this.mode === 'playing',
@@ -657,17 +657,29 @@ export class Game {
   _beamDistance() {
     const fl = this.flashlight, w = this.world, p = fl.light.position, d = fl.dir;
     const tmp = this._qtmp || (this._qtmp = []);
-    const bodies = this._bodies || (this._bodies = []); bodies.length = 0;
-    if (this.hv.root.visible) bodies.push([this.hv.pos.x, this.hv.pos.y, this.hv.pos.z, this.hv.flags & 16 ? 0.7 : 0.4, this.hv.flags & 16 ? 0.95 : 1.95]);
-    if (this.sf.root.visible) bodies.push([this.sf.pos.x, this.sf.pos.y, this.sf.pos.z, 0.55 * CONFIG.SF.MODEL_SCALE, CONFIG.SF.MODEL_SCALE]);
-    for (const a of this.avatars.values()) if (a.root.visible) bodies.push([a.pos.x, a.pos.y, a.pos.z, 0.35, 1.8]);
+    // runs every frame: flat reusable body buffer [x, y, z, r, h] * n, no Math.hypot / iterators
+    const B = this._bodyBuf || (this._bodyBuf = new Float64Array(5 * 8)); let nb = 0;
+    const put = (x, y, z, r, h) => { if (nb >= 8) return; const o = nb++ * 5; B[o] = x; B[o + 1] = y; B[o + 2] = z; B[o + 3] = r; B[o + 4] = h; };
+    if (this.hv.root.visible) put(this.hv.pos.x, this.hv.pos.y, this.hv.pos.z, this.hv.flags & 16 ? 0.7 : 0.4, this.hv.flags & 16 ? 0.95 : 1.95);
+    if (this.sf.root.visible) put(this.sf.pos.x, this.sf.pos.y, this.sf.pos.z, 0.55 * CONFIG.SF.MODEL_SCALE, CONFIG.SF.MODEL_SCALE);
+    for (const a of this.avatars.values()) if (a.root.visible) put(a.pos.x, a.pos.y, a.pos.z, 0.35, 1.8);
     for (let k = 1; k < 48; k++) {
       const t = k * 0.3, x = p.x + d.x * t, y = p.y + d.y * t, z = p.z + d.z * t;
       const g = w.heightAt(x, z);
       if (y < g + 0.02) return t;
-      for (const b of bodies) if (Math.hypot(x - b[0], z - b[2]) < b[3] && y > b[1] && y < b[1] + b[4]) return t;
+      for (let i = 0; i < nb; i++) {
+        const o = i * 5, bx = x - B[o], bz = z - B[o + 2], r = B[o + 3];
+        if (bx * bx + bz * bz < r * r && y > B[o + 1] && y < B[o + 1] + B[o + 4]) return t;
+      }
       if (y - g < 1.5 && w.gridAt(w.gBrush, x, z) > 0.7) return t + 0.6;
-      if (k % 2 === 0) for (const r of w.queryColliders(x, z, 0.2, tmp)) if (r < 100000) { const c = w.circles[r]; if (Math.hypot(x - c[0], z - c[1]) < c[2] + 0.05) return t; }
+      if (k % 2 === 0) {
+        const hits = w.queryColliders(x, z, 0.2, tmp);
+        for (let i = 0; i < hits.length; i++) {
+          const r = hits[i]; if (r >= 100000) continue;
+          const c = w.circles[r], cx = x - c[0], cz = z - c[1], rr = c[2] + 0.05;
+          if (cx * cx + cz * cz < rr * rr) return t;
+        }
+      }
     }
     return 14.4;
   }

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { clamp, lerp } from '../../shared/math.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q2 = new THREE.Quaternion();
+const _chain = [], _wpQ = new THREE.Quaternion(), _wpV = new THREE.Vector3();   // scratch for wq()/wp() (not re-entrant)
 
 class Rig {
   constructor(char) {
@@ -22,19 +23,21 @@ class Rig {
     }
   }
   reset() { for (const bone of this.order) { bone.quaternion.identity(); bone.position.copy(bone.userData.restPos); } }
+  // world-space (skeleton-root) rotation/position of a bone. Called many times per
+  // frame per character, so the bone chain and temporaries are reused, not allocated.
   wq(bone, out = new THREE.Quaternion()) {
     out.identity();
-    const chain = [];
-    let b = bone; while (b && b.isBone) { chain.push(b); b = b.parent; }
-    for (let i = chain.length - 1; i >= 0; i--) out.multiply(chain[i].quaternion);
+    const chain = _chain; let n = 0;
+    let b = bone; while (b && b.isBone) { chain[n++] = b; b = b.parent; }
+    for (let i = n - 1; i >= 0; i--) out.multiply(chain[i].quaternion);
     return out;
   }
   wp(bone, out = new THREE.Vector3()) {
-    const chain = [];
-    let b = bone; while (b && b.isBone) { chain.push(b); b = b.parent; }
-    out.set(0, 0, 0); const q = new THREE.Quaternion();
-    for (let i = chain.length - 1; i >= 0; i--) {
-      out.add(chain[i].position.clone().applyQuaternion(q)); q.multiply(chain[i].quaternion);
+    const chain = _chain; let n = 0;
+    let b = bone; while (b && b.isBone) { chain[n++] = b; b = b.parent; }
+    out.set(0, 0, 0); const q = _wpQ.identity();
+    for (let i = n - 1; i >= 0; i--) {
+      out.add(_wpV.copy(chain[i].position).applyQuaternion(q)); q.multiply(chain[i].quaternion);
     }
     return out;
   }
