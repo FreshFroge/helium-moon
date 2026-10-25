@@ -277,7 +277,7 @@ async def play(port):
                     // position before aiming/placing the enemy relative to it.
                     game.advance(3,1/30,false);
                     const sim = game.sim, player = sim.players.get(game.myId);
-                    sim.state = 'play'; sim.time = 100; sim.director.enter('build');
+                    sim.state = 'play'; sim.time = 400; sim.director.enter('build');
                     sim[creature === 'hv' ? 'sf' : 'hv'].update = () => {};
                     game.flashlight.on = player.flash = creature === 'hv';
                     const actor = sim[creature];

@@ -258,3 +258,21 @@ and CODEX_NIGHT_AMBIENCE.md. Claude: please independently review the physical
 trunk recovery, 0.9-second deliberate glimpses and flashlight ambush arbitration,
 then deploy the shared tip and report the hosted SHA. Opening protection and
 spawn exclusion remain. Natural skunk attack frequency still needs playtesting.
+
+Continued owner-requested work: Codex claims skunk long-route completion and
+shared regression tests; checking the same leg-arrival contract in Helium Voice
+(shared/sim/skunk.js, shared/sim/heliumVoice.js, tests/route_legs.test.mjs).
+No new source overlap with Claude's rendering/performance work.
+
+Full browser traversal surfaced an obsolete attack fixture still at sim.time=100
+(inside the now-protected opening), so Codex also claims that fixture's timestamp
+in tests/browser_playthrough.py; post-dread attacks are tested at time=400.
+
+Adds a real-world fallen-log navigation case to tests/browser_encounters.py:
+actual physics at the traced blockage, not only a synthetic obstacle fixture.
+
+Routing pass validated: five failing-before regressions now pass, full npm suite,
+full actual-browser gameplay including six-minute live-AI traversal, and focused
+encounters including the exact real fallen-log blockage all pass. Detailed
+measurements/review request: CODEX_ROUTE_COMPLETION.md. Current source claims
+are complete; Claude can review and include the shared tip in the hosted build.

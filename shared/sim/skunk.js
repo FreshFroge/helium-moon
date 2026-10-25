@@ -48,10 +48,12 @@ export class SkunkAI {
     this.x = x; this.z = z; this.y = groundAt(this.world, x, z);
   }
 
-  setState(s, info) { this.state = s; this.stateT = 0; this.path = null; this.finalGoal = null; if (info) Object.assign(this, info); }
+  setState(s, info) { this.state = s; this.stateT = 0; this.path = null; this.finalGoal = null; this.goal=null; if (info) Object.assign(this, info); }
 
   planTo(x, z) {
+    this.avoidHeading=null;this.avoidT=0;
     if(!this.outsideSpawn(x,z)){this.path=null;this.finalGoal=null;return false;}
+    this.goal=[x,z];
     const w = this.world, gB = w.gBrush, gT = w.gTrail;
     const D = Math.hypot(x - this.x, z - this.z);
     let gx = x, gz = z; this.finalGoal = null;
@@ -69,13 +71,47 @@ export class SkunkAI {
     if (!this.path || this.pathI >= this.path.length) { this.speed = lerp(this.speed, 0, 1 - Math.exp(-dt * 10)); return true; }
     const [tx, tz] = this.path[this.pathI];
     const dx = tx - this.x, dz = tz - this.z, d = Math.hypot(dx, dz);
-    if (d < 0.6) { this.pathI++; return this.pathI >= this.path.length; }
+    // The end of one bounded leg is not arrival at the final destination.
+    if (d < 0.6) { this.pathI++; return this.pathI >= this.path.length && !this.finalGoal; }
+    // A physically blocked waypoint can otherwise keep a prowl alive forever.
+    // Measure progress toward the waypoint, not motion: collision jitter counts
+    // as movement but does not get the creature any closer to its destination.
+    let progress=this.routeProgress;
+    if(!progress || progress.path!==this.path || progress.index!==this.pathI)
+      progress=this.routeProgress={path:this.path,index:this.pathI,best:d,stalled:0};
+    if(d<progress.best-.08){progress.best=d;progress.stalled=0;}
+    else progress.stalled+=dt;
+    if(progress.stalled>1.5){this.path=null;this.finalGoal=null;this.speed=0;return false;}
     this.speed = lerp(this.speed, speed, 1 - Math.exp(-dt * 6));
     const step = Math.min(d, this.speed * dt);
-    const r = moveCharacter(this.world, this, dx / d * step, dz / d * step, 0.25, { nav: true, slope: false, step: 0.5 });
+    let r = moveCharacter(this.world, this, dx / d * step, dz / d * step, 0.25, { nav: true, slope: false, step: 0.5 });
+    const forward=((r.x-this.x)*dx+(r.z-this.z)*dz)/d;
+    const detouring=this.avoidSign && this.avoidHeading!=null && (this.world.lineOfSight?.(this.x,this.y+.3,this.z,
+      tx,groundAt(this.world,tx,tz)+.3,tz,{brushK:0}) ?? 1)<.8;
+    if(step>1e-5 && (detouring || forward<step*.45)) {
+      // The 2 m nav grid cannot represent every fallen log/trunk. Keep one
+      // turning direction until the direct step clears, rather than oscillating
+      // between equally short sides of an obstacle on successive frames.
+      const heading=this.avoidHeading??Math.atan2(dx,dz),preferred=this.avoidSign||1;
+      for(const sign of [preferred,-preferred]) {
+        let found=false;
+        for(const angle of [.9,1.4,1.8]) {
+          const a=heading+sign*angle;
+          const candidate=moveCharacter(this.world,this,Math.sin(a)*step,Math.cos(a)*step,.25,{nav:true,slope:false,step:.5});
+          const travel=Math.hypot(candidate.x-this.x,candidate.z-this.z);
+          if(travel<step*.65 || travel>step*1.5
+              || spawnStepBlocked(this.world,this.x,this.z,candidate.x,candidate.z))continue;
+          r=candidate;this.avoidSign=sign;this.avoidHeading=heading;progress.stalled=0;found=true;break;
+        }
+        if(found)break;
+      }
+      this.avoidT=(this.avoidT||0)+dt;
+      if(this.avoidT>6){this.path=null;this.finalGoal=null;this.avoidSign=-preferred;this.avoidHeading=null;this.avoidT=0;return false;}
+    } else if(forward>step*.9) {this.avoidSign=0;this.avoidHeading=null;this.avoidT=0;}
     if(spawnStepBlocked(this.world,this.x,this.z,r.x,r.z)){this.path=null;this.speed=0;return false;}
+    const facing=Math.hypot(r.x-this.x,r.z-this.z)>1e-5 ? Math.atan2(r.x-this.x,r.z-this.z) : this.yaw;
     this.x = r.x; this.z = r.z; this.y = groundAt(this.world, this.x, this.z);
-    this.yaw += angleDiff(this.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 10);
+    this.yaw += angleDiff(this.yaw, facing) * Math.min(1, dt * 10);
     return false;
   }
 
@@ -120,10 +156,13 @@ export class SkunkAI {
       }
       case 'prowl': {
         a.low = 1;
+        const focus = dir.focusPlayer();
+        const fp = focus && this.outsideSpawn(focus.x,focus.z) ? focus : nearest;
+        if(this.goal && fp && Math.hypot(this.goal[0]-fp.x,this.goal[1]-fp.z)>110){
+          this.path=null;this.finalGoal=null;
+        }
         if (!this.path) {
-          // set up beside the route ahead of the focus player, in the brush just off the trail
-          const focus = dir.focusPlayer();
-          const fp = focus && this.outsideSpawn(focus.x,focus.z) ? focus : nearest;
+          // Set up beside the current route, replacing destinations players left behind.
           let s = null;
           if (fp && this.rng() < 0.7) {
             const ti = this.world.trailInfo(fp.x, fp.z);

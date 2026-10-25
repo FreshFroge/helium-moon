@@ -44,3 +44,5 @@ possible without waiting on each other:
 | 7 | Unseen attacks allowed, on-screen pursuit seeks cover outside contact; owner clarification task A | Codex; Node and actual-browser hits/escapes; reviewed by Claude at abbe980 |
 | 8b | Director hooks drive movement; opening paths preserve separation; unseen repositioning no longer keeps director in recovery | Codex; 16-session route check plus controlled 0-to-3 chase before/after profile; review requested |
 | 9 | Both creatures stay outside spawn: goals, full/fallback routes, direct lunges and body-padded movement segments; protected focus fallback | Codex; mandatory ten-minute zones test, no TODO, full npm suite |
+
+| 16 | Both creatures complete all long-route legs; skunk recovers from fallen-log stalls and refreshes stale prowl goals | Codex; five route regressions, full npm, actual-browser gameplay and exact-log collision check; CODEX_ROUTE_COMPLETION.md |

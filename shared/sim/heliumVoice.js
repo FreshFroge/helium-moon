@@ -189,7 +189,8 @@ export class HeliumVoiceAI {
     if (!this.path || this.pathI >= this.path.length) { this.speed = lerp(this.speed, 0, 1 - Math.exp(-dt * 8)); return true; }
     const [tx, tz] = this.path[this.pathI];
     const dx = tx - this.x, dz = tz - this.z, d = Math.hypot(dx, dz);
-    if (d < (this.state === 'chase' ? 0.3 : 0.8)) { this.pathI++; return this.pathI >= this.path.length; }
+    // Keep the state alive until all bounded legs reach the actual destination.
+    if (d < (this.state === 'chase' ? 0.3 : 0.8)) { this.pathI++; return this.pathI >= this.path.length && !this.finalGoal; }
     // Brake unseen stalking at eight feet. A committed chase is allowed
     // to close and hit without waiting for the player to look back.
     const tp = this.target != null ? this.sim.players.get(this.target) : null;

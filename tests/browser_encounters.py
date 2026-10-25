@@ -115,6 +115,27 @@ async def play(port):
                 }""",state)
                 assert skunk['server']<2 and skunk['client']==skunk['server'],skunk
                 print(f'  ok  flashlight does not suppress skunk attack from {state}:',skunk,flush=True)
+            route=await page.evaluate("""async()=>{
+                game.restart();game.advance(9,1/30,false);
+                const {CONFIG}=await import('/shared/config.js');
+                const sim=game.sim,sf=sim.sf,goal=[389,450];
+                sim.state='play';sim.time=400;sim.director.update=()=>{};
+                sim.hv.update=()=>{};sim.mimic.update=()=>{};
+                Object.assign(sf,{x:388.67781822079417,z:460.7093538507989});
+                sf.y=game.world.heightAt(sf.x,sf.z);sf.setState('prowl');sf.planTo(...goal);
+                let maxStep=0;
+                sf.update=dt=>{
+                    if(!sf.path)sf.planTo(...goal);
+                    const x=sf.x,z=sf.z;sf.follow(dt,CONFIG.SF.SCURRY);
+                    maxStep=Math.max(maxStep,Math.hypot(sf.x-x,sf.z-z));
+                };
+                game.tp(sf.x+6,sf.z+5,sf.x,sf.z);
+                game.advance(600,1/30,false);
+                return {remaining:Math.hypot(sf.x-goal[0],sf.z-goal[1]),maxStep,
+                    clientError:Math.hypot(game.sf.pos.x-sf.x,game.sf.pos.z-sf.z)};
+            }""")
+            assert route['remaining']<1 and route['maxStep']<.4 and route['clientError']<.6,route
+            print('  ok  actual fallen-log route recovers with physical movement and matching client pose:',route,flush=True)
             assert not errors,errors
             print('all focused browser encounter checks passed',flush=True)
         finally:
