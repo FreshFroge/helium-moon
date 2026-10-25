@@ -6,6 +6,7 @@ import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
 import { CONFIG } from '../shared/config.js';
 import { pointAtDistance } from '../shared/math.js';
+import { moveCharacter, waterDepthAt } from '../shared/physics.js';
 
 const world = new World();
 const R = CONFIG.HV.HUNT_START_RANGE;
@@ -53,8 +54,9 @@ test('a hunt requested inside the range starts immediately', () => {
   assert.equal(sim.director.chasing, true);
 });
 
-test('fail-safe: a hunt on a player he cannot reach (wading in the river) ends instead of running forever', () => {
-  // the shallows by the River Bend Overlook: playable for players, not walkable for him
+test('fail-safe: a hunt on a target he cannot reach ends instead of running forever', () => {
+  // synthetic unreachable target: deep river water (real players are blocked there too; this
+  // guards any other unreachable spot, e.g. future props or nav gaps)
   let spot = null;
   for (let a = 220; a < 270 && !spot; a += 7) for (const side of [6, 10, 14, 18]) {
     const q = pointAtDistance(world.trail, world.trailCum, a);
@@ -88,5 +90,30 @@ test('running away is not an escape: a sprinting player (9 s stamina) still gets
     }
     assert.ok(ended != null, `seed ${seed}: the hunt ends`);
     assert.ok(p.health < 2, `seed ${seed}: it ends with a hit, not by outrunning him (ended at ${ended?.toFixed(1)} s)`);
+  }
+});
+
+test('hugging a big tree trunk is not an escape: the final lunge reaches the player', () => {
+  // spots a real player body can occupy (pushed out of colliders) inside a 2 m nav cell
+  // that the trunk blocks for the creature
+  const spots = [];
+  for (let a = 300; a < 1700 && spots.length < 5; a += 11) for (const side of [-14, -10, -6, 6, 10, 14]) {
+    const q = pointAtDistance(world.trail, world.trailCum, a);
+    const x = q.x + Math.cos(q.dir) * side, z = q.z - Math.sin(q.dir) * side;
+    if (world.navWalkable(x, z) || !world.isPlayable(x, z) || waterDepthAt(world, x, z) > CONFIG.DEEP_WATER) continue;
+    const r = moveCharacter(world, { x, y: world.heightAt(x, z), z }, 0, 0, CONFIG.PLAYER.RADIUS, { boundary: true });
+    if (world.navWalkable(r.x, r.z)) continue;
+    const inside = world.queryColliders(r.x, r.z, 2, []).some((ref) => ref < 100000 && Math.hypot(r.x - world.circles[ref][0], r.z - world.circles[ref][1]) < world.circles[ref][2] + 0.25);
+    if (inside) continue;
+    spots.push({ a, x: r.x, z: r.z }); break;
+  }
+  assert.ok(spots.length >= 3, `fixture: found ${spots.length} trunk-hugging spots`);
+  for (const sp of spots) {
+    const { sim, p, hv } = fixture(20, 3);
+    Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: false });
+    const at = pointAtDistance(world.trail, world.trailCum, sp.a - 20); hv.place(at.x, at.z);
+    hv.startChase(p);
+    for (let t = 0; t < 12 && p.health === 2; t += 0.05) sim.step(0.05);
+    assert.ok(p.health < 2, `trail ${sp.a}: he reaches a player pressed against the trunk`);
   }
 });

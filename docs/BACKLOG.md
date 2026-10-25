@@ -27,7 +27,7 @@ possible without waiting on each other:
 
 | 20 | Helium Voice stuck beside fallen log during late-session approach despite director presence requests | shared creature local avoidance, `heliumVoice.js`/`skunk.js` follow methods, route/browser checks | Codex |
 
-| 22 | **Wading exploit (found Oct 25, Claude):** players can stand in the river shallows (e.g. by River Bend Overlook), which are not walkable for Helium Voice, so he can never reach them. A stuck-hunt fail-safe now ends such hunts after ~12 s instead of letting them run forever (`HUNT_STALL_TIME`), but the real fix is letting him wade where players can | `shared/world.js` nav / `heliumVoice.js` paths (Codex #20 area) | — |
+| 22 | ~~Wading exploit~~ **Not real:** the river spots were deeper than `DEEP_WATER`, which blocks players too. The real gap was **hugging a big tree trunk**: the 2 m nav cell around it was blocked, so he stopped 2.3–3.6 m away and couldn't hit. **Fixed** by a collision-based final lunge within 4 m (`HV.HUNT_LUNGE_DIST`, `followPath` `freeLunge`): 6/6 valid trunk spots are now hit in 4–5 s. The stuck-hunt fail-safe stays as a guard | `heliumVoice.js` | done (Claude) |
 
 ## Done
 

@@ -76,6 +76,7 @@ export const CONFIG = {
     // The client's hunt hum plays only within HUNT_HUM_RANGE of him.
     HUNT_START_RANGE: 35, HUNT_CLOSE_TIMEOUT: 45,
     HUNT_BREAK_LIT_DIST: 2.13, HUNT_TRACK_EVERY: 2.5,
+    HUNT_LUNGE_DIST: 4,   // within this (clear line), the final lunge uses real collision, not the 2 m nav grid
     HUNT_STALL_TIME: 8,   // fail-safe: stuck (moved <1.5 m in 8 s, not in attack range) ends a hunt
     HUNT_HUM_RANGE: 50,
   },

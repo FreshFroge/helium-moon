@@ -203,7 +203,7 @@ export class HeliumVoiceAI {
     this.speed = lerp(this.speed, speed, 1 - Math.exp(-dt * (this.state === 'retreat' ? 18 : speed > 3 ? 3 : 5)));
     const step = Math.min(d, this.speed * dt);
     const nx = dx / d, nz = dz / d;
-    const r = moveCharacter(this.world, this, nx * step, nz * step, 0.32, { nav: true, slope: false, step: 0.6 });
+    const r = moveCharacter(this.world, this, nx * step, nz * step, 0.32, { nav: !this.freeLunge, slope: false, step: 0.6 });
     const minimum = this.openingDistance();
     if (minimum && this.sim.playerList.some(p => playerActive(p)
         && this.dist(p) >= minimum && Math.hypot(p.x-r.x,p.z-r.z) < minimum)) {
@@ -546,8 +546,15 @@ export class HeliumVoiceAI {
         if (d < 7 && this.world._straightWalkable([this.x, this.z], [tp.x, tp.z])) {
           // close enough to lunge straight at them
           this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1;
+        } else if (d < C.HUNT_LUNGE_DIST && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.5) {
+          // Final lunge with real collision instead of the 2 m nav grid: a big trunk blocks
+          // its whole grid cell, so a player pressed against the bark used to be unreachable
+          // (he stopped 2.3-3.6 m away). He still can't pass through the trunk itself, and
+          // spawn/deep-water limits still apply.
+          this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1; this.freeLunge = true;
         }
         this.followPath(dt, burst * dir.chaseSpeedMul() * (1 + .12 * escalation));
+        this.freeLunge = false;
         if (d < 4) anim.reach = 1;
         if (d < C.ATTACK_RANGE && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
             && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2) {
