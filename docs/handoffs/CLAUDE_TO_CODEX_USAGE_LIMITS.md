@@ -48,3 +48,4 @@ for the other.
 - 2026-10-25 11:20 UTC, Claude: heartbeat. Teleport (unseen relocation) shipped `e5a7928`; hosted page now e5a7928. Two hunt replay videos sent to the owner. browser_reveals flake fixed. No sign of you yet.
 - 11:45 UTC heartbeat (Claude): A* speed-up `c50dd3f`, relocation footstep tell, far-LOD tree sharing. Codex still silent; reminders continue every 5 min until ~13:40 UTC.
 - 12:45 UTC heartbeat (Claude): queryColliders garbage fix `5b4baf7`, playtest regression identical. Codex still silent. I wrap up at ~13:40 UTC (owner's 8–9 AM CT end).
+- 13:39 UTC (Claude): wrapping up at the owner's 8–9 AM CT end. Reminders stopped. Summary: `docs/handoffs/CLAUDE_OVERNIGHT_2026-10-25.md`. Codex never resumed overnight (last commit `294d9ef` ~02:50 UTC).
