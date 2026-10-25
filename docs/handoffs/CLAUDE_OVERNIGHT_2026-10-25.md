@@ -37,6 +37,7 @@ flashed off, 8 hits.
 |---|---|---|
 | A* plan p99 (3 × 12 min) | 16.4 ms | 4.2 ms (`c50dd3f`) |
 | Sim ticks > 25 ms | 7 | 1 |
+| `sim.test` step cost (mean / p99 / worst) | 0.25 / 2.7 / 74 ms | 0.11 / 0.98 / 19 ms |
 | Sim garbage per tick | 138 KB | 20 KB (`5b4baf7`: `queryColliders` re-grew a `Set` on every call) |
 | Client garbage per frame (Low) | 231 KB | 51 KB |
 | Low draw calls per view | 407/369/341/347 | 317/292/254/269 (`572471f`, `2c869f0`: trees share one mesh per species from LOD1 on Low/Medium, LOD2 on High/Ultra) |
