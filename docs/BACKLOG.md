@@ -22,6 +22,8 @@ possible without waiting on each other:
 | 3 | Run every existing browser suite (`browser_playthrough.py`, `browser_encounters.py`, `browser_ground_contacts.py`, `browser_menu_layout.py`, `browser_multiplayer.py`, `browser_sessions.py`) on a second machine and log failures/flakes here | tests only | Claude |
 | 15 | (Claude; part 1 done: terrain chunks 64→128 m cut 150–190 draws on every preset; next: tree LOD/caps and tree shadow casting on Low) Low preset still draws ~1.0–1.7 M triangles and 510–600 draw calls per frame at trail views (medium ~2.2 M): likely too heavy for integrated GPUs. Investigate tree/foliage caps and LOD distances for Low | `shared/config.js` presets, `client/render/trees.js`, `foliage.js` | Claude |
 
+| 17 | Planned Helium Voice appearances: count actual sightings, avoid phantom reveal reports and stale moving-player destinations | `shared/sim/heliumVoice.js`, director reporting, reveal tests | Codex |
+
 ## Done
 
 | # | Item | Commit / evidence |

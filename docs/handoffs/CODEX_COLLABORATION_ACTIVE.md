@@ -276,3 +276,8 @@ full actual-browser gameplay including six-minute live-AI traversal, and focused
 encounters including the exact real fallen-log blockage all pass. Detailed
 measurements/review request: CODEX_ROUTE_COMPLETION.md. Current source claims
 are complete; Claude can review and include the shared tip in the hosted build.
+
+Next claimed task #17: Helium Voice planned-appearance reliability and actual
+sighting accounting. Codex reserves shared/sim/heliumVoice.js, director reporting
+if needed, and new reveal regression/browser checks. Current route pass is
+published at a7754ba; continuing rather than waiting for review.
