@@ -467,6 +467,8 @@ export class HeliumVoiceAI {
             this.closingOn = null;
           } else {
             this.closeReplanT = (this.closeReplanT || 0) - dt;
+            // Getting ahead: they're moving away out of reach -> reappear ahead of them, unseen
+            if (d > C.RELOCATE_AHEAD_TRIGGER && this.tryRelocate(tp, 'ahead')) { this.path = null; this.closeReplanT = 0; break; }
             if (!this.path || this.closeReplanT <= 0) {
               const spot = this.observationSpot(tp, 'behind', 12, 24);
               this.planTo(spot ? spot[0] : tp.x, spot ? spot[1] : tp.z, 'cover');
@@ -545,7 +547,13 @@ export class HeliumVoiceAI {
         if (!tp || !playerAlive(tp) || tp.state === 'downed') { this.retreatFrom(tp || this, false); break; }
         this.lookAtPoint(tp.x, tp.y + 1.5, tp.z);
         const vis = sightOf(this.world, this, EYE, this.lookYaw, tp, C);
-        if (vis > 0.02 || this.dist(tp) < 12) this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
+        if (vis > 0.02 || this.dist(tp) < 12) { this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time }; this.huntUnseenT = 0; }
+        else this.huntUnseenT = (this.huntUnseenT || 0) + dt;
+        // Cut-off: lost sight of them for RELOCATE_CUTOFF_UNSEEN s mid-hunt -> reappear ahead (once per hunt)
+        if (!this.huntRelocated && this.huntUnseenT >= C.RELOCATE_CUTOFF_UNSEEN && this.dist(tp) > 25 && this.tryRelocate(tp, 'cutoff')) {
+          this.huntRelocated = true; this.huntUnseenT = 0; this.huntStall = null; this.replanT = 0;
+          this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
+        }
         // hearing keeps the chase going when sight is lost (sprinting is loud)
         if (this.stimulus && this.stimulus.pid === tp.id && sim.time - this.stimulus.t < 0.2) this.lastSeenChase = { x: this.stimulus.x, z: this.stimulus.z, t: sim.time - 0.5 };
         let ls = this.lastSeenChase || { x: tp.x, z: tp.z, t: sim.time };
@@ -660,12 +668,39 @@ export class HeliumVoiceAI {
       if (this.state !== 'stalk') { this.setState('stalk'); this.replanT = 0; }
       return false;
     }
-    this.closingOn = null; this.trackT = 0; this.huntStall = null;
+    this.closingOn = null; this.trackT = 0; this.huntStall = null; this.huntUnseenT = 0; this.huntRelocated = false;
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time };
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
     this.sim.director.onChaseStart(p);
     this.vocal('scream', true);
+  }
+
+  // Unseen relocation ("teleport", owner Oct 25; OWNER_DECISIONS_2026-10-25b): he vanishes
+  // and reappears ahead of the player. Never while anyone has him on screen (departure), never
+  // to a spot any player can see (arrival), never during the opening dread, never into spawn or
+  // within RELOCATE_MIN_DIST of a player. Cooldown shortens with escalation. The client snaps
+  // across the jump (SnapBuffer jump threshold) instead of drawing a slide.
+  tryRelocate(tp, reason) {
+    const sim = this.sim, dir = sim.director;
+    if (!tp || !playerActive(tp) || sim.state === 'intro' || dir.inDread?.()) return false;
+    if (this.observers?.length) return false;
+    const esc = dir.escalation?.() || 0;
+    if (sim.time - (this.relocateT ?? -1e9) < lerp(C.RELOCATE_COOLDOWN[0], C.RELOCATE_COOLDOWN[1], esc)) return false;
+    const spot = this.observationSpot(tp, 'ahead', C.RELOCATE_AHEAD[0], C.RELOCATE_AHEAD[1]);
+    if (!spot) return false;
+    const [x, z] = spot, y = groundAt(this.world, x, z);
+    for (const p of sim.playerList) {
+      if (!playerActive(p)) continue;
+      if (Math.hypot(p.x - x, p.z - z) < C.RELOCATE_MIN_DIST) return false;
+      if (onScreen(this.world, p, x, y, z, HEIGHT)) return false;
+    }
+    const fx = this.x, fz = this.z;
+    if (this.place(x, z) === false) return false;
+    this.relocateT = sim.time; this.speed = 0;
+    this.yaw = this.lookYaw = Math.atan2(tp.x - x, tp.z - z);
+    sim.emit({ type: 'hv_relocate', reason, pid: tp.id, x: +x.toFixed(1), z: +z.toFixed(1), fx: +fx.toFixed(1), fz: +fz.toFixed(1) });
+    return true;
   }
 
   // ---------------------------------------------------------------- deliberate reveals

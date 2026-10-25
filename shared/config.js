@@ -81,6 +81,11 @@ export const CONFIG = {
     HUNT_LUNGE_DIST: 4,   // within this (clear line), the final lunge uses real collision, not the 2 m nav grid
     HUNT_STALL_TIME: 8,   // fail-safe: stuck (moved <1.5 m in 8 s, not in attack range) ends a hunt
     HUNT_HUM_RANGE: 50,
+    // Unseen relocation ("teleport", owner Oct 25): reappears RELOCATE_AHEAD m ahead of the
+    // player, concealed. Triggers: mid-hunt after RELOCATE_CUTOFF_UNSEEN s without sight (once
+    // per hunt), or while closing in on a player more than RELOCATE_AHEAD_TRIGGER m away.
+    RELOCATE_COOLDOWN: [150, 60], RELOCATE_AHEAD: [35, 60], RELOCATE_MIN_DIST: 12,
+    RELOCATE_CUTOFF_UNSEEN: 4, RELOCATE_AHEAD_TRIGGER: 70,
   },
   SF: {
     MODEL_SCALE: 0.6,               // keep the creature low and partially concealed in undergrowth

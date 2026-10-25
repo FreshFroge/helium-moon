@@ -67,11 +67,13 @@ for (let t = 0; t < 12 * 60; t += DT) {
     if (talking && (t % 40) < DT) sim.action(id, { a: 'phrase', id: 'v' + Math.floor(t), dur: 1.8 });
   }
   const s0 = performance.now(); sim.step(DT); const el = performance.now() - s0; times.push(el); if (sim.time > 3) worst = Math.max(worst, el); steps++;
-  for (const e of sim.drainEvents()) { ev[e.type] = (ev[e.type] || 0) + 1; }
+  let relocated = false;
+  for (const e of sim.drainEvents()) { ev[e.type] = (ev[e.type] || 0) + 1; if (e.type === 'hv_relocate') relocated = true; }
   if (sim.hv.state === 'chase' && sim.director.inDread()) openingChases++;
   hvStates[sim.hv.state] = (hvStates[sim.hv.state] || 0) + 1; sfStates[sim.sf.state] = (sfStates[sim.sf.state] || 0) + 1;
   const dh = Math.hypot(sim.hv.x - prevHv[0], sim.hv.z - prevHv[1]), ds = Math.hypot(sim.sf.x - prevSf[0], sim.sf.z - prevSf[1]);
-  if (sim.hv.state !== 'dormant' && sim.time > CONFIG.SESSION.INTRO_TIME + 1) { maxHvStep = Math.max(maxHvStep, dh); if (world.nearestNav(sim.hv.x, sim.hv.z, 2) < 0) offNav++; }
+  // announced unseen relocations (owner-requested teleport) are the only allowed jumps
+  if (sim.hv.state !== 'dormant' && sim.time > CONFIG.SESSION.INTRO_TIME + 1) { if (!relocated) maxHvStep = Math.max(maxHvStep, dh); if (world.nearestNav(sim.hv.x, sim.hv.z, 2) < 0) offNav++; }
   if (sim.sf.state !== 'dormant' && sim.time > CONFIG.SESSION.INTRO_TIME + 1) maxSfStep = Math.max(maxSfStep, ds);
   prevHv = [sim.hv.x, sim.hv.z]; prevSf = [sim.sf.x, sim.sf.z];
   if (![sim.hv.x, sim.hv.z, sim.sf.x, sim.sf.z].every(Number.isFinite)) nan++;
@@ -82,7 +84,7 @@ console.log('     HV seconds by state:', sec(hvStates));
 console.log('     SF6 seconds by state:', sec(sfStates));
 console.log('     events:', ev);
 ok(nan === 0, 'no NaN positions');
-ok(maxHvStep < Math.max(CONFIG.HV.BURST, CONFIG.HV.RETREAT) * DT * 1.6, `Helium Voice never teleports (max ${maxHvStep.toFixed(2)} m per 50 ms step)`);
+ok(maxHvStep < Math.max(CONFIG.HV.BURST, CONFIG.HV.RETREAT) * DT * 1.6, `Helium Voice never jumps except announced unseen relocations (max ${maxHvStep.toFixed(2)} m per 50 ms step; ${ev.hv_relocate || 0} relocations)`);
 ok(maxSfStep < CONFIG.SF.DART * DT * 1.6, `SF6 never teleports (max ${maxSfStep.toFixed(2)} m per step)`);
 ok(offNav === 0, 'Helium Voice stays on walkable ground');
 ok(openingChases === 0, 'opening dread stays free of chases');
