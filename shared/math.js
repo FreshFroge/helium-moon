@@ -91,7 +91,8 @@ export function pointAtDistance(pts, cum, d) {
 
 // Nearest point on polyline: returns {d, x, z, along, side}.
 export function nearestOnPolyline(pts, cum, px, pz) {
-  let best = { d: Infinity, x: 0, z: 0, along: 0, side: 0 };
+  // scalars while scanning, one result object at the end (called many times per frame)
+  let bd = Infinity, bx0 = 0, bz0 = 0, bAlong = 0, bSide = 0;
   for (let i = 1; i < pts.length; i++) {
     const ax = pts[i - 1][0], az = pts[i - 1][1], bx = pts[i][0], bz = pts[i][1];
     const dx = bx - ax, dz = bz - az;
@@ -99,13 +100,15 @@ export function nearestOnPolyline(pts, cum, px, pz) {
     let t = ((px - ax) * dx + (pz - az) * dz) / L2;
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     const cx = ax + dx * t, cz = az + dz * t;
-    const d = Math.hypot(px - cx, pz - cz);
-    if (d < best.d) {
+    const ex = px - cx, ez = pz - cz;
+    if (ex * ex + ez * ez >= bd * bd) continue;   // cheap reject; exact hypot only for candidates
+    const d = Math.hypot(ex, ez);
+    if (d < bd) {
       const cross = dx * (pz - az) - dz * (px - ax);
-      best = { d, x: cx, z: cz, along: cum[i - 1] + Math.sqrt(L2) * t, side: Math.sign(cross) || 1 };
+      bd = d; bx0 = cx; bz0 = cz; bAlong = cum[i - 1] + Math.sqrt(L2) * t; bSide = Math.sign(cross) || 1;
     }
   }
-  return best;
+  return { d: bd, x: bx0, z: bz0, along: bAlong, side: bSide };
 }
 
 export function pointInPolygon(poly, x, z) {
