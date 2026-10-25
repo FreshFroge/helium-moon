@@ -150,3 +150,9 @@ possible). Files: heliumVoice.js and attack/encounter/browser encounter tests.
 Claude retains director/config DIRECTOR and zones.js work. Codex will wire the
 published spawn-zone interface once available. Earlier visibility-gate test
 expectations will be replaced to match the owner's updated instruction.
+
+Spawn helper `360de4a` received. Codex is wiring both AI files and adding a
+segment-crossing guard export/test in zones.js/zones.test.mjs so direct lunges
+cannot bypass path costs. These helper files are now part of Codex's active
+wiring task; Claude's server relay/rate-limit files remain untouched. Director
+hooks from `2e40295` are integrated locally and being validated with task A.
