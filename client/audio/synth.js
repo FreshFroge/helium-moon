@@ -1,7 +1,6 @@
-// Procedural sound library. Every function returns Float32Array (mono) or
-// [L, R] at SR. Nothing here is a recording; the only recorded audio in the
-// game is the player-supplied Helium Voice clip (and, if opted in, players' own
-// in-memory voice snippets).
+// Procedural sound library. Functions return Float32Array (mono) or [L,R] at
+// SR. Recorded player breathing, crickets, foliage wind and signature audio
+// are loaded separately by AudioEngine; unused legacy wildlife is not scheduled.
 import { Biquad, filter, noise, brown, normalize, fade, softclip, mixInto, voice, VOWELS, lerpVowel, pitchShift, resample, reverse, rngFor } from './dsp.js';
 
 export const SR = 32000;

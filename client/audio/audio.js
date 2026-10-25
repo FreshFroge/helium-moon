@@ -1,8 +1,9 @@
 // Audio engine: Web Audio graph, HRTF-positional emitters with occlusion and a
 // forest reverb, natural night ambience, subdued player physiology, footsteps
-// and creature vocals. Player breathing and Helium Voice's signature are sourced
-// recordings; other effects are synthesized at load. Cold is the proximity cue.
+// and creature vocals. Breathing, night crickets, foliage wind and the signature
+// use recordings; other effects are synthesized at load. Cold is the proximity cue.
 import * as S from './synth.js';
+import { NIGHT_CRICKETS_FILE, TREE_LEAVES_FILE, nearbyCanopies } from './nightAmbience.js';
 import { PLAYER_BREATH_FILE, recordedBreathPhrase } from './playerBreath.js';
 import { impulse, rngFor } from './dsp.js';
 import { assetUrl } from '../render/textures.js';
@@ -20,7 +21,7 @@ export class AudioEngine {
     this.settings = settings;
     this.ready = false; this.lib = {}; this.var = {};
     this.world = null; this.listener = { x: 0, y: 0, z: 0, fx: 0, fz: -1 };
-    this.timers = { owl: 30, coyote: 100, creak: 10, snap: 30, frog: 8, dog: 150 };
+    this.treeEmitters = new Map(); this.treeRefreshAt = 0;
     this.breathT = 0; this.breathIn = true; this.heartT = 0; this.onExhale = null;
     this.state = { terror: 0, fear: 0, cold: 0, exert: 0, gas: 0, downed: 0, inGame: false, critical: 0 };
     this.loops = {};
@@ -51,9 +52,7 @@ export class AudioEngine {
     // ---- synthesis (yielding so the loading bar keeps moving)
     const jobs = [];
     const add = (key, fn) => jobs.push([key, fn]);
-    add('crickets', () => S.crickets(11)); add('katydids', () => S.katydids(12)); add('wind', () => S.wind(13)); add('river', () => S.river(14)); add('traffic', () => S.traffic(15));
-    for (let i = 0; i < 3; i++) { add('owl' + i, () => S.owl(20 + i)); add('creak' + i, () => S.creak(30 + i)); add('snap' + i, () => S.twigSnap(40 + i)); add('frog' + i, () => S.frog(50 + i)); }
-    add('coyote0', () => S.coyotes(60)); add('coyote1', () => S.coyotes(61)); add('dog0', () => S.dogBark(63));
+    add('wind', () => S.wind(13)); add('river', () => S.river(14)); add('traffic', () => S.traffic(15));
     for (const k of ['litter', 'dirt', 'mud', 'grass', 'silt', 'water', 'gravel', 'wood', 'asphalt', 'brush']) for (let i = 0; i < 4; i++) add(`fs_${k}${i}`, () => S.footstep(k, 100 + i * 7 + k.length));
     add('heart', () => S.heartbeat()); add('clickOn', () => S.click(1, true)); add('clickOff', () => S.click(2, false)); add('paper', () => S.paper(3)); add('clink', () => S.clink(4));
     for (const k of ['gen', 'relay', 'mast']) add('work_' + k, () => S.work(k, 5));
@@ -69,8 +68,13 @@ export class AudioEngine {
     this.sigPCM = null;
     try { await this.loadSignature(); } catch (e) { console.warn('signature clip unavailable', e); }
     await this.loadPlayerBreathing();
-    this._buildLoops();
+    for (const [key,file] of [['crickets',NIGHT_CRICKETS_FILE],['treeLeaves',TREE_LEAVES_FILE]]) {
+      const response=await fetch(assetUrl(file));
+      if(!response.ok)throw new Error(`Night ambience recording is missing: ${file}`);
+      this.lib[key]=await this.ctx.decodeAudioData(await response.arrayBuffer());
+    }
     this.ready = true;
+    this._buildLoops();
   }
 
   async loadPlayerBreathing() {
@@ -230,7 +234,7 @@ export class AudioEngine {
   _buildLoops() {
     const ctx = this.ctx;
     const loop = (name, bus, gain = 0) => { const h = this.play(this.lib[name], { loop: true, bus, gain }); return h; };
-    this.loops.crickets = loop('crickets', 'amb'); this.loops.katydids = loop('katydids', 'amb');
+    this.loops.crickets = loop('crickets', 'amb');
     this.loops.wind = loop('wind', 'amb'); this.loops.river = loop('river', 'amb'); this.loops.traffic = loop('traffic', 'amb');
     // cold wind: band-passed noise whose centre wanders
     const nb = ctx.createBuffer(1, S.SR * 4, S.SR); const nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
@@ -265,10 +269,9 @@ export class AudioEngine {
     Object.assign(this.state, st);
     const terr = st.terror || 0;
     const cues = horrorCues(terr);
-    // the night goes quiet as he gets close: insects first, then everything
+    // Background insects remain independent of enemy proximity.
     const insects = cues.insects * (st.menu ? 0.6 : 1);
-    this.setLoopGain(this.loops.crickets, 0.55 * insects, 0.6);
-    this.setLoopGain(this.loops.katydids, 0.32 * insects * (0.7 + 0.3 * Math.sin(t * 0.05)), 0.6);
+    this.setLoopGain(this.loops.crickets, 0.27 * insects, 0.6);
     const rd = w ? w.riverDistAt(L.x, L.z) : 100;
     this.setLoopGain(this.loops.river, 0.55 * Math.pow(clamp(1 - rd / 75, 0, 1), 2), 0.5);
     this.setLoopGain(this.loops.wind, 0.36 + 0.14 * Math.sin(t * 0.13), 0.8);
@@ -311,30 +314,27 @@ export class AudioEngine {
         if (this.onBeat) this.onBeat();
       }
     }
-    this._wildlife(dt, terr);
+    this._treeRustle(t);
   }
 
-  _randPos(dmin, dmax, h = 2) {
-    const L = this.listener, a = Math.random() * Math.PI * 2, d = lerp(dmin, dmax, Math.random());
-    const x = L.x + Math.sin(a) * d, z = L.z + Math.cos(a) * d;
-    const y = (this.world ? this.world.heightAt(x, z) : 0) + h;
-    return { x, y, z };
-  }
-
-  _wildlife(dt, terr) {
-    const T = this.timers, quiet = horrorCues(terr).quietWildlife;
-    for (const k in T) T[k] -= dt * (quiet ? 0.15 : 1);
-    if (quiet) return;
-    if (T.owl <= 0) { T.owl = 25 + Math.random() * 55; this.play(this.pick('owl', 3, (Math.random() * 9) | 0), { pos: this._randPos(50, 140, 9), gain: 0.55, ref: 12, reverb: 0.5, occlude: false }); }
-    if (T.coyote <= 0) { T.coyote = 100 + Math.random() * 140; this.play(this.pick('coyote', 2, (Math.random() * 9) | 0), { pos: this._randPos(220, 420, 2), gain: 0.9, ref: 40, reverb: 0.8, occlude: false }); }
-    if (T.creak <= 0) { T.creak = 7 + Math.random() * 16; this.play(this.pick('creak', 3, (Math.random() * 9) | 0), { pos: this._randPos(10, 40, 5), gain: 0.35, ref: 5, reverb: 0.35 }); }
-    if (T.snap <= 0) { T.snap = 25 + Math.random() * 45; this.play(this.pick('snap', 3, (Math.random() * 9) | 0), { pos: this._randPos(25, 70, 0.3), gain: 0.4, ref: 6, reverb: 0.4 }); }
-    if (T.frog <= 0) {
-      T.frog = 5 + Math.random() * 10;
-      const w = this.world, L = this.listener;
-      if (w && (w.riverDistAt(L.x, L.z) < 60 || w.isWetZone(L.x, L.z))) this.play(this.pick('frog', 3, (Math.random() * 9) | 0), { pos: this._randPos(12, 40, 0.2), gain: 0.4, ref: 5, reverb: 0.3 });
+  _treeRustle(t) {
+    if (t < this.treeRefreshAt) return;
+    this.treeRefreshAt = t + 2;
+    const trees=nearbyCanopies(this.world,this.listener.x,this.listener.z);
+    for(const [tree,h] of this.treeEmitters) if(!trees.includes(tree)) {
+      h.stop(.8);this.treeEmitters.delete(tree);
     }
-    if (T.dog <= 0) { T.dog = 140 + Math.random() * 160; this.play(this.lib.dog0, { pos: this._randPos(500, 800, 2), gain: 0.6, ref: 60, reverb: 0.7, occlude: false }); }
+    for(const tree of trees) {
+      let h=this.treeEmitters.get(tree);
+      if(!h) {
+        h=this.play(this.lib.treeLeaves,{bus:'amb',loop:true,gain:0,
+          pos:{x:tree.x,y:tree.y+Math.min(tree.height*.65,10),z:tree.z},
+          ref:7,rolloff:1.6,reverb:.08,occlude:false,rate:.94+Math.random()*.12});
+        if(h)this.treeEmitters.set(tree,h);
+      }
+      // Slow gusts share the wind rhythm; enemy distance never affects leaves.
+      if(h)h.e.out.gain.setTargetAtTime(.16+.07*Math.sin(t*.13+tree.x*.08),t,.8);
+    }
   }
 
   // ---------------------------------------------------------------- game sounds
@@ -392,5 +392,6 @@ export class AudioEngine {
   stopAll() {
     for (const h of [...this.active]) if (!Object.values(this.loops).includes(h)) h.stop(0.2);
     for (const id of ['gen', 'relay', 'siren']) this.stopLoop(id);
+    this.treeEmitters.clear(); this.treeRefreshAt = 0;
   }
 }

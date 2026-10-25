@@ -14,3 +14,7 @@
   import are recorded in [PLAYER_BREATH_LICENSE.md](assets/audio/PLAYER_BREATH_LICENSE.md).
 
 Other environmental and creature sound is synthesised procedurally in the browser.
+
+- **Night crickets and foliage wind:** CC0 field recordings by **felix.blume**,
+  Freesound IDs 476672 / 711106. Licensed mirror, edits and reproducible import
+  are documented in [NIGHT_AMBIENCE_LICENSE.md](assets/audio/NIGHT_AMBIENCE_LICENSE.md).
