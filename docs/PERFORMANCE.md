@@ -68,7 +68,7 @@ walking on Low, without rendering:
 
 ### Oct 25 morning (Claude)
 
-Same profiler, Low, no rendering: **96 → 63 KB/frame.**
+Same profiler, Low, no rendering: **96 → 63 KB/frame, then 51 KB/frame** with the sim fixes below (single-player runs the sim in the page).
 - Reused scratch objects in the flashlight, animators (Euler and quaternions),
   shadow-camera snap, player camera, anomaly and interaction checks.
 - Tree and foliage instance update ranges reuse one `{start, count}` object.
