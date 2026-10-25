@@ -928,6 +928,12 @@ export class World {
     const gw = this.gw, R = CONFIG.GRID_RES;
     const maxExp = opts.maxExpand || 24000;
     const extra = opts.costFn;
+    // A weighted cell is visited from up to eight neighbours. Its cost is
+    // immutable during this synchronous search; evaluate it once per search.
+    if (extra && !this._navExtraStamp) {
+      this._navExtraStamp = new Uint32Array(this.navCost.length);
+      this._navExtraCost = new Float64Array(this.navCost.length);
+    }
     const heap = this._navHeap; heap.clear();
     const G = this._navG, from = this._navFrom, stamp = this._navStamp;
     const seq = ++this._navSeq;
@@ -950,7 +956,14 @@ export class World {
         const c = this.navCost[ni];
         if (c <= 0) continue;
         if (dx && dy && (this.navCost[cy * gw + nx] <= 0 || this.navCost[ny * gw + cx] <= 0)) continue;
-        const ng = gc + dl * (c + (extra ? extra(ni) : 0));
+        let weight = 0;
+        if (extra) {
+          if (this._navExtraStamp[ni] !== seq) {
+            this._navExtraStamp[ni] = seq; this._navExtraCost[ni] = extra(ni);
+          }
+          weight = this._navExtraCost[ni];
+        }
+        const ng = gc + dl * (c + weight);
         if (stamp[ni] === seq && ng >= G[ni]) continue;
         stamp[ni] = seq; G[ni] = ng; from[ni] = cur;
         const h = hfn(ni);

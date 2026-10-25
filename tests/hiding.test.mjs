@@ -93,3 +93,56 @@ test('unseen cover repositioning does not manufacture player tension',()=>{
   hv.observers=[{p:player}];hv.retreatFrom(player);
   assert.equal(reports,1,'a witnessed escape remains a real tension event');
 });
+
+test('weighted navigation evaluates each cell cost once and refreshes it next search',()=>{
+  const world=Object.create(World.prototype),size=21*21;
+  Object.assign(world,{gw:21,gh:21,minX:0,minZ:0,navCost:new Float32Array(size).fill(1),
+    _navHeap:new BinaryHeap(),_navG:new Float32Array(size),_navFrom:new Int32Array(size),
+    _navStamp:new Uint32Array(size),_navSeq:1});
+  for(const weight of [30,0]) {
+    const visited=new Set();
+    const path=world.findPath(2,20,38,20,{costFn:i=>{
+      assert.equal(visited.has(i),false,'duplicate expensive evaluation in one search');
+      visited.add(i);return weight;
+    }});
+    assert.ok(path.length>=2);assert.ok(visited.size>0,'new search recomputes costs');
+  }
+});
+
+test('a cylinder overlapping a trunk recovers gradually instead of rejecting every correction',()=>{
+  const {hv,world}=fixture();
+  Object.assign(world,{circles:[[0,0,.5]],queryColliders:()=>[0],waterAt:()=>null});
+  hv.x=.1;hv.z=0;hv.target=null;hv.setState('roam');
+  let maxStep=0;
+  for(let i=0;i<60;i++) {
+    if(!hv.path){hv.path=[[hv.x,hv.z],[3,0]];hv.pathI=1;}
+    const x=hv.x,z=hv.z;hv.followPath(.05,2.8);
+    maxStep=Math.max(maxStep,Math.hypot(hv.x-x,hv.z-z));
+  }
+  assert.ok(hv.x>1,'actor must leave the overlapping tree');
+  assert.ok(maxStep<.22,'recovery cannot teleport');
+});
+
+test('an intentional appearance registers briefly before physically retreating',()=>{
+  const {hv,player}=fixture();hv.x=30;
+  hv.setState('reveal');hv.reveal={pid:player.id,phase:'show'};
+  hv.perceive=()=>{hv.observers=[{p:player}];hv.litBy=null;};
+  hv.vocals=()=>{};hv.updateReveal=()=>{};hv.followPath=()=>false;
+  hv.concealedAt=()=>false;hv.coverAway=()=>null;
+  let retreats=0;hv.retreatFrom=()=>{retreats++;hv.setState('retreat');};
+  for(let i=0;i<10;i++)hv.update(.05);
+  assert.equal(retreats,0,'a deliberate glimpse survives its first visible frame');
+  for(let i=0;i<15;i++)hv.update(.05);
+  assert.equal(retreats,1,'appearance still ends in physical escape');
+});
+
+test('a flashlight cannot cancel the first frame of a planned watcher glimpse',()=>{
+  const {hv,sim,player}=fixture();hv.x=30;
+  hv.reveal={pid:player.id,kind:'watcher',phase:'show',t:0,exposureT:.1};
+  hv.observers=[{p:player}];hv.litBy={p:player};
+  sim.director.onReveal=()=>{};
+  let retreats=0;hv.retreatFrom=()=>{retreats++;};
+  hv.updateReveal(.05);assert.equal(retreats,0);
+  hv.reveal.exposureT=.95;
+  hv.updateReveal(.05);assert.equal(retreats,1);
+});

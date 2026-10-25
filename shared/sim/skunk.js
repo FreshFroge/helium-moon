@@ -95,9 +95,16 @@ export class SkunkAI {
       const r = noiseRadius(p, CONFIG.HV) * 0.75;
       if (d < Math.max(r, C.SENSE_RADIUS * (p.crouch ? 0.5 : 1)) && (!this.inv || sim.time - this.inv.t > 6)) this.inv = { x: p.x, z: p.z, t: sim.time, pid: p.id };
     }
-    // flashlight in its eyes up close makes it bolt
+    // Resolve close-range attack acquisition before flashlight avoidance.
+    // A ready ambush remains dangerous across the whole 12 m flashlight
+    // reaction range; otherwise he always flees before reaching 7.5 m.
     let lit = null;
     for (const p of sim.playerList) if (playerActive(p)) { const ob = observedBy(this.world, p, this.x, this.y, this.z, 0.7 * C.MODEL_SCALE); if (ob.lit && ob.d < 12 && ob.vis > 0.3) lit = p; }
+    if (nearest && ['lurk','prowl','investigate'].includes(this.state)
+        && nd < (lit?.id === nearest.id ? 12 : C.AMBUSH_RADIUS) && dir.allowSkunkAmbush()
+        && sim.time - this.gasT > C.GAS_COOLDOWN) {
+      this.target = nearest.id; this.setState('ambush');
+    }
     if (lit && !['retreat', 'rear', 'ambush'].includes(this.state) && this.state !== 'lurk') this.flee(lit);
     // gas lingering players hiding nearby out of cover
     switch (this.state) {

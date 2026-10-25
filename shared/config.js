@@ -101,12 +101,12 @@ export const CONFIG = {
     DREAD_MIN_DIST: 55,       // m he is asked to stay beyond during the dread period (inside the outer cold ring)
     ESCALATE_TIME: 840,       // s after the dread period to reach full escalation (~18 min into the session)
     ESCALATE_AGGRESSION: 0.35,// added to base aggression at full escalation
-    CHASE_COOLDOWN: [70, 30], // s between chases: start -> full escalation
-    ATTACK_COOLDOWN: [50, 22],
-    RELAX_LEN: [[45, 85], [18, 35]],   // relax phase length range: start -> full escalation
+    CHASE_COOLDOWN: [50, 22], // s between chases: start -> full escalation
+    ATTACK_COOLDOWN: [40, 18],
+    RELAX_LEN: [[30, 55], [15, 25]],   // relax phase length range: start -> full escalation
     BUILD_LEN: [[90, 160], [45, 80]],
-    REVEAL_GAP: [[150, 260], [75, 130]],
-    PRESENCE_SAFE: [50, 15],  // s of safety before he deliberately comes closer
+    REVEAL_GAP: [[75, 130], [45, 80]],
+    PRESENCE_SAFE: [25, 8],  // s of safety before he deliberately comes closer
     VOCAL_MUL: [1, 1.8],
   },
   SESSION: {

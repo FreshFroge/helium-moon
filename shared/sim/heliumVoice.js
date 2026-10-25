@@ -212,7 +212,23 @@ export class HeliumVoiceAI {
     const moved = Math.hypot(r.x - this.x, r.z - this.z);
     // A tight waypoint beside solid geometry can return a large penetration
     // correction. Replan instead of snapping the creature through the obstacle.
-    if (moved > Math.max(0.08, step * 1.5)) { this.path = null; this.stop(dt); return false; }
+    if (moved > Math.max(0.08, step * 1.5)) {
+      // The nav grid can place a cylinder slightly inside a trunk. Discarding
+      // every correction traps it forever. Recover only existing penetration
+      // (zero requested movement), gradually and within this tick's speed cap.
+      const out=moveCharacter(this.world,this,0,0,.32,{nav:true,slope:false,step:.6});
+      const distance=Math.hypot(out.x-this.x,out.z-this.z);
+      if(distance>1e-5) {
+        const k=Math.min(step,distance)/distance;
+        const x=this.x+(out.x-this.x)*k,z=this.z+(out.z-this.z)*k;
+        const crossesOpening=minimum && this.sim.playerList.some(p=>playerActive(p)
+          && this.dist(p)>=minimum && Math.hypot(p.x-x,p.z-z)<minimum);
+        if(!crossesOpening && !spawnStepBlocked(this.world,this.x,this.z,x,z)) {
+          this.x=x;this.z=z;this.y=groundAt(this.world,x,z);
+        }
+      }
+      this.path=null;return false;
+    }
     this.x = r.x; this.z = r.z; this.y = groundAt(this.world, this.x, this.z);
     const desired = Math.atan2(nx, nz) + (this.state === 'retreat' ? Math.PI : 0);
     this.yaw += angleDiff(this.yaw, desired) * Math.min(1, dt * (this.state === 'retreat' ? 22 : speed > 3 ? 8 : 4));
@@ -303,10 +319,14 @@ export class HeliumVoiceAI {
     const tp = this.focusPlayer();
     for (let k = 0; k < 40; k++) {
       let x, z;
-      if (tp && (sim.director.wantsPresence() || this.openingDistance() > 0)) {
+      if (tp) {
         // drift into the outer terror ring of the focus player
         const a = rng.range(0, Math.PI * 2), minimum = this.openingDistance();
-        const d = minimum ? rng.range(minimum + 3, Math.max(minimum + 4, CONFIG.TERROR.OUTER - 3)) : rng.range(55, 110);
+        const escalation=sim.director.escalation?.()||0;
+        const d = minimum ? rng.range(minimum + 3, Math.max(minimum + 4, CONFIG.TERROR.OUTER - 3))
+          : sim.director.wantsPresence()
+            ? rng.range(lerp(28,18,escalation),lerp(48,32,escalation))
+            : rng.range(55,85);
         x = tp.x + Math.sin(a) * d; z = tp.z + Math.cos(a) * d;
       } else {
         // wander the stretch of trail around whoever he is following, never the whole map
@@ -357,7 +377,13 @@ export class HeliumVoiceAI {
       // Complete an already committed contact strike, then escape. At longer
       // range immediately seek cover, including when a chase is spotted.
       const contact = this.state === 'chase' && tp && this.dist(tp) < C.ATTACK_RANGE;
-      if (!contact) this.retreatFrom(observer.p, !!this.litBy, true);
+      // Deliberate appearances need time to register. The global hiding
+      // reaction previously cancelled them on their very first visible frame,
+      // making the reveal's own show/cross logic effectively unreachable.
+      const deliberate=this.state==='reveal' && this.reveal;
+      if(deliberate)this.reveal.exposureT=(this.reveal.exposureT||0)+dt;
+      if (!contact && (!deliberate || this.reveal.exposureT >= .9))
+        this.retreatFrom(observer.p, !!this.litBy, true);
     }
 
     // Reactions above can start a chase of a player who was not the previous
@@ -375,16 +401,20 @@ export class HeliumVoiceAI {
       }
       case 'roam': {
         const fpl = this.focusPlayer();
-        if (this.path && this.goal && fpl && dir.wantsPresence() && Math.hypot(this.goal[0] - fpl.x, this.goal[1] - fpl.z) > 120) this.path = null;
-        if (!this.path) { const g = this.roamGoal(); if (g) this.planTo(g[0], g[1], 'cover'); }
-        const near = sim.nearestPlayer(this.x, this.z);
+        if (this.path && this.goal && fpl && dir.wantsPresence() && Math.hypot(this.goal[0] - fpl.x, this.goal[1] - fpl.z) > lerp(85,55,escalation)) this.path = null;
+        if (!this.path && (minimum || sim.time >= (this.roamPlanAt || 0))) {
+          this.roamPlanAt = sim.time + .75;
+          const g = this.roamGoal(); if (g) this.planTo(g[0], g[1], 'cover');
+        }
+        const near = fpl ? {p:fpl,d:this.dist(fpl)} : sim.nearestPlayer(this.x, this.z);
         // unseen and far away he covers ground quickly; near people he slows to a creep
         const roamSpd = !near || near.d > 130 ? C.RELOCATE : near.d > 75 ? C.STALK : C.WALK * (0.8 + 0.4 * Math.sin(sim.time * 0.37 + 1.3));
-        if (this.followPath(dt, roamSpd)) this.path = null;
+        const approachSpd = near && dir.wantsPresence() && near.d > 25 ? C.STALK * (1 + .15 * escalation) : roamSpd;
+        if (this.followPath(dt, approachSpd)) this.path = null;
         // stimuli
         if (this.stimulus && sim.time - this.stimulus.t < 1) this.setState('investigate', { inv: this.stimulus, stimulus: null });
         if (tp && (this.awareness.get(tp.id) || 0) > 1 && this.stateT > 2) this.setState('stalk');
-        lookP = null;
+        lookP = dir.wantsPresence() ? fpl : null;
         break;
       }
       case 'investigate': {
@@ -446,7 +476,10 @@ export class HeliumVoiceAI {
       case 'retreat': {
         // Keep escaping until genuinely occluded; an exposed route endpoint
         // must never become a prolonged stationary hiding pose.
-        if (!this.path && tp) { const away = this.coverAway(tp, 8, 24); if (away) this.planTo(...away, 'cover'); }
+        if (!this.path && tp && (minimum || sim.time >= (this.retreatPlanAt || 0))) {
+          this.retreatPlanAt = sim.time + .4;
+          const away = this.coverAway(tp, 8, 24); if (away) this.planTo(...away, 'cover');
+        }
         const done = this.followPath(dt, C.RETREAT);
         if (tp && this.stateT > 0.45 && this.concealedAt(this.x, this.z)) {
           this.lastRetreatT = sim.time; this.setState('still', { stillFor: this.rng.range(2, 6) }); break;
@@ -478,7 +511,7 @@ export class HeliumVoiceAI {
           this.path = null;
         }
         this.replanT -= dt;
-        if (this.replanT <= 0 || !this.path) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = this.dist(tp) < 15 ? 0.3 : 0.7; }
+        if (this.replanT <= 0) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = this.dist(tp) < 15 ? 0.3 : 0.7; }
         const d = this.dist(tp);
         const burst = d < 12 ? C.BURST : C.CHASE;
         if (d < 7 && this.world._straightWalkable([this.x, this.z], [tp.x, tp.z])) {
@@ -585,7 +618,7 @@ export class HeliumVoiceAI {
       }
     }
     if (!plan) return false;
-    this.reveal = plan;
+    this.reveal = plan; this.target = p.id;
     this.setState('reveal');
     if (!this.planTo(plan.spot[0], plan.spot[1], 'cover')) { this.reveal = null; this.setState('roam'); return false; }
     return true;
@@ -607,7 +640,7 @@ export class HeliumVoiceAI {
       // stand motionless between the trees, facing them, until seen (or bored)
       r.t += dt; this.stop(dt); this.anim.still = 1;
       if (this.observers.some((o) => o.p.id === p.id)) r.seenT = (r.seenT || 0) + dt;
-      if ((r.seenT || 0) > this.rng.range(1.2, 2.6) || this.litBy || r.t > 30) {
+      if ((r.seenT || 0) > this.rng.range(1.2, 2.6) || (this.litBy && (r.exposureT || 0) >= .9) || r.t > 30) {
         sim.director.onReveal('watcher');
         this.reveal = null; this.retreatFrom(p, false, true);
       }

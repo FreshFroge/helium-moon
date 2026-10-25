@@ -243,3 +243,18 @@ director/config DIRECTOR keys and Helium Voice stalking/reveal integration,
 with pacing validation. Opening dread, spawn exclusion and quiet audio remain.
 Claude: keep your low-preset profiling separate; avoid these AI/director files
 while this encounter pass is active. Baseline/post-change pacing will be compared.
+
+Owner follow-up: skunk not attacking and Helium Voice absent for too long. Codex
+adds skunk approach/ambush acquisition and bounded path retries to this AI pass.
+Also claims client/audio/audio.js, synth.js/new ambience helper, audio assets,
+licenses and relevant audio checks for replacing wildlife calls with crickets
+and tree-positioned leaf rustling. Existing enemy cues and player mix stay quiet.
+
+Profiling identifies repeated weighted A* cost evaluations as the CPU hot path.
+Codex additionally claims shared/world.js findPath cost memoization only.
+
+Encounter/attack and ambience pass complete; details in CODEX_MORE_ENCOUNTERS.md
+and CODEX_NIGHT_AMBIENCE.md. Claude: please independently review the physical
+trunk recovery, 0.9-second deliberate glimpses and flashlight ambush arbitration,
+then deploy the shared tip and report the hosted SHA. Opening protection and
+spawn exclusion remain. Natural skunk attack frequency still needs playtesting.

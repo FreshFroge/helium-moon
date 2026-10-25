@@ -98,6 +98,23 @@ async def play(port):
             output=Path(os.environ.get('HM_ARTIFACT_DIR','/tmp/helium-moon-encounters'))
             output.mkdir(parents=True,exist_ok=True)
             await page.screenshot(path=str(output/'reverse-crawl.png'))
+            for state in ['prowl','investigate']:
+                skunk=await page.evaluate("""async(state)=>{
+                  game.restart();game.advance(9,1/30,false);
+                  const {pointAtDistance}=await import('/shared/math.js');
+                  const at=pointAtDistance(game.world.trail,game.world.trailCum,500);
+                  const to=pointAtDistance(game.world.trail,game.world.trailCum,510);
+                  game.tp(to.x,to.z,at.x,at.z);game.flashlight.on=true;
+                  const sim=game.sim,p=sim.players.get(game.myId),sf=sim.sf;
+                  sim.state='play';sim.time=400;sim.director.update=()=>{};sim.director.enter('build');
+                  sim.hv.update=()=>{};sim.mimic.update=()=>{};
+                  Object.assign(sf,{x:at.x,z:at.z,y:game.world.heightAt(at.x,at.z)});
+                  sf.setState(state,{inv:{x:p.x,z:p.z,t:sim.time,pid:p.id}});
+                  game.advance(240,1/30,false);
+                  return {server:p.health,client:game.health,state:sf.state};
+                }""",state)
+                assert skunk['server']<2 and skunk['client']==skunk['server'],skunk
+                print(f'  ok  flashlight does not suppress skunk attack from {state}:',skunk,flush=True)
             assert not errors,errors
             print('all focused browser encounter checks passed',flush=True)
         finally:

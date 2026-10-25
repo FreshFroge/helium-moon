@@ -10,9 +10,10 @@ export class Director {
     this.sim = sim; this.rng = sim.rng;
     this.phase = 'build'; this.phaseT = 0;
     this.intensity = 0;          // short-term stress (0..1+)
+    this.presenceT = 0;
     this.safeT = 0;              // seconds since anything threatening happened near anyone
     this.lastChase = -999; this.lastAttack = -999; this.lastReveal = -999; this.lastVocal = -999; this.lastSkunk = -999;
-    // first deliberate reveal is scheduled 40-100 s after the dread period actually ends (see update)
+    // first deliberate reveal is scheduled 20-45 s after the dread period actually ends (see update)
     this.nextReveal = null;
     this.revealKinds = ['watcher', 'crossing', 'skunk'];
     this.recentKinds = [];
@@ -46,7 +47,7 @@ export class Director {
   // the player the monsters should pay most attention to: the isolated, the quiet, the one in front
   focusPlayer() { return this.focus ? this.sim.players.get(this.focus) : null; }
 
-  wantsPresence() { return !this.inDread() && this.phase !== 'relax' && (this.safeT > this._esc(this.D.PRESENCE_SAFE) || this.phase === 'peak'); }
+  wantsPresence() { return !this.inDread() && this.phase !== 'relax' && (this.presenceT > this._esc(this.D.PRESENCE_SAFE) || this.phase === 'peak'); }
 
   allowChase(p) {
     const t = this.sim.time;
@@ -102,6 +103,10 @@ export class Director {
       p.isolation = active.length > 1 ? iso : 0;
     }
     if (closest < CONFIG.TERROR.MIDDLE) this.safeT = 0; else this.safeT += dt;
+    // Being hidden 40 m away is not a player encounter. Keep approaching
+    // until a glimpse, committed pursuit or genuinely close cold presence.
+    if (hv.observers?.length || this.chasing || closest < CONFIG.TERROR.INNER) this.presenceT = 0;
+    else this.presenceT += dt;
     if (closest < CONFIG.TERROR.INNER) this.intensity += dt * 0.01;
     // focus: most isolated player, else the one furthest along the trail, rotating occasionally
     if (!this.focusT || this.focusT <= 0) {
@@ -121,11 +126,12 @@ export class Director {
     if (this.intensity > 1.6 && this.phase !== 'relax' && !this.chasing) this.enter('relax');
     // deliberate reveals - rare, varied, never the same twice in a row
     if (sim.state === 'play' || sim.state === 'extract') {
-      if (this.nextReveal === null && !this.inDread()) this.nextReveal = sim.time + this.rng.range(40, 100);
+      if (this.nextReveal === null && !this.inDread()) this.nextReveal = sim.time + this.rng.range(20, 45);
       if (this.nextReveal !== null && sim.time > this.nextReveal && !this.chasing && this.phase !== 'relax' && !this.inDread()) {
-        const p = this.focusPlayer();
+        const p = sim.hv.focusPlayer?.() || this.focusPlayer();
         if (p) {
           let kinds = this.revealKinds.filter((k) => k !== this.recentKinds[this.recentKinds.length - 1]);
+          if (this.presenceT > 90) kinds = kinds.filter(k => k !== 'skunk');
           const kind = this.rng.pick(kinds);
           const ok = kind === 'skunk' ? sim.sf.requestEmerge(p) : sim.hv.requestReveal(kind, p);
           this.nextReveal = sim.time + (ok ? this._escRange(this.D.REVEAL_GAP) : 20);

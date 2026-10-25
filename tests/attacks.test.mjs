@@ -95,3 +95,12 @@ test('nearby enemies do not damage through an occluding wall',()=>{
   for(let t=0;t<5;t+=.05)sim.step(.05);
   assert.equal(p.health,2);
 });
+
+for (const separation of [6,10]) for (const state of ['prowl','investigate']) test(`skunk at ${separation} m commits to a close ambush from ${state} under a flashlight`,()=>{
+  const {sim,p,actor}=encounter('sf',separation);
+  p.flash=true;
+  p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));
+  actor.setState(state,{inv:{x:p.x,z:p.z,t:sim.time,pid:p.id}});
+  for(let t=0;t<8 && p.health===2;t+=.05)sim.step(.05);
+  assert.ok(p.health<2,`a nearby flashlight must not suppress ${state} attack acquisition`);
+});
