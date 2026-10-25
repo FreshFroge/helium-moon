@@ -42,7 +42,7 @@ export class TreeSystem {
       const lods = [0, 1, 2].map((l) => generateTree(presetName, seed, h, l));
       lods[0].bark.computeBoundingBox();
       const top = Math.max(lods[0].bark.boundingBox.max.y, lods[0].leaves ? (lods[0].leaves.computeBoundingBox(), lods[0].leaves.boundingBox.max.y) : 0);
-      const a = { key, presetName, species, variant, lods, top, meshes: [], instances: 0 };
+      const a = { key, presetName, species, variant, lods, top, trunkR: lods[0].trunkR, meshes: [], instances: 0 };
       a.barkMat = this.barkMats[SPECIES_BARK[species]];
       const leafType = presetName === 'sapling' ? (SPECIES_LEAF[species] || 'ash') : SPECIES_LEAF[species];
       a.leafMat = leafType ? this.leafMats[leafType] : null;
@@ -72,8 +72,15 @@ export class TreeSystem {
       leanQ.setFromAxisAngle(axis.set(Math.cos(t.leanDir), 0, Math.sin(t.leanDir)), t.lean);
       q.multiplyQuaternions(leanQ, yQ);
       for (const [arr, k] of [[this.mats, ai], [this.farMats, fi]]) {
-        const sc = t.height / this.arch[k].top;
-        m.compose(p.set(t.x, t.y - 0.05, t.z), q, s.set(sc * (0.92 + (i % 7) * 0.025), sc, sc * (0.92 + (i % 5) * 0.03)));
+        const a = this.arch[k];
+        const sy = t.height / a.top;
+        // The authoritative world already randomizes each tree's trunk radius.
+        // Scaling X/Z from total generated height made the visible bark up to
+        // ~2.5x wider than that collision radius, placing the first-person
+        // camera inside a one-sided hollow shell. Match the rendered trunk to
+        // the same radius while preserving the independently varied height.
+        const sxz = t.trunkR / a.trunkR;
+        m.compose(p.set(t.x, t.y - 0.05, t.z), q, s.set(sxz, sy, sxz));
         m.toArray(arr, i * 16);
       }
       this.pos[i * 3] = t.x; this.pos[i * 3 + 1] = t.y; this.pos[i * 3 + 2] = t.z;

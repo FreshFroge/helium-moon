@@ -91,7 +91,7 @@ export class PlayerController {
       this.vel.y = P.JUMP; this.grounded = false; this.stamina = Math.max(0, this.stamina - 0.6);
     }
     this.vel.y -= P.GRAVITY * dt;
-    const res = moveCharacter(this.world, this.pos, this.vel.x * dt, this.vel.z * dt, P.RADIUS, { boundary: true });
+    const res = moveCharacter(this.world, this.pos, this.vel.x * dt, this.vel.z * dt, P.RADIUS, { boundary: true, cameraSafe: true });
     const movedX = res.x - this.pos.x, movedZ = res.z - this.pos.z;
     this.pos.x = res.x; this.pos.z = res.z;
     if (dt > 0) { this.vel.x = movedX / dt; this.vel.z = movedZ / dt; }

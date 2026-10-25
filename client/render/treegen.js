@@ -89,6 +89,26 @@ export function generateTree(presetName, seed, height, lod = 0) {
       const a = base + i * (radial + 1) + j, b = a + radial + 1;
       bark.idx.push(a, b, a + 1, a + 1, b, b + 1);
     }
+    // Close every exposed branch tip. The tubes used to end in an empty ring,
+    // so a flashlight or a close camera angle revealed the hollow tree shell.
+    // Duplicate the rim so the cut face has its own tangent-facing normal and
+    // planar UVs instead of inheriting the side wall's radial normal/UV seam.
+    const end = n - 1, tangent = tangents[end];
+    const rim = bark.count, endSway = level === 0 ? Math.pow(points[end].y / height, 2) * 0.05 : swayBase + 0.25 * level;
+    for (let j = 0; j < radial; j++) {
+      const a = (j / radial) * Math.PI * 2, cx = Math.cos(a), sx = Math.sin(a);
+      const side = base + end * (radial + 1) + j;
+      bark.pos.push(bark.pos[side * 3], bark.pos[side * 3 + 1], bark.pos[side * 3 + 2]);
+      bark.nor.push(tangent.x, tangent.y, tangent.z);
+      bark.uv.push(0.5 + cx * 0.48, 0.5 + sx * 0.48);
+      bark.sway.push(endSway);
+    }
+    const center = bark.count;
+    bark.pos.push(points[end].x, points[end].y, points[end].z);
+    bark.nor.push(tangent.x, tangent.y, tangent.z);
+    bark.uv.push(0.5, 0.5);
+    bark.sway.push(endSway);
+    for (let j = 0; j < radial; j++) bark.idx.push(center, rim + j, rim + (j + 1) % radial);
   }
 
   function branch(level, start, dir, length, radius, swayBase) {
@@ -200,5 +220,5 @@ export function generateTree(presetName, seed, height, lod = 0) {
     }
     leaves.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
-  return { bark: bark.build(), leaves: leafCards.length ? leaves.build() : null, height };
+  return { bark: bark.build(), leaves: leafCards.length ? leaves.build() : null, height, trunkR };
 }

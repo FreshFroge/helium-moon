@@ -734,9 +734,15 @@ export class World {
     const S = SPECIES[sp];
     const height = lerp(S.hMin, S.hMax, rng()) * scale;
     const trunkR = clamp(height * (sp === 2 ? 0.026 : sp === 1 ? 0.024 : 0.021) * (0.8 + rng() * 0.4), 0.04, 0.85);
+    const rot = rng() * TAU;
+    const lean = rng.range(0, 0.06) + (scale < 0.4 ? 0.06 : 0);
+    // The collision cylinder is centred at the root. Cover the trunk's
+    // horizontal shift through standing eye height as well as its bark radius,
+    // or a strongly leaning sapling can still put the camera inside the mesh.
+    const collisionR = trunkR + Math.sin(lean) * Math.min(2, height) + 0.02;
     return {
-      x, z, y: this.heightAt(x, z), sp, scale, height, trunkR,
-      rot: rng() * TAU, lean: rng.range(0, 0.06) + (scale < 0.4 ? 0.06 : 0), leanDir: rng() * TAU,
+      x, z, y: this.heightAt(x, z), sp, scale, height, trunkR, collisionR,
+      rot, lean, leanDir: rng() * TAU,
       variant: Math.floor(rng() * 4), play,
     };
   }
@@ -748,7 +754,10 @@ export class World {
     const circles = this.circles = [];
     const segs = this.segs = [];   // capsules: ax, az, bx, bz, r, topY (absolute)
     const boxes = this.boxes = []; // oriented boxes: x, z, hx, hz, rot, top
-    for (const t of this.trees) if (t.trunkR > 0.06) circles.push([t.x, t.z, t.trunkR + 0.02]);
+    // Slot 3 is an optional first-person camera-safe radius. Creature motion
+    // keeps the original nav-matched radius; only the local player needs the
+    // extra allowance for a leaning trunk at eye height.
+    for (const t of this.trees) if (t.trunkR > 0.06) circles.push([t.x, t.z, t.trunkR + 0.02, t.collisionR]);
     for (const s of this.stumps) circles.push([s[0], s[2], s[3]]);
     for (const l of this.logs) {
       const [x, y, z, len, rad, yaw] = l;

@@ -44,7 +44,7 @@ export function moveCharacter(world, p, dx, dz, r, opts = {}) {
       if (ref < 100000) {
         const c = world.circles[ref];
         const ex = nx - c[0], ez = nz - c[1];
-        const d = Math.hypot(ex, ez), min = c[2] + r;
+        const d = Math.hypot(ex, ez), min = (opts.cameraSafe ? (c[3] ?? c[2]) : c[2]) + r;
         if (d < min && d > 1e-6) { nx = c[0] + ex / d * min; nz = c[1] + ez / d * min; }
       } else if (ref < 200000) {
         const s = world.segs[ref - 100000];
