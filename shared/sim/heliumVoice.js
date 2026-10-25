@@ -812,7 +812,11 @@ export class HeliumVoiceAI {
     // Hunts start close (owner, Oct 25): farther out, mark the player and close in
     // unseen first (stalk handles the approach and commits inside the range).
     if (this.dist(p) > C.HUNT_START_RANGE) {
-      if (this.closingOn?.pid !== p.id) { this.closingOn = { pid: p.id, t: this.sim.time }; this.closeReplanT = 0; }
+      if (this.closingOn?.pid !== p.id) {
+        this.closingOn = { pid: p.id, t: this.sim.time }; this.closeReplanT = 0;
+        // the mark: his joints crack, far off and quiet (Puppet)
+        this.sim.emit({ type: 'hv_pops', pid: p.id, x: +this.x.toFixed(1), y: +this.y.toFixed(1), z: +this.z.toFixed(1) });
+      }
       this.target = p.id;
       if (this.state !== 'stalk') { this.setState('stalk'); this.replanT = 0; }
       return false;

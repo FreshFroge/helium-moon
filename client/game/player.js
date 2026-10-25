@@ -129,6 +129,7 @@ export class PlayerController {
     const s = this.settings;
     let eye = lerp(P.HEIGHT - 0.1, P.CROUCH_HEIGHT - 0.1, this.crouch);
     eye = lerp(eye, 0.35, this.downed);
+    eye += this.eyeOffset || 0;   // e.g. lifted by the throat in his grab
     this.landDip = lerp(this.landDip, 0, 1 - Math.exp(-dt * 6));
     const bobAmt = s.headBob * (this.sprinting ? 0.055 : 0.028) * clamp(hs / 2, 0, 1.4);
     const bobY = Math.abs(Math.sin(this.bobT)) * bobAmt - bobAmt * 0.5;
@@ -142,7 +143,7 @@ export class PlayerController {
     const right = (this._right || (this._right = new THREE.Vector3())).set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     cam.position.set(this.pos.x, this.pos.y + eye + bobY - this.landDip, this.pos.z).addScaledVector(right, bobX);
     const breathe = Math.sin(performance.now() * 0.0012) * 0.004 * s.headBob;
-    const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35;
+    const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35 + (this.extraRoll || 0);
     cam.rotation.set(this.pitch + shy + breathe, this.yaw + shx, roll, 'YXZ');
     cam.updateMatrixWorld();
   }

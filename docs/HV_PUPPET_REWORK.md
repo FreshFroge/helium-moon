@@ -1,7 +1,14 @@
 # Helium Voice rework: "The Puppet" (DRAFT, owner chose this direction Oct 25 2026)
 
-Status: **design draft, being settled with the owner.** Nothing here is implemented yet.
-Open owner decisions are marked **[OWNER?]**.
+Status: **implemented on `codex/early-build-playtest` (Oct 25 2026 afternoon)** - see "As built" at the end.
+
+Owner decisions (Oct 25, 13:57 and 14:17 CT):
+- Looking back during a hunt **freezes him for a beat**.
+- The all-fours movement is **only glimpsed**.
+- **No swing.** Grabs, with variations. You **survive two grabs; the third kills** (MAX_HEALTH 3, no auto-heal).
+- Full replacement of the old behaviour (relayed via ChatGPT's agent), but **keep** spawn safety, the cold
+  warning and Developer mode. The 7-ft flashlight rule goes: **"find a more creative way to end a hunt"**
+  -> *cut the strings* (below).
 
 ## Core idea
 
@@ -93,3 +100,45 @@ Owner note: motion-capture quality would need a rigged model with animation clip
 4. Search beat with listening; hiding survives.
 5. Pursuit (dead-arm run, look-back freeze if approved) and the grab.
 6. Grass ambush.
+
+## As built
+
+**Cut the strings (how a hunt ends).** During a hunt faint strings run from his head, hands and knees
+up into the canopy to *the control*, a dark wooden crossbar 9-12 m above him and 2-4 m behind him (as
+seen from the hunted player). The strings are nearly invisible until a flashlight beam crosses them.
+Hold a beam on the control for 1.5 s (within 11 deg of the beam centre; drains at 0.6x when the beam
+slips) and the strings snap: he collapses, the hunt is over, and the moment nobody is looking at him he
+is gone (reappears 35-70 m off, concealed). Anyone can cut it, so a teammate can save you. To look up at
+it you usually lose sight of him, and unwatched he moves. Learning: a player who has cut him before gets
+a control hung 1.35x higher and further back. The ranger's log note hints at it ("fishing line running
+up off him into the trees... Dale put the big light up into the branches and the man dropped like a coat
+off a hook"). Config: `CONFIG.HV.CONTROL_*`.
+
+**Watched / unwatched.** Outside hunts, watched he freezes mid-pose (4-7 s; lit 2.5-4.5; close 2-3.5),
+peeking from cover at the wrong height, then backs away upright facing you. Unwatched: low, on all
+fours, 1.3x faster (snapshot flag 16). In a hunt each fresh look back freezes him for 0.55-0.85 s (at
+most every 1.8 s after the last beat, never inside 3 m); unwatched he runs low, watched upright with
+dead arms. The prowl (ChatGPT's 12-15 ft, ~30 s circle) keeps going up to 6 s more while you watch him:
+the final rush comes when you look away.
+
+**The grab.** Reach 0.45 s (scream), then hold: shoulders 1.7 s, throat 2.0 (lifts you), face 1.4
+(hand over your eyes, screen goes dark), turn 1.6 (from behind: spins you to face him), drag 1.5 (from
+behind: yanks you 2 m to him), final 3.2 (the third grab: pulled in, zoom, fade). Damage lands on
+release. From the front he picks shoulders/throat/face, from behind turn/drag, never the same twice in
+a row. Pinned behind a trunk next to you and unwatched, he is on your side of it (`slip`); still pinned,
+his arms reach round it (GRAB_AROUND 3.1 m).
+
+**In the grass.** While closing in on someone walking the trail (30% of approaches, 240 s cooldown) he
+may lie flat beside the trail 55-75 m ahead, placed unseen, preferring grass. Within 4.5 m (or lit
+inside 9 m) he does the plank rise (1.1 s) and hunts; if they pass by he slips off.
+
+**Sounds** (all procedural, `client/audio/synth.js`): joint pops (the mark when he starts closing in,
+quiet, up to 40 m; one crack when a look back freezes him), crawl patter in leaves and knuckles on the
+boardwalk when he moves low (audible to 8-11 m only), string strain while a beam works at the control,
+string snaps when cut, the body drop, the cloth grab, your choke (throat/face/final), and his breath in
+time with yours when he is within 7 m and not hunting you.
+
+**Animation** (`client/entities/animators.js`, `views.js`, `strings.js`): hanging idle on his toes,
+mid-stride freeze, owl head (2.75 rad), dead-arm upright run with over-long strides, backing away with the
+gait in reverse, forward operated crawl, peek lean / low peek, six grab arm poses + reach, limp collapse
+(whole-body fall about the feet), prone and the plank rise, stop-motion stutter within 5 m (7 fps).

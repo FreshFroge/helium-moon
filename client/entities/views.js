@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { groundAt } from '../../shared/physics.js';
 import { loadCharacter } from './character.js';
 import { HeliumAnimator, SkunkAnimator } from './animators.js';
+import { PuppetStrings } from './strings.js';
 import { angleDiff, clamp, lerp } from '../../shared/math.js';
 import { makeTextTexture } from '../render/textures.js';
 import { patchMaterial } from '../render/shaderlib.js';
@@ -45,6 +46,7 @@ export class SnapBuffer {
 }
 
 // ------------------------------------------------------------------ Helium Voice
+const STUTTER_DIST = 5, STUTTER_FPS = 7;
 export class HeliumView {
   static async create(scene, world) { const v = new HeliumView(); await v._load(scene); v.world = world; return v; }
   async _load(scene) {
@@ -53,6 +55,7 @@ export class HeliumView {
     scene.add(this.root);
     this.anim = new HeliumAnimator(this.char);
     this.head = this.char.bones.head;
+    this.strings = new PuppetStrings(scene, this.char);
     this.pos = new THREE.Vector3(); this.state = 0; this.flags = 8; this.speed = 0; this.yaw = 0;
     this.stepAcc = 0;
     this.ground = (x, z) => {
@@ -60,19 +63,44 @@ export class HeliumView {
       return groundAt(this.world, this.pos.x + c * x + s * z, this.pos.z - s * x + c * z) - this.pos.y;
     };
   }
-  // s: [x,y,z,yaw,lookYaw,lookPitch,speed,flags,tilt,jaw,stateIdx]
-  update(dt, s) {
+  // s: [x,y,z,yaw,lookYaw,lookPitch,speed,flags,tilt,jaw,stateIdx, grabKind,grabPhase,peek, ctlX,ctlY,ctlZ,cut]
+  // flags: 1 run, 2 reach, 4 still, 8 hidden, 16 low (operated crawl), 128 frozen, 256 collapse,
+  // 512 prone, 1024 rise, 2048 grab, 4096 backing away (see HeliumVoiceAI.snapshot)
+  // camPos: within STUTTER_DIST his motion stutters like stop-motion (Puppet).
+  update(dt, s, camPos = null) {
     if (!s) { this.root.visible = false; return; }
     const [x, y, z, yaw, lookYaw, lookPitch, speed, flags, tilt, jaw, st] = s;
-    const prev = this.pos.clone();
-    this.pos.set(x, y, z); this.yaw = yaw; this.flags = flags; this.state = st; this.speed = speed;
+    this.flags = flags; this.state = st; this.speed = speed;
     this.root.visible = !(flags & 8);
+    // stop-motion within a few metres: pose and position update only STUTTER_FPS times a second
+    const near = camPos && this.root.visible ? Math.hypot(x - camPos.x, z - camPos.z) : 99;
+    this.stutterAcc = (this.stutterAcc || 0) + dt;
+    if (near < STUTTER_DIST && this.stutterAcc < 1 / STUTTER_FPS && this._posed) { this.moved = 0; this.strings?.update(dt, this, s); return; }
+    const step = this._posed ? this.stutterAcc : dt; this.stutterAcc = 0; this._posed = true;
+    const prev = this.pos.clone();
+    this.pos.set(x, y, z); this.yaw = yaw;
     this.root.position.copy(this.pos);
     this.root.rotation.y = yaw;
     this.moved = prev.distanceTo(this.pos);
+    // whole-body tip about his feet: strings cut (falls forward), lying flat, the plank rise
+    const collapse = !!(flags & 256), prone = !!(flags & 512), rise = !!(flags & 1024);
+    if (rise) { this.riseT = (this.riseT ?? 0) + step; } else this.riseT = null;
+    let tipTo = 0;
+    if (collapse || prone) tipTo = Math.PI / 2 * 0.97;
+    if (rise) { const u = clamp(this.riseT / CONFIG.HV.RISE_TIME, 0, 1); tipTo = Math.PI / 2 * 0.97 * (1 - u * u * (3 - 2 * u)); this.tip = tipTo; }
+    else if (collapse) { this.tipV = (this.tipV || 0) + step * 9; this.tip = Math.min(tipTo, (this.tip || 0) + this.tipV * step); }   // drops, accelerating
+    else { this.tipV = 0; this.tip = lerp(this.tip || 0, tipTo, 1 - Math.exp(-step * (prone ? 12 : 6))); }
+    this.root.rotation.set(this.tip, yaw, 0, 'YXZ');
+    const tipped = this.tip > 0.05;
     if (this.root.visible) {
-      this.anim.update(dt, { speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, windup: flags & 32 ? 1 : 0, strike: flags & 64 ? 1 : 0, still: !!(flags & 4), crawl: !!(flags & 16), lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st, ground: this.world ? this.ground : null });
+      this.anim.update(step, { speed: tipped ? 0 : speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), crawl: !!(flags & 16),
+        frozen: !!(flags & 128), back: !!(flags & 4096), limp: collapse, rigid: prone || rise,
+        grab: flags & 2048 ? (s[11] || 1) : 0, grabPhase: s[12] || 0, peek: s[13] || 0,
+        crouch: s[13] === 2 ? 0.85 : (flags & 2048 && s[11] === 5 && s[12] === 2) ? 0.55 : collapse ? 0.9 : 0,
+        lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st,
+        ground: this.world && !tipped ? this.ground : null });
     }
+    this.strings?.update(dt, this, s);
   }
   headPos(out = new THREE.Vector3()) { this.root.updateMatrixWorld(true); return this.head.getWorldPosition(out); }
 }

@@ -62,6 +62,10 @@ export class AudioEngine {
     add('hurt', () => S.hurt(9, false)); add('down', () => S.hurt(10, true));
     // real-animal false alarms (wildlife.js)
     for (let i = 0; i < 3; i++) add('swing' + i, () => S.swing(70 + i));
+    // the Puppet: joints, crawl, knuckles, strings, the collapse and the grab
+    for (let i = 0; i < 4; i++) { add('pop' + i, () => S.jointPop(200 + i)); add('crawl' + i, () => S.crawlPatter(210 + i)); }
+    for (let i = 0; i < 3; i++) { add('knuckle' + i, () => S.knuckleWood(220 + i)); add('snapStr' + i, () => S.stringSnap(230 + i)); add('strain' + i, () => S.stringStrain(240 + i)); }
+    for (let i = 0; i < 2; i++) { add('bodyDrop' + i, () => S.bodyDrop(250 + i)); add('cloth' + i, () => S.clothGrab(260 + i)); add('choke' + i, () => S.choke(270 + i)); }
     for (let i = 0; i < 3; i++) { add('deerBlow' + i, () => S.deerBlow(40 + i)); add('owlHoot' + i, () => S.owl(50 + i)); add('wings' + i, () => S.wingFlap(60 + i)); }
     let t0 = performance.now();
     for (let i = 0; i < jobs.length; i++) {
@@ -453,6 +457,13 @@ export class AudioEngine {
     if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal(HV_KINDS.includes(kind) ? kind : 'giggle', seed % 5 + 1, this.sigPCM));
     const loud = { scream: 2.2, call: 1.6, cry: 1.2, laugh: 1.2, whisper: 0.55, breath: 0.6, inhale: 0.7, hum: 0.8, giggle: 1, fragment: 1.2 }[kind] || 1;
     return this.play(this.var[key], { pos, bus: 'mon', gain: loud, ref: 1.5, reverb: 0.1, range: creatureFootstepCue('hv', 0) });
+  }
+
+  // his breath, close, in time with yours (Puppet search beat): audible to ~8 m
+  hvBreath(pos, seed = 0) {
+    const key = `hv_breath_${seed % 5}`;
+    if (!this.var[key]) this.var[key] = this.toBuffer(S.hvVocal('breath', seed % 5 + 1, this.sigPCM));
+    return this.play(this.var[key], { pos, bus: 'mon', gain: 0.75, ref: 1.5, reverb: 0.05, range: { fadeStart: 3, maxDistance: 8 } });
   }
 
   // the attack scream: his loudest sound, never range-gated like ordinary close vocals

@@ -180,6 +180,110 @@ export function swing(seed) {
   return fade(normalize(filter(out, 'lp', 2800, 0.7, SR), 0.8), SR, 0.01, 0.06);
 }
 
+// ---- The Puppet (Helium Voice rework, Oct 25): his body's sounds
+// joints popping: two or three dry knuckle-cracks with a little body thump
+export function jointPop(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(0.6)), n = r.int(1, 3);
+  let at = 0;
+  for (let k = 0; k < n; k++) {
+    const len = N(0.03), f = r.range(1400, 2600);
+    const nz = filter(filter(noise(len, r), 'bp', f, 2.2, SR), 'hp', 500, 0.7, SR);
+    for (let i = 0; i < len; i++) out[N(at) + i] += nz[i] * Math.exp(-i / SR * r.range(160, 260)) * (k ? r.range(0.5, 0.85) : 1);
+    const th = N(0.05), tf = r.range(110, 170);
+    for (let i = 0; i < th; i++) out[N(at) + i] += Math.sin(TAU * tf * i / SR) * Math.exp(-i / SR * 70) * 0.25;
+    at += r.range(0.04, 0.15);
+  }
+  return normalize(out, 0.85);
+}
+
+// hands and feet scuttling through leaf litter: a quick, uneven four-beat patter
+export function crawlPatter(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(0.42));
+  const beats = [0, r.range(0.06, 0.1), r.range(0.17, 0.22), r.range(0.26, 0.33)];
+  for (const b of beats) {
+    const len = N(r.range(0.04, 0.07));
+    const nz = filter(filter(noise(len, r), 'bp', r.range(900, 2400), 0.8, SR), 'lp', 4200, 0.7, SR);
+    for (let i = 0; i < len; i++) out[N(b) + i] += nz[i] * env(i / SR, 0.004, 0.018) * r.range(0.5, 1);
+    const th = N(0.04);
+    for (let i = 0; i < th; i++) out[N(b) + i] += Math.sin(TAU * r.range(70, 100) * i / SR) * Math.exp(-i / SR * 60) * 0.35;
+  }
+  return fade(normalize(out, 0.8), SR, 0.002, 0.03);
+}
+
+// knuckles on the boardwalk planks: hollow wooden knocks
+export function knuckleWood(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(0.35)), n = r.int(2, 3);
+  for (let k = 0; k < n; k++) {
+    const s0 = N(k * r.range(0.07, 0.12)), len = N(0.12), f = r.range(260, 420);
+    const exc = filter(noise(len, r), 'bp', f, 9, SR), body = filter(noise(len, r), 'bp', f * 2.7, 6, SR);
+    for (let i = 0; i < len; i++) out[s0 + i] += (exc[i] + body[i] * 0.4) * Math.exp(-i / SR * 45);
+  }
+  return normalize(out, 0.8);
+}
+
+// a taut string snapping: inharmonic pluck that drops in pitch, a whip of air
+export function stringSnap(seed) {
+  const r = rngFor(seed), d = 1.1, n = N(d), out = new Float32Array(n), f = r.range(520, 820);
+  const parts = [[1, 1], [2.04, 0.5], [3.11, 0.3], [4.3, 0.18]];
+  for (let i = 0; i < n; i++) {
+    const t = i / SR, drop = 1 - 0.35 * (1 - Math.exp(-t * 6));
+    let v = 0;
+    for (const [m, a] of parts) v += Math.sin(TAU * f * m * drop * t + m) * a * Math.exp(-t * (4 + m * 2.5));
+    out[i] = v;
+  }
+  const whip = N(0.09), nz = filter(noise(whip, r), 'hp', 2500, 0.7, SR);
+  for (let i = 0; i < whip; i++) out[i] += nz[i] * Math.exp(-i / SR * 40) * 0.6;
+  return fade(normalize(out, 0.75), SR, 0.001, 0.2);
+}
+
+// the strings straining while a beam holds the control: a thin bowed-wire whine
+export function stringStrain(seed) {
+  const r = rngFor(seed), d = 0.7, n = N(d), out = new Float32Array(n), f = r.range(170, 240);
+  let ph = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / SR, fr = f * (1 + 0.012 * Math.sin(TAU * 5.5 * t)) * (1 + 0.04 * t);
+    ph += fr / SR; ph -= Math.floor(ph);
+    const stick = (r() < 0.06 ? r.range(0.4, 1) : 0) * 0.3;
+    out[i] = (ph * 2 - 1 + stick) * Math.sin(Math.PI * t / d) ** 0.6;
+  }
+  return fade(normalize(filter(filter(out, 'bp', f * 4, 3, SR), 'lp', 3000, 0.7, SR), 0.55), SR, 0.03, 0.15);
+}
+
+// a limp body dropping into the leaves
+export function bodyDrop(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(0.9));
+  const hit = (at, g) => {
+    const len = N(0.25), tf = r.range(55, 80);
+    for (let i = 0; i < len; i++) out[N(at) + i] += Math.sin(TAU * tf * i / SR) * Math.exp(-i / SR * 18) * g;
+    const nz = filter(noise(len, r), 'bp', r.range(600, 1400), 0.7, SR);
+    for (let i = 0; i < len; i++) out[N(at) + i] += nz[i] * Math.exp(-i / SR * 22) * g * 0.6;
+  };
+  hit(0, 1); hit(r.range(0.12, 0.2), 0.55); hit(r.range(0.3, 0.42), 0.3);
+  return fade(normalize(out, 0.9), SR, 0.002, 0.15);
+}
+
+// his hands closing on your clothes: a hard fabric grab and drag
+export function clothGrab(seed) {
+  const r = rngFor(seed), d = 0.5, n = N(d), out = new Float32Array(n), nz = noise(n, r);
+  const bp = new Biquad('bp', 1800, 0.9, SR);
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    if ((i & 31) === 0) bp.set('bp', 1200 + 2200 * Math.exp(-t * 6) + r.range(-200, 200), 0.9);
+    out[i] = bp.tick(nz[i]) * (env(t, 0.006, 0.07) + 0.35 * Math.exp(-((t - 0.22) ** 2) / 0.004));
+  }
+  return fade(normalize(out, 0.85), SR, 0.002, 0.08);
+}
+
+// your own breath cut off: a muffled strangled gasp (the throat / hand-over-face grabs)
+export function choke(seed) {
+  const r = rngFor(seed), d = 1.2;
+  const v = voice(SR, d, {
+    f0: (t) => 150 + 40 * Math.sin(t * 9), vowel: (t) => lerpVowel(VOWELS.u, VOWELS.o, t / d), breath: 0.7, formantShift: 0.9, rng: r,
+    env: (t) => (0.4 + 0.6 * Math.abs(Math.sin(t * 7.5))) * Math.sin(Math.PI * Math.min(1, t / d)) ** 0.8,
+  });
+  return fade(normalize(filter(v, 'lp', 900, 0.7, SR), 0.6), SR, 0.02, 0.2);
+}
+
 export function coyotes(seed) {
   const r = rngFor(seed), dur = 5.5, out = new Float32Array(N(dur));
   for (let v = 0; v < 4; v++) {

@@ -49,7 +49,7 @@ async def play(port):
                   return {state:hv.state,reports:[...reports],exposure:hv.reveal?.exposureT,
                     visible:game.hv.root.visible,screen:onScreen(w,p,hv.x,hv.y,hv.z),health:game.health};
                 }''',kind)
-                assert mid['state']=='reveal' and mid['reports']==[kind] and mid['screen'] and mid['visible'] and mid['health']==2,mid
+                assert mid['state']=='reveal' and mid['reports']==[kind] and mid['screen'] and mid['visible'] and mid['health']==3,mid
                 # Manual simulation is frozen at the glimpse; let only the UI's
                 # real-time opening title finish fading before the artifact.
                 # The opening title fades on a real-time 7.5 s timer + CSS transition; on slow
@@ -59,14 +59,15 @@ async def play(port):
                 await page.screenshot(path=str(output/f'{kind}-glimpse.png'),timeout=120000)
                 end=await page.evaluate('''()=>{
                     const hv=game.sim.hv,c=window.revealCheck;
-                    for(let i=0;i<60;i++){
+                    // Puppet: watched he freezes and holds (HV.FREEZE) before backing away
+                    for(let i=0;i<300;i++){
                       const x=hv.x,z=hv.z;game.advance(1,1/30,false);
                       c.maxStep=Math.max(c.maxStep,Math.hypot(hv.x-x,hv.z-z));
                       if(hv.state!=='reveal' && c.escapeAt===null)c.escapeAt=i/30+.4;
                     }
                     return {...c,health:game.health};
                 }''')
-                assert end['reports']==[kind] and .4<=end['escapeAt']<=1.3 and end['maxStep']<.8 and end['health']==2,end
+                assert end['reports']==[kind] and end['escapeAt'] is not None and .4<=end['escapeAt']<=9 and end['maxStep']<.8 and end['health']==3,end
                 print(f'PASS actual {kind} glimpse/escape:',mid,end,flush=True)
             assert not errors,errors
         finally:

@@ -25,6 +25,7 @@ async def play(port):
                     const random=Math.random;
                     try { Math.random=()=>seed/2**31;game.restart(); } finally { Math.random=random; }
                     const {pointAtDistance}=await import('/shared/math.js');
+                    const {CONFIG}=await import('/shared/config.js');const MAXH=CONFIG.PLAYER.MAX_HEALTH;
                     const at=pointAtDistance(game.world.trail,game.world.trailCum,500);
                     const to=pointAtDistance(game.world.trail,game.world.trailCum,506);
                     game.tp(to.x,to.z,at.x,at.z);game.look(game.player.yaw+Math.PI,0);game.flashlight.on=flash;game.advance(6,1/30,false);
@@ -33,21 +34,19 @@ async def play(port):
                     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
                     const initial={seed:sim.seed,target:hv.target,awareness:hv.awareness.size};
                     let chased=false,aborted=false;
-                    for(let i=0;i<1350 && p.health===2;i++){
+                    for(let i=0;i<1800 && p.health===MAXH;i++){
                         game.advance(1,1/30,false);
                         chased ||= hv.state==='chase';
-                        aborted ||= hv.state==='retreat'&&p.health===2;
+                        aborted ||= hv.state==='collapse'&&p.health===MAXH;
                     }
                     game.advance(6,1/30,false);
                     return {initial,chased,aborted,server:p.health,client:game.health,chasing:sim.director.chasing};
                 }''',[seed,flash])
                 assert first['initial']=={'seed':seed,'target':None,'awareness':0},first
                 assert first['chased'] and first['client']==first['server'] and not first['chasing'],first
-                if flash:
-                    assert first['server']<2 or first['aborted'],first
-                else:
-                    assert first['server']<2 and not first['aborted'],first
-                print(f'  ok  normal first sighting becomes a long hunt, then hits or meets the close light counter (seed {seed}, flashlight {flash}):',first,flush=True)
+                # Puppet: a beam in his face no longer stops him (only cutting the strings does)
+                assert first['server']<3 and not first['aborted'],first
+                print(f'  ok  normal first sighting becomes a long hunt that ends in his grab (seed {seed}, flashlight {flash}):',first,flush=True)
             await page.evaluate('game.restart()')
             result=await page.evaluate('''async()=>{
                 const {pointAtDistance}=await import('/shared/math.js');
@@ -60,10 +59,11 @@ async def play(port):
                 sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);
                 hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.setState('chase');hv.speed=6.6;
-                game.advance(60,1/30,false);
+                for(let i=0;i<1800&&p.health===3;i++)game.advance(1,1/30,false);
+                game.advance(30,1/30,false);
                 return {server:p.health,client:game.health};
             }''')
-            assert result['server']<2 and result['client']==result['server'],result
+            assert result['server']<3 and result['client']==result['server'],result
             print('  ok  unseen committed chase lands a real hit without a sighting:',result,flush=True)
             escape=await page.evaluate('''async()=>{
                 game.restart();game.advance(6,1/30,false);
@@ -73,29 +73,29 @@ async def play(port):
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
                 sim.state='play';sim.time=400;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.startChase(p);
-                // Owner rule (Oct 25): only a flashlight on him within 7 ft calls a hunt off.
-                // The player holds the light on him as he charges from 6 m.
-                let brokeAt=null,seenFar=false;
-                for(let i=0;i<1350&&brokeAt==null;i++){
-                  game.advance(1,1/30,false);
-                  if(hv.state==='chase'&&hv.dist(p)>3)seenFar=true;
-                  if(hv.state==='retreat')brokeAt=hv.dist(p);
-                }
-                game.advance(9,1/30,false);
-                return {state:hv.state,brokeAt,seenFar,health:p.health,flags:game.hv.flags,moved:Math.hypot(hv.x-at.x,hv.z-at.z)};
+                // Puppet (owner): a hunt ends only when someone cuts his strings - a beam held on
+                // the control above him. The player looks up at it and holds the light there.
+                const aim=(q)=>{const ey=p.y+1.6;game.look(Math.atan2(-(q.x-p.x),-(q.z-p.z)),Math.atan2(q.y-ey,Math.hypot(q.x-p.x,q.z-p.z)));};
+                game.flashlight.on=true;
+                let cut=null,start=null;
+                for(let i=0;i<300&&cut==null;i++){const c=hv.controlPos();if(c)aim(c);game.advance(1,1/30,false);if(hv.state==='collapse'){cut=i/30;start=[hv.x,hv.z];}}
+                const fell={flags:game.hv.flags,strings:game.hv.strings.lines.visible};
+                aim({x:hv.x,y:hv.y+.3,z:hv.z});game.advance(45,1/30,false);
+                const stayed=Math.hypot(hv.x-start[0],hv.z-start[1]);
+                game.look(game.player.yaw+Math.PI,0);game.advance(30,1/30,false);
+                return {cut,fell,stayed,gone:Math.hypot(hv.x-start[0],hv.z-start[1]),health:p.health,state:hv.state};
             }''')
-            assert escape['seenFar'] and escape['brokeAt'] is not None and escape['brokeAt']<=2.2 and escape['health']==2 and escape['flags']&16 and escape['moved']>.1,escape
-            print('  ok  lit at range he keeps coming; the 7-ft flashlight sends him into a physical reverse crawl:',escape,flush=True)
+            assert escape['cut'] is not None and escape['health']==3 and escape['fell']['flags']&256 and escape['stayed']<.05 and escape['gone']>20,escape
+            print('  ok  holding the beam on the control cuts the strings: he collapses, and is gone once you look away:',escape,flush=True)
             pose=await page.evaluate('''async()=>{
                 game.restart();game.advance(9,1/30,false);
                 const {pointAtDistance}=await import('/shared/math.js');
                 const at=pointAtDistance(game.world.trail,game.world.trailCum,500),end=pointAtDistance(game.world.trail,game.world.trailCum,470);
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
                 sim.state='play';sim.time=400;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
-                game.tp(at.x+3,at.z+2,at.x,at.z);game.advance(3,1/30,false);
+                game.tp(at.x+3,at.z+2,at.x,at.z);game.look(game.player.yaw+Math.PI,0);game.advance(3,1/30,false);   // looking away: unwatched
                 hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);
                 hv.retreatFrom(p,false,true);hv.path=game.world.findPath(hv.x,hv.z,end.x,end.z);hv.pathI=1;
-                hv.yaw=Math.atan2(hv.path[1][0]-hv.x,hv.path[1][1]-hv.z)+Math.PI;
                 game.advance(15,1/30,false);
                 const result={flags:game.hv.flags,blend:game.hv.anim.blend.crawl,head:game.hv.headPos().y-game.hv.pos.y,speed:hv.speed};
                 // Hold a real snapshot after motion so a rendered frame can be inspected.
@@ -105,13 +105,13 @@ async def play(port):
                 return result;
             }''')
             assert pose['flags']&16 and pose['blend']>.99 and pose['head']<.95 and pose['speed']>8,pose
-            print('  ok  authoritative retreat renders as a low four-limb crawl:',pose,flush=True)
+            print('  ok  unwatched, the retreat renders as the low four-limb operated crawl:',pose,flush=True)
             output=Path(os.environ.get('HM_ARTIFACT_DIR','/tmp/helium-moon-encounters'))
             output.mkdir(parents=True,exist_ok=True)
             # artifact only (no assertion). HM_SKIP_ARTIFACTS=1 skips it on machines where a full
             # software-rendered 1280x720 frame exceeds memory; the default keeps it.
             if not os.environ.get('HM_SKIP_ARTIFACTS'):
-                await page.screenshot(path=str(output/'reverse-crawl.png'),timeout=120000)   # same artifact timeout as ground contacts (#13)
+                await page.screenshot(path=str(output/'operated-crawl.png'),timeout=120000)   # same artifact timeout as ground contacts (#13)
             for state in ['prowl','investigate']:
                 skunk=await page.evaluate("""async(state)=>{
                   game.restart();game.advance(9,1/30,false);
@@ -127,7 +127,7 @@ async def play(port):
                   game.advance(240,1/30,false);
                   return {server:p.health,client:game.health,state:sf.state};
                 }""",state)
-                assert skunk['server']<2 and skunk['client']==skunk['server'],skunk
+                assert skunk['server']<3 and skunk['client']==skunk['server'],skunk
                 print(f'  ok  flashlight does not suppress skunk attack from {state}:',skunk,flush=True)
             route=await page.evaluate("""async()=>{
                 game.restart();game.advance(9,1/30,false);

@@ -260,7 +260,7 @@ async def play(port):
             assert await page.evaluate("game.mode === 'ended' && game.result.result === 'lost'")
             await page.click('#end [data-act=restart]')
             await advance(0.2)
-            assert await page.evaluate("game.myState === 'alive' && game.health === 2")
+            assert await page.evaluate("game.myState === 'alive' && game.health === 3")
             print('  ok  lethal damage reaches game over and restart restores health')
 
             # Exercise actual AI attacks and their client health snapshots.
@@ -288,11 +288,11 @@ async def play(port):
                         actor.awareness.set(game.myId,1.5); actor.spotted.add(game.myId);
                         actor.setState('watch');
                     } else actor.setState('lurk');
-                    for(let i=0;i<240 && player.health===2;i++) game.advance(1,1/30,false);
+                    for(let i=0;i<1800 && player.health===3;i++) game.advance(1,1/30,false);
                     game.advance(6,1/30,false);
                     return {server:player.health,client:game.health,state:actor.state};
                 }''', creature)
-                assert attack['server'] < 2 and attack['client'] == attack['server'], attack
+                assert attack['server'] < 3 and attack['client'] == attack['server'], attack
                 await page.evaluate('game.restart()')
                 await advance(0.2)
             print('  ok  both real enemy AI attacks damage the player and update browser health')

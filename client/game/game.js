@@ -121,7 +121,7 @@ export class Game {
     const [hv, sf] = await Promise.all([HeliumView.create(this.scene, world), SkunkView.create(this.scene)]);
     this.hv = hv; this.sf = sf;
     this.wildlife = new WildlifeSystem(this.scene, world, this.audio);
-    this.hvBuf = new SnapBuffer([3, 4], [7, 10], 8); this.sfBuf = new SnapBuffer([3, 4], [6, 8], 8);   // >8 m between snapshots = relocation: snap, never slide
+    this.hvBuf = new SnapBuffer([3, 4], [7, 10, 11, 12, 13], 8); this.sfBuf = new SnapBuffer([3, 4], [6, 8], 8);   // >8 m between snapshots = relocation: snap, never slide
     progress(0.97, 'Compiling shaders');
     this._menuCamera(0);
     this.env.update(0.016, this.camera, 0);
@@ -236,7 +236,7 @@ export class Game {
     const idx = Math.max(0, info.players.findIndex((p) => p.id === this.myId));
     const sp = GameSim.prototype.spawnPoint.call({ world: this.world }, idx);
     this.player.spawn(sp.x, sp.z, sp.yaw);
-    this.player.injured = 0; this.player.slow = 1; this.player.downed = 0; this.player.lookLock = null; this._attackLock = 0; this._attackLockPending = 0;
+    this.player.injured = 0; this.player.slow = 1; this.player.downed = 0; this.player.lookLock = null; this._attackLock = 0; this._attackLockPending = 0; this._grab = null; this.player.eyeOffset = 0; this.player.extraRoll = 0; if (this.camera.fov !== this.settings.fov) { this.camera.fov = this.settings.fov; this.camera.updateProjectionMatrix(); }
     this.flashlight.battery = 1; this.flashlight.on = true; this.flashlight.snap(this.camera);
     this.terror = 0; this.fear = 0; this.cold = 0; this.critical = 0; this.gasFx = 0; this.damage = 0; this.chasing = false;
     this.me = null; this.myState = 'alive'; this.health = CONFIG.PLAYER.MAX_HEALTH;
@@ -385,15 +385,38 @@ export class Game {
       case 'wildlife': if (this.wildlife && this._near(pos, 90)) this.wildlife.spawn(e, this.player.pos); break;
       case 'hv_vocal': if (this._near(pos, CONFIG.HV.FOOTSTEP_MAX_DISTANCE) && this._canSee(pos)) { A.hvVocal(e.k, e.s, pos); this.voice.suppress(2); } break;
       case 'hv_line': A.hvLine(e.id, pos, e.seq || 0); this.voice.suppress(2.5); break;
-      // owner: a real attack - he stops, SCREAMS and winds up, then swings
+      // the grab (Puppet rework): he screams as he reaches, takes hold, lets go
       case 'hv_attack': {
-        const at = { x: e.x, y: this.world.heightAt(e.x, e.z) + 1.7, z: e.z };
-        if (e.phase === 'windup') {
-          A.hvScream(at, e.seq || 0);
+        const at = { x: e.x, y: this.world.heightAt(e.x, e.z) + 1.7, z: e.z }, k = e.seq || 0;
+        if (e.phase === 'reach' || e.phase === 'windup') {
+          A.hvScream(at, k);
           if (this._near(at, 12)) { this.player.shake = Math.max(this.player.shake, 0.6); this.voice.suppress(3); }
-        } else if (e.phase === 'strike') A.at('swing' + ((e.seq || 0) % 3), at, { bus: 'mon', gain: e.hit ? 1.2 : 0.9, ref: 2.5, reverb: 0.08 });
+        } else if (e.phase === 'grab') {
+          A.at('cloth' + (k % 2), at, { bus: 'mon', gain: 1.4, ref: 2, reverb: 0.05 });
+          A.at('pop' + (k % 4), at, { bus: 'mon', gain: 0.8, ref: 2, reverb: 0.05 });
+          if (e.pid === this.myId) this._grabStart(e);
+        } else if (e.phase === 'release') {
+          if (e.pid === this.myId) this._grabEnd(e);
+        } else if (e.phase === 'miss' || e.phase === 'strike') A.at('swing' + (k % 3), at, { bus: 'mon', gain: 0.9, ref: 2.5, reverb: 0.08 });
         break;
       }
+      // strings cut: they snap up in the canopy, and he drops
+      case 'hv_cut': {
+        const c = this.hv.strings.last, at = c && c.y ? { x: c.x, y: c.y, z: c.z } : pos;
+        for (let i = 0; i < 3; i++) setTimeout(() => this.mode === 'playing' && A.at('snapStr' + ((e.seq + i) % 3), at, { bus: 'mon', gain: 1.25 - i * 0.25, rate: 1 + i * 0.07, ref: 6, reverb: 0.45 }), i * 70 + Math.random() * 40);
+        break;
+      }
+      case 'hv_collapse': A.at('bodyDrop' + ((e.seq || 0) % 2), { x: e.x, y: (e.y ?? this.world.heightAt(e.x, e.z)) + 0.3, z: e.z }, { bus: 'mon', gain: 1.4, ref: 4, reverb: 0.2 }); break;
+      // a look back caught him: one dry crack of his joints as he locks
+      case 'hv_freeze': if (this._near(pos, 25)) A.at('pop' + ((e.seq || 0) % 4), { ...pos, y: pos.y + 0.6 }, { bus: 'mon', gain: 0.7, ref: 2, reverb: 0.1, range: { fadeStart: 8, maxDistance: 25 } }); break;
+      // in the grass: he unfolds - grass, joints, cloth
+      case 'hv_rise': {
+        A.at('fs_brush' + ((e.seq || 0) % 4), pos, { bus: 'mon', gain: 1.3, ref: 3, reverb: 0.05 });
+        for (let i = 0; i < 3; i++) setTimeout(() => this.mode === 'playing' && A.at('pop' + ((e.seq + i) % 4), { ...pos, y: pos.y + 0.5 + i * 0.4 }, { bus: 'mon', gain: 0.9, ref: 2, reverb: 0.1 }), 150 + i * 260);
+        break;
+      }
+      // closing in (the mark): far off, his joints crack - quiet, easy to miss
+      case 'hv_pops': if (this._near(pos, 40)) A.at('pop' + ((e.seq || 0) % 4), { ...pos, y: pos.y + 1.2 }, { bus: 'mon', gain: 0.55, ref: 3, reverb: 0.35, range: { fadeStart: 12, maxDistance: 40 } }); break;
       case 'hv_sig': if (this._canSee(pos)) { A.signature(pos); this.voice.suppress(2.6); } break;
       case 'sf_vocal': A.sfVocal(e.k, e.s, pos); break;
       case 'snap': break; // no artificial branch-snap warning of an unseen approach
@@ -590,7 +613,8 @@ export class Game {
     pl.downed = lerp(pl.downed, downed ? 1 : 0, 1 - Math.exp(-dt * 3));
     pl.slow = this.gasFx > 0.3 ? 0.6 : 1;
     pl.injured = this.health < CONFIG.PLAYER.MAX_HEALTH ? 1 : 0;
-    const frozen = !active || typing || downed || dead || !!this.reading;
+    const frozen = !active || typing || downed || dead || !!this.reading || !!this._grab;
+    this._grabTick(dt);
     // Attack lock (owner, Oct 25): the instant he strikes you, the camera is pulled onto his
     // face and held there for a moment. Only on an actual hit, so it never aims the
     // flashlight for you during the approach (the 7-ft flashlight counter stays yours).
@@ -602,11 +626,11 @@ export class Game {
     }
     this._attackLockPending = 0;
     if (this._attackLock > 0) this._attackLock -= dt;
-    const locked = this._attackLock > 0 && this.hv;
+    const locked = (this._attackLock > 0 || this._grab) && this.hv;
     if (locked) {
-      const eyeY = pl.pos.y + 1.6, headY = this.hv.pos.y + 1.68;
+      const eyeY = pl.pos.y + 1.6 + (pl.eyeOffset || 0), headY = this.hv.pos.y + 1.68;
       const hd = Math.hypot(this.hv.pos.x - pl.pos.x, this.hv.pos.z - pl.pos.z);
-      pl.lookLock = { x: this.hv.pos.x, z: this.hv.pos.z, pitch: clamp(Math.atan2(headY - eyeY, Math.max(0.3, hd)), -0.6, 0.6), rate: 16 };
+      pl.lookLock = { x: this.hv.pos.x, z: this.hv.pos.z, pitch: clamp(Math.atan2(headY - eyeY, Math.max(0.3, hd)), -0.6, 0.6), rate: this._grab?.kind === 'turn' ? 30 : 16 };
     } else if (pl.lookLock && pl.lookLock.rate) pl.lookLock = null;
     if (!dead) pl.update(active && !typing ? dt : dt, frozen ? { consumeLook: () => inp.consumeLook(), down: () => false, hit: () => false } : inp, { frozen, noLook: !active || typing || locked });
     else this._spectate(dt);
@@ -618,9 +642,12 @@ export class Game {
     }
     // ---- monsters
     const hs = this.hvBuf.sample(this.renderT);
-    this.hv.update(dt, hs);
-    let shine = 0;
     const fl = this.flashlight;
+    // the strings above him catch your beam (Puppet: cut the strings)
+    this.hv.strings.flash = { on: fl.on && fl.light.intensity > 5, pos: fl.light.position, dir: fl.dir, cosOuter: Math.cos(fl.light.angle), range: fl.light.distance || CONFIG.FLASHLIGHT.RANGE, k: clamp(fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY, 0, 1) };
+    this.hv.update(dt, hs, this.camera.position);
+    this._strings(dt, hs);
+    let shine = 0;
     const ss = this.sfBuf.sample(this.renderT);
     if (ss && fl.on && fl.light.intensity > 5) {
       const h = this.sf.headPos(this._v1 || (this._v1 = new THREE.Vector3()));
@@ -725,10 +752,77 @@ export class Game {
     for (; lightIdx < this.remoteLights.length; lightIdx++) this.remoteLights[lightIdx].intensity = 0;
   }
 
+  // ---- the grab, from the inside (Puppet rework). kind: shoulders | throat | face | turn | drag | final
+  _grabStart(e) {
+    const pl = this.player;
+    this._grab = { kind: e.kind, t: 0, dur: e.dur || 1.6, from: { x: pl.pos.x, z: pl.pos.z }, to: { x: e.px ?? pl.pos.x, z: e.pz ?? pl.pos.z } };
+    pl.vel.set(0, 0, 0);
+    pl.shake = Math.max(pl.shake, e.kind === 'final' ? 1 : 0.75);
+    this.voice.suppress(this._grab.dur + 0.5);
+    if (e.kind === 'throat' || e.kind === 'face' || e.kind === 'final') setTimeout(() => this._grab && this.audio.ui('choke' + ((e.seq || 0) % 2), 0.85), 180);
+  }
+
+  _grabEnd() {
+    if (!this._grab) return;
+    const kind = this._grab.kind;
+    this._grab = null;
+    this.player.eyeOffset = 0; this.player.extraRoll = 0;
+    if (kind !== 'final') this.fadeTarget = 0;
+    this.camera.fov = this.settings.fov; this.camera.updateProjectionMatrix();
+    this.player.shake = Math.max(this.player.shake, 0.9);
+    this._attackLock = Math.max(this._attackLock || 0, 0.6);
+  }
+
+  _grabTick(dt) {
+    const g = this._grab, pl = this.player;
+    if (!g) return;
+    g.t += dt;
+    if (g.t > g.dur + 1 || this.myState === 'dead' && g.kind !== 'final') { this._grabEnd(); return; }
+    const u = clamp(g.t / g.dur, 0, 1), ease = (x) => x * x * (3 - 2 * x);
+    let eye = 0, roll = 0, zoom = 1;
+    switch (g.kind) {
+      case 'throat': eye = 0.24 * ease(clamp(g.t / 0.5, 0, 1)); roll = 0.06 * Math.sin(g.t * 9); this.fadeTarget = 0.35 * u; break;   // lifted off your feet
+      case 'face': this.fadeTarget = g.t > 0.12 && g.t < g.dur - 0.1 ? 0.9 : 0; eye = -0.05; break;                                // his hand over your face
+      case 'drag': {                                                                                                                 // yanked toward him by the leg
+        const k = ease(clamp(g.t / 0.45, 0, 1));
+        pl.pos.x = lerp(g.from.x, g.to.x, k); pl.pos.z = lerp(g.from.z, g.to.z, k);
+        pl.pos.y = this.world.heightAt(pl.pos.x, pl.pos.z);
+        eye = -0.75 * (1 - ease(clamp((g.t - 0.3) / 0.8, 0, 1))); roll = 0.25 * (1 - u); break;
+      }
+      case 'turn': roll = -0.12 * (1 - u); break;                                                                                     // spun round to face him
+      case 'final': zoom = 1 - 0.32 * ease(u); eye = 0.06 * u; this.fadeTarget = u > 0.65 ? (u - 0.65) / 0.35 : 0; break;            // the last one
+      default: zoom = 1 - 0.08 * ease(u); roll = 0.03 * Math.sin(g.t * 13);                                                          // both shoulders
+    }
+    pl.eyeOffset = lerp(pl.eyeOffset || 0, eye, 1 - Math.exp(-dt * 10)); pl.extraRoll = lerp(pl.extraRoll || 0, roll, 1 - Math.exp(-dt * 10));
+    const fov = this.settings.fov * zoom;
+    if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
+  }
+
+  // the strings strain audibly while a beam works at the control
+  _strings(dt, hs) {
+    const cut = hs && hs.length > 17 ? hs[17] : 0;
+    this._strainT = (this._strainT || 0) - dt;
+    if (cut > (this._lastCut || 0) + 0.005 && this._strainT <= 0) {
+      const c = this.hv.strings.last;
+      this.audio.at('strain' + ((this._strainN = (this._strainN || 0) + 1) % 3), { x: c.x, y: c.y, z: c.z }, { bus: 'mon', gain: 0.5 + cut * 0.9, rate: 0.9 + cut * 0.4, ref: 6, reverb: 0.35 });
+      this._strainT = 0.42;
+    }
+    this._lastCut = cut;
+  }
+
   _monsterFoley(dt) {
     const hv = this.hv, w = this.world;
     const quiet = this._hvQuietUntil && performance.now() < this._hvQuietUntil;
-    if (hv.root.visible && hv.speed > 2.2 && hv.moved < 3 && !quiet) {
+    // operated (low, on all fours): a quick scuttle through the leaves, knuckles on the boardwalk
+    if (hv.root.visible && hv.flags & 16 && hv.speed > 0.8 && hv.moved < 3 && !quiet) {
+      hv.crawlAcc = (hv.crawlAcc || 0) + hv.moved;
+      if (hv.crawlAcc > 1.1) {
+        hv.crawlAcc = 0;
+        const wood = w.surfaceAt(hv.pos.x, hv.pos.z) === SURFACE.WOOD, n = (Math.random() * 4) | 0;
+        this.audio.at(wood ? 'knuckle' + (n % 3) : 'crawl' + n, { x: hv.pos.x, y: hv.pos.y + 0.2, z: hv.pos.z },
+          { bus: 'mon', gain: wood ? 1.1 : 0.9, rate: 0.92 + Math.random() * 0.16, ref: 2, reverb: 0.06, range: wood ? { fadeStart: 4, maxDistance: 11 } : { fadeStart: 3, maxDistance: 8 } });
+      }
+    } else if (hv.root.visible && hv.speed > 2.2 && hv.moved < 3 && !quiet) {
       hv.stepAcc += hv.moved;
       if (hv.stepAcc > 1.35) { hv.stepAcc = 0; this.audio.footstep({ creature: 'hv', surface: w.surfaceAt(hv.pos.x, hv.pos.z), water: 0, brush: w.gridAt(w.gBrush, hv.pos.x, hv.pos.z), loud: hv.speed >= CONFIG.HV.CHASE * 0.8 ? 1 : 0.35, speed: hv.speed }, { x: hv.pos.x, y: hv.pos.y + 0.1, z: hv.pos.z }); }
     }
@@ -793,6 +887,13 @@ export class Game {
 
   _exhale(vol) {
     if (this.mode !== 'playing') return;
+    // close by and not hunting you, he breathes out when you do (Puppet search beat)
+    const hv = this.hv, st = HV_STATES[hv.state];
+    if (hv.root.visible && !this.chasing && (st === 'search' || st === 'still' || st === 'watch' || st === 'stalk')
+        && hv.pos.distanceTo(this.player.pos) < 7) {
+      const at = hv.headPos(this._v3 || (this._v3 = new THREE.Vector3()));
+      setTimeout(() => this.mode === 'playing' && this.audio.hvBreath({ x: at.x, y: at.y, z: at.z }, (this._breathN = (this._breathN || 0) + 1)), 120);
+    }
     const t = this.temp ?? T.BASE_TEMP_C;
     const k = clamp((7 - t) / 9, 0, 1) * (0.6 + 0.4 * clamp(vol * 2, 0, 1));
     const lit = this.flashlight.on ? 1 : 0.2;
