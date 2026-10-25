@@ -34,7 +34,9 @@ export const CONFIG = {
     JUMP: 4.1, GRAVITY: 18, HEIGHT: 1.72, CROUCH_HEIGHT: 1.05, RADIUS: 0.3,
     STAMINA_MAX: 9, STAMINA_REGEN: 1.15, STAMINA_REGEN_DELAY: 1.2,
     STEP_HEIGHT: 0.42, MUD_SLOW: 0.72, WATER_SLOW: 0.55, BRUSH_SLOW: 0.78,
-    MAX_HEALTH: 2,
+    // owner (Oct 25, Puppet rework): you survive two of his grabs; the third kills. No
+    // automatic healing, so the count holds for the whole night.
+    MAX_HEALTH: 3, HEAL_AFTER: 0,
     // Teammates remain locatable nearby without sounding like another threat.
     REMOTE_STEP_FADE_START: 4, REMOTE_STEP_MAX_DISTANCE: 11, REMOTE_STEP_GAIN: 0.45,
   },
@@ -108,6 +110,26 @@ export const CONFIG = {
     // Seen from a distance (owner): he doesn't vanish instantly. Beyond STARE_MIN_DIST he holds
     // still and stares back for STARE s (shorter if lit: STARE_LIT), then leaves at SLOW_RETREAT.
     STARE_MIN_DIST: 10, STARE: [3, 6], STARE_LIT: [1.8, 3.2], STARE_REFRACTORY: 8, SLOW_RETREAT: 2.4,
+    // ---- "The Puppet" rework (owner, Oct 25 2026 afternoon; docs/HV_PUPPET_REWORK.md)
+    // Watched he is "worn": he freezes mid-pose and holds (FREEZE s; shorter lit or close),
+    // then backs away upright, facing you. Unwatched he is "operated": low, on all fours,
+    // OPERATED_MUL faster. A new look after FREEZE_RESET s unwatched starts a new freeze.
+    FREEZE: [4, 7], FREEZE_LIT: [2.5, 4.5], FREEZE_CLOSE: [2, 3.5], FREEZE_RESET: 0.6, OPERATED_MUL: 1.3,
+    // In a hunt, each time the target looks back he freezes for a beat (owner), at most every
+    // LOOKBACK_GAP s after the last beat ended, and never inside LOOKBACK_MIN_DIST.
+    LOOKBACK_FREEZE: [0.55, 0.85], LOOKBACK_GAP: 1.8, LOOKBACK_MIN_DIST: 3,
+    // The grab replaces the swing (owner): reach (GRAB_WINDUP s, the 7-ft flashlight still
+    // breaks it), then he holds you for GRAB_HOLD[kind] s and lets go. Damage lands on release.
+    // MAX_HEALTH 3: two grabs survived, the third kills (the 'final' grab).
+    GRAB_REACH: 1.5, GRAB_LAND: 2.1, GRAB_WINDUP: 0.45, GRAB_STAND: 0.75,
+    GRAB_HOLD: { shoulders: 1.7, throat: 2.0, face: 1.4, turn: 1.6, drag: 1.5, final: 3.2 },
+    // Flashlight within 7 ft: he collapses like his strings were cut. Once nobody has watched
+    // him for COLLAPSE_GONE_AFTER s he is gone (unseen, COLLAPSE_AWAY m off). Watched for
+    // COLLAPSE_MAX s, he gets up and backs away instead.
+    COLLAPSE_MIN: 1.2, COLLAPSE_GONE_AFTER: 0.3, COLLAPSE_AWAY: [35, 70], COLLAPSE_MAX: 25,
+    // In the grass (rare ambush): while closing in he may instead lie flat beside the trail
+    // ahead (LIE_AHEAD m along it, LIE_OFF m off it) and unfold when they come within LIE_WAKE.
+    LIE_CHANCE: 0.3, LIE_COOLDOWN: 240, LIE_AHEAD: [55, 75], LIE_OFF: [1.6, 3.2], LIE_WAKE: 4.5, LIE_TIMEOUT: 60, RISE_TIME: 1.1,
   },
   SF: {
     MODEL_SCALE: 0.6,               // keep the creature low and partially concealed in undergrowth

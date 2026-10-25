@@ -1,8 +1,10 @@
+import { CONFIG } from '../shared/config.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
 import { pointAtDistance } from '../shared/math.js';
+const MAXH = CONFIG.PLAYER.MAX_HEALTH;
 
 const world = new World();
 function encounter(creature, separation=6) {
@@ -24,8 +26,8 @@ function encounter(creature, separation=6) {
 for(const creature of ['hv','sf']) test(`${creature} actually closes distance and damages a stationary player`,()=>{
   const {sim,p,actor}=encounter(creature);
   const events=[];const initial=Math.hypot(actor.x-p.x,actor.z-p.z);
-  for(let t=0;t<45 && p.health===2;t+=0.05){sim.step(.05);events.push(...sim.drainEvents());}
-  assert.ok(p.health<2,`${creature} must reach a real damaging attack`);
+  for(let t=0;t<45 && p.health===MAXH;t+=0.05){sim.step(.05);events.push(...sim.drainEvents());}
+  assert.ok(p.health<MAXH,`${creature} must reach a real damaging attack`);
   assert.ok(events.some(e=>e.type==='hit'&&e.by===creature));
   if(creature==='sf') assert.ok(events.some(e=>e.type==='sf_vocal'&&e.k==='growl'),'ambush announces its windup at the server tick rate');
   assert.ok(Math.hypot(actor.x-p.x,actor.z-p.z)<initial);
@@ -34,8 +36,8 @@ for(const creature of ['hv','sf']) test(`${creature} actually closes distance an
 test('a close flashlight encounter remains dangerous during the director cooldown',()=>{
   const {sim,p}=encounter('hv',3);
   sim.director.enter('relax');sim.director.lastChase=sim.time;
-  for(let t=0;t<45 && p.health===2;t+=.05)sim.step(.05);
-  assert.ok(p.health<2,'standing within arm reach cannot exploit a flashlight/cooldown immunity');
+  for(let t=0;t<45 && p.health===MAXH;t+=.05)sim.step(.05);
+  assert.ok(p.health<MAXH,'standing within arm reach cannot exploit a flashlight/cooldown immunity');
 });
 
 for(const flash of [true,false]) test(`first sighting reaches a real attack without preassigned awareness (flashlight ${flash})`,()=>{
@@ -47,10 +49,10 @@ for(const flash of [true,false]) test(`first sighting reaches a real attack with
     hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
     assert.equal(hv.target,null);assert.equal(hv.awareness.size,0);
     let retreatBeforeHit=false,chased=false;
-    for(let t=0;t<50 && p.health===2&&!retreatBeforeHit;t+=.05){sim.step(.05);chased ||= hv.state==='chase';if(hv.state==='retreat'&&p.health===2)retreatBeforeHit=true;}
+    for(let t=0;t<50 && p.health===MAXH&&!retreatBeforeHit;t+=.05){sim.step(.05);chased ||= hv.state==='chase';if((hv.state==='retreat'||hv.state==='collapse')&&p.health===MAXH)retreatBeforeHit=true;}
     assert.ok(chased,`seed ${seed}: natural first sighting must become a hunt`);
-    if(flash) assert.ok(p.health<2||retreatBeforeHit,`seed ${seed}: the hunt attacks or is stopped by the close flashlight counter`);
-    else { assert.ok(p.health<2,`seed ${seed}: the unlit hunt must resolve into a damaging attack`); assert.equal(retreatBeforeHit,false); }
+    if(flash) assert.ok(p.health<MAXH||retreatBeforeHit,`seed ${seed}: the hunt attacks or is stopped by the close flashlight counter`);
+    else { assert.ok(p.health<MAXH,`seed ${seed}: the unlit hunt must resolve into a damaging attack`); assert.equal(retreatBeforeHit,false); }
     assert.equal(sim.director.chasing,false,'a completed hit closes the director chase');
   }
 });
@@ -62,8 +64,8 @@ test('acquisition switches from a downed teammate to the living target',()=>{
   const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
   Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash:false});
   hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
-  for(let t=0;t<45&&p.health===2;t+=.05)sim.step(.05);
-  assert.ok(p.health<2,'the living observer becomes the actual attack target');
+  for(let t=0;t<45&&p.health===MAXH;t+=.05)sim.step(.05);
+  assert.ok(p.health<MAXH,'the living observer becomes the actual attack target');
 });
 
 test('losing a chase target clears the director chase flag',()=>{
@@ -77,7 +79,7 @@ test('a player who leaves during the skunk windup can avoid its bite',()=>{
   sim.step(.05);assert.equal(actor.state,'ambush');
   p.x+=20;p.lastX=p.x;
   for(let t=0;t<5;t+=.05)sim.step(.05);
-  assert.equal(p.health,2);
+  assert.equal(p.health,MAXH);
 });
 
 test('nearby enemies do not damage through an occluding wall',()=>{
@@ -87,14 +89,14 @@ test('nearby enemies do not damage through an occluding wall',()=>{
     if(creature==='hv'){actor.setState('chase');actor.lastSeenChase={x:p.x,z:p.z,t:sim.time};}
     else{actor.target=p.id;actor.setState('rear');}
     for(let t=0;t<1;t+=.05)sim.step(.05);
-    assert.equal(p.health,2,creature);
+    assert.equal(p.health,MAXH,creature);
   }
 });
 
  test('opening dread cannot be bypassed by the close aggression override',()=>{
   const {sim,p}=encounter('hv',2.2);sim.time=20;
   for(let t=0;t<5;t+=.05)sim.step(.05);
-  assert.equal(p.health,2);
+  assert.equal(p.health,MAXH);
 });
 
 for (const separation of [6,10]) for (const state of ['prowl','investigate']) test(`skunk at ${separation} m commits to a close ambush from ${state} under a flashlight`,()=>{
@@ -102,8 +104,8 @@ for (const separation of [6,10]) for (const state of ['prowl','investigate']) te
   p.flash=true;
   p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));
   actor.setState(state,{inv:{x:p.x,z:p.z,t:sim.time,pid:p.id}});
-  for(let t=0;t<8 && p.health===2;t+=.05)sim.step(.05);
-  assert.ok(p.health<2,`a nearby flashlight must not suppress ${state} attack acquisition`);
+  for(let t=0;t<8 && p.health===MAXH;t+=.05)sim.step(.05);
+  assert.ok(p.health<MAXH,`a nearby flashlight must not suppress ${state} attack acquisition`);
 });
 
 test('a teammate flashlight cannot suppress the skunk attacking the nearest player',()=>{
@@ -112,6 +114,6 @@ test('a teammate flashlight cannot suppress the skunk attacking the nearest play
   Object.assign(q,{x:at.x,z:at.z,y:world.heightAt(at.x,at.z),flash:true,
     yaw:Math.atan2(-(actor.x-at.x),-(actor.z-at.z))});
   actor.setState('prowl');
-  for(let t=0;t<8 && p.health===2;t+=.05)sim.step(.05);
-  assert.ok(p.health<2,'the farther flashlight must not grant immunity to its teammate');
+  for(let t=0;t<8 && p.health===MAXH;t+=.05)sim.step(.05);
+  assert.ok(p.health<MAXH,'the farther flashlight must not grant immunity to its teammate');
 });

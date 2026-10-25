@@ -83,7 +83,9 @@ export class GameSim {
   input(id, m) {
     const p = this.players.get(id);
     if (!p || (p.state !== 'alive' && p.state !== 'downed')) return;
-    if (p.state === 'alive' && Number.isFinite(m.x) && Number.isFinite(m.z)) {
+    // held in his grab: the client's movement is ignored until he lets go
+    const held = p.heldUntil != null && this.time < p.heldUntil;
+    if (p.state === 'alive' && !held && Number.isFinite(m.x) && Number.isFinite(m.z)) {
       const d = Math.hypot(m.x - p.x, m.z - p.z);
       if (d < 12) { p.x = m.x; p.z = m.z; p.y = Number.isFinite(m.y) ? m.y : p.y; }
     }
@@ -151,9 +153,11 @@ export class GameSim {
       p.interactNoise = false;
       const mdx = p.x - p.lastX, mdz = p.z - p.lastZ, md = Math.hypot(mdx, mdz);
       if (md > 0.05) p.moveDir = [mdx / md, mdz / md];
+      // smoothed walking speed (teleports and respawns are ignored)
+      if (md < 1) p.moveSpeed = (p.moveSpeed || 0) + (md / dt - (p.moveSpeed || 0)) * Math.min(1, dt * 1.5);
       p.lastX = p.x; p.lastZ = p.z;
       p.quietT = p.voice > CONFIG.VOICE.NOISE_THRESHOLD ? 0 : (p.quietT || 0) + dt;
-      if (p.state === 'alive' && p.health < CONFIG.PLAYER.MAX_HEALTH && this.time - p.hurtT > 120) p.health = CONFIG.PLAYER.MAX_HEALTH;
+      const heal = CONFIG.PLAYER.HEAL_AFTER; if (heal && p.state === 'alive' && p.health < CONFIG.PLAYER.MAX_HEALTH && this.time - p.hurtT > heal) p.health = CONFIG.PLAYER.MAX_HEALTH;
     }
     this.obj.update(dt);
     this.updateRevives(dt);

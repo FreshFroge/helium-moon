@@ -7,6 +7,7 @@ import { GameSim } from '../shared/sim/sim.js';
 import { CONFIG } from '../shared/config.js';
 import { pointAtDistance } from '../shared/math.js';
 import { moveCharacter, waterDepthAt } from '../shared/physics.js';
+const MAXH = CONFIG.PLAYER.MAX_HEALTH;
 
 const world = new World();
 const R = CONFIG.HV.HUNT_START_RANGE;
@@ -74,10 +75,10 @@ test('a hunt prowls within twelve to fifteen feet for about thirty seconds befor
   const {sim,p,hv}=fixture(4.2,31);p.flash=false;
   hv.startChase(p);
   for(let t=0;t<25;t+=.05)sim.step(.05);
-  assert.equal(p.health,2,'the prowl is threatening without an early strike');
+  assert.equal(p.health,MAXH,'the prowl is threatening without an early strike');
   assert.ok(hv.huntProwlT>=24,'nearby prowl time accumulates in the ring');
-  for(let t=0;t<15&&p.health===2;t+=.05)sim.step(.05);
-  assert.ok(p.health<2,'the completed prowl resolves into the final attack');
+  for(let t=0;t<15&&p.health===MAXH;t+=.05)sim.step(.05);
+  assert.ok(p.health<MAXH,'the completed prowl resolves into the final attack');
 });
 
 test('fail-safe: a hunt on a target he cannot reach ends instead of running forever', () => {
@@ -115,7 +116,7 @@ test('running away is not an escape: a sprinting player (9 s stamina) still gets
       for (const e of sim.drainEvents()) if (e.type === 'chase' && !e.on) ended = t;
     }
     assert.ok(ended != null, `seed ${seed}: the hunt ends`);
-    assert.ok(p.health < 2, `seed ${seed}: it ends with a hit, not by outrunning him (ended at ${ended?.toFixed(1)} s)`);
+    assert.ok(p.health < MAXH, `seed ${seed}: it ends with a hit, not by outrunning him (ended at ${ended?.toFixed(1)} s)`);
   }
 });
 
@@ -139,7 +140,7 @@ test('hugging a big tree trunk is not an escape: the final lunge reaches the pla
     Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: false });
     const at = pointAtDistance(world.trail, world.trailCum, sp.a - 20); hv.place(at.x, at.z);
     hv.startChase(p);
-    for (let t = 0; t < 120 && p.health === 2; t += 0.05) sim.step(0.05);
-    assert.ok(p.health < 2, `trail ${sp.a}: he reaches a player pressed against the trunk (state ${hv.state}, d ${hv.dist(p).toFixed(2)}, prowl ${(hv.huntProwlT||0).toFixed(1)}/${(hv.huntProwlFor||0).toFixed(1)})`);
+    for (let t = 0; t < 120 && p.health === MAXH; t += 0.05) sim.step(0.05);
+    assert.ok(p.health < MAXH, `trail ${sp.a}: he reaches a player pressed against the trunk (state ${hv.state}, d ${hv.dist(p).toFixed(2)}, prowl ${(hv.huntProwlT||0).toFixed(1)}/${(hv.huntProwlFor||0).toFixed(1)})`);
   }
 });

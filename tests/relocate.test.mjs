@@ -45,7 +45,7 @@ for (const [seed, look] of [[1001, 0], [1002, 20], [1003, 0], [1004, 20], [1005,
         inSpawn: inSpawnZone(world, e.x, e.z),
         minDist: Math.min(...players.map((q) => Math.hypot(q.x - e.x, q.z - e.z))),
         arrivalSeen: players.some((q) => onScreen(world, q, e.x, world.heightAt(e.x, e.z), e.z)),
-        departureSeen: players.some((q) => onScreen(world, q, before.x, before.y, before.z)),
+        departureSeen: players.some((q) => onScreen(world, q, before.x, before.y, before.z, e.reason === 'collapse' ? 0.45 : 1.9)),
       });
     }
   }
@@ -65,7 +65,9 @@ test('never seen: neither the departure nor the arrival is on a player\'s screen
 });
 test('cooldown between relocations; at most one cut-off per hunt', () => {
   const bySeed = {};
-  for (const r of relocations) (bySeed[r.seed] ||= []).push(r);
+  // the cooldown governs the 'ahead'/'cutoff' teleports; the Puppet's collapse vanish and
+  // lying in the grass are separate, rarer mechanics with their own rules
+  for (const r of relocations) if (r.reason === 'ahead' || r.reason === 'cutoff') (bySeed[r.seed] ||= []).push(r);
   for (const list of Object.values(bySeed)) for (let i = 1; i < list.length; i++) assert.ok(list[i].t - list[i - 1].t >= C.RELOCATE_COOLDOWN[1] - 0.1, `gap ${(list[i].t - list[i - 1].t).toFixed(1)} s`);
   for (const r of relocations) if (r.reason === 'cutoff') assert.ok(r.huntCutoffs <= 1, JSON.stringify(r));
 });

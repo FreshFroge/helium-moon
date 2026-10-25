@@ -5,6 +5,7 @@ import { GameSim } from '../shared/sim/sim.js';
 import { CONFIG } from '../shared/config.js';
 import { pointAtDistance } from '../shared/math.js';
 import { onScreen } from '../shared/sim/perception.js';
+const MAXH = CONFIG.PLAYER.MAX_HEALTH;
 
 const world = new World();
 function encounter(separation=2.3) {
@@ -22,8 +23,8 @@ function tick(sim,seconds) {for(let t=0;t<seconds;t+=.05)sim.step(.05);}
 
 test('a committed chase attacks a player who never looks back',()=>{
   const {sim,p,hv}=encounter();
-  tick(sim,2);
-  assert.ok(p.health<2,'unseen pursuit must be able to land a real hit');
+  tick(sim,3.5);   // reach + hold (the grab, owner's Puppet rework): damage lands as he lets go
+  assert.ok(p.health<MAXH,'unseen pursuit must be able to land a real hit');
   assert.equal(sim.director.chasing,false,'the hit ends the chase');
 });
 
@@ -35,20 +36,26 @@ test('a glimpse at range does not call off a hunt',()=>{
   tick(sim,.2);
   assert.equal(hv.state,'chase','being seen at 10 m is ignored');
   p.yaw+=Math.PI;                                         // looks away again
-  tick(sim,3);
-  assert.ok(p.health<2,'the hunt follows through to a hit');
+  tick(sim,5);
+  assert.ok(p.health<MAXH,'the hunt follows through to a hit');
 });
 
 test('holding the light on him as he charges: he breaks off only once within 7 ft',()=>{
   const {sim,p,hv}=encounter(12);p.yaw+=Math.PI;          // faces him with the light the whole time
   let brokeAt=null,start=null;
-  for(let t=0;t<4&&brokeAt==null;t+=.05){sim.step(.05);if(hv.state==='retreat'){brokeAt=hv.dist(p);start=[hv.x,hv.z];}}
+  for(let t=0;t<5&&brokeAt==null;t+=.05){sim.step(.05);if(hv.state==='collapse'){brokeAt=hv.dist(p);start=[hv.x,hv.z];}}
   assert.ok(brokeAt!=null,'the 7 ft flashlight calls the hunt off');
   assert.ok(brokeAt<=CONFIG.HV.HUNT_BREAK_LIT_DIST+.05,`not before he is within 7 ft (broke off at ${brokeAt?.toFixed(2)} m)`);
-  assert.equal(p.health,2,'no hit when the light lands in time');
-  assert.ok(hv.snapshot()[7]&16);assert.equal(sim.director.chasing,false);
-  tick(sim,.5);
-  assert.ok(Math.hypot(hv.x-start[0],hv.z-start[1])>.5,'escape uses real movement');
+  assert.equal(p.health,MAXH,'no hit when the light lands in time');
+  // Puppet: strings cut - he collapses where he stands
+  assert.ok(hv.snapshot()[7]&256,'the collapse reaches every client');assert.equal(sim.director.chasing,false);
+  tick(sim,2);
+  assert.equal(hv.state,'collapse','he lies there while watched');
+  assert.ok(Math.hypot(hv.x-start[0],hv.z-start[1])<.05,'no movement while watched');
+  p.yaw+=Math.PI;tick(sim,.6);                           // look away...
+  p.yaw+=Math.PI;                                         // ...and back: gone
+  assert.ok(Math.hypot(hv.x-start[0],hv.z-start[1])>20,'gone the moment nobody was looking');
+  assert.notEqual(hv.state,'chase');
 });
 
 test('a teammate can flash him off from within 7 ft',()=>{
@@ -58,7 +65,7 @@ test('a teammate can flash him off from within 7 ft',()=>{
   q.yaw=Math.atan2(q.x-hv.x,q.z-hv.z);                    // teammate looks at him (camera faces -Z)
   hv.target=p.id;
   tick(sim,.1);
-  assert.equal(hv.state,'retreat');assert.equal(p.health,2);
+  assert.equal(hv.state,'collapse');assert.equal(p.health,MAXH);
 });
 
 test('losing sight or time no longer ends a hunt',()=>{
@@ -91,20 +98,31 @@ test('server accepts bounded screen settings for individual co-op players',()=>{
   sim.input(p.id,{viewFov:NaN,viewAspect:Infinity});assert.deepEqual([p.viewFov,p.viewAspect],[120,5]);
 });
 
-test('retreat moves physically backward at crawl speed and transmits its pose',()=>{
+test('retreat: unwatched he goes low and fast; watched he backs away upright, facing you',()=>{
   const {sim,p,hv}=encounter();
   hv.retreatFrom(p,false,true);
   const end=pointAtDistance(world.trail,world.trailCum,470);
   hv.path=world.findPath(hv.x,hv.z,end.x,end.z);hv.pathI=1;
-  hv.yaw=Math.atan2(hv.path[1][0]-hv.x,hv.path[1][1]-hv.z)+Math.PI;
-  let fast=0,backward=0;
-  for(let i=0;i<40;i++){
+  let fast=0,forward=0;
+  for(let i=0;i<30;i++){
     const [x,z]=[hv.x,hv.z];sim.step(.05);
     const dx=hv.x-x,dz=hv.z-z,d=Math.hypot(dx,dz);
     assert.ok(d<=CONFIG.HV.RETREAT*.05*1.5,'each movement step is bounded, never a teleport');
-    if(d>.3){fast++;if((dx*Math.sin(hv.yaw)+dz*Math.cos(hv.yaw))/d<-.8)backward++;}
-    assert.ok(hv.snapshot()[7]&16,'the authoritative retreat reaches every client as a crawl pose');
+    if(d>.3){fast++;if((dx*Math.sin(hv.yaw)+dz*Math.cos(hv.yaw))/d>.8)forward++;}
+    assert.ok(hv.snapshot()[7]&16,'unwatched: the low operated crawl reaches every client');
   }
-  assert.ok(fast>=20 && backward>=20,`fast=${fast}, backward=${backward}`);
-  assert.equal(p.health,2);
+  assert.ok(fast>=15 && forward>=15,`fast=${fast}, forward=${forward}`);
+  // now the player turns and watches him go
+  p.yaw=Math.atan2(-(hv.x-p.x),-(hv.z-p.z));
+  hv.path=world.findPath(hv.x,hv.z,end.x,end.z);hv.pathI=1;
+  let slow=0,backward=0;
+  for(let i=0;i<30;i++){
+    const [x,z]=[hv.x,hv.z];sim.step(.05);
+    if(hv.state!=='retreat')break;
+    const dx=hv.x-x,dz=hv.z-z,d=Math.hypot(dx,dz);
+    if(d>.02){slow++;if(i>=3)assert.ok(d<=CONFIG.HV.SLOW_RETREAT*.05*1.5+.01,'watched, he backs off at walking pace');
+      if((dx*Math.sin(hv.yaw)+dz*Math.cos(hv.yaw))/d<-.5)backward++;}
+  }
+  assert.ok(slow>=5 && backward>=slow*.6,`slow=${slow}, backward=${backward}`);
+  assert.equal(p.health,MAXH);
 });
