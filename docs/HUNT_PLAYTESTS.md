@@ -718,3 +718,10 @@ Players: p1 (cautious, gen branch), p2 (rusher, relay branch), p3 (rusher, escor
 - 25:03 extraction open
 
 </details>
+
+## Regression check, Oct 25 ~12:35 UTC (Claude)
+
+I re-ran all 10 playtests at `e99053d`, after the morning's A*, polyline and
+allocation optimizations. The results are identical to round 3: 27 hunts, 19
+flashed off and 8 hits, with the same relocations and the same session
+outcomes. The optimizations didn't change any AI decision.
