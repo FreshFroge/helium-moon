@@ -129,7 +129,7 @@ export class HeliumAnimator {
   //   back    - backing away upright, facing you
   //   peek    - 1 leaning out from cover / 2 low with the head sideways
   //   grab    - GRAB_KINDS index (1 shoulders, 2 throat, 3 face, 4 turn, 5 drag, 6 final), grabPhase 1 reach / 2 hold
-  //   limp    - strings cut;  rigid - lying flat / the plank rise (the view tips the whole body)
+  //   limp    - gone limp (lost you);  rigid - lying flat / the plank rise (the view tips the whole body)
   update(dt, p) {
     const rig = this.rig, b = this.b, B = this.blend;
     this.t += dt;
@@ -269,7 +269,7 @@ export class HeliumAnimator {
       const lag = B.stalk * sign * 0.025 + this.accel * 0.005 * creature * free;
       const up = new THREE.Vector3(0.14 * sign, -1, swing * armSwing * 0.6 + 0.05 - lag).normalize();
       const fore = new THREE.Vector3(0.05 * sign, -1, 0.12 + swing * armSwing * 0.4 + B.run * 0.9 * (1 - B.dead) - lag).normalize();
-      if (B.hang > 0.01) {          // hanging from his strings: limp, slightly forward and in
+      if (B.hang > 0.01) {          // hanging like a puppet: limp, slightly forward and in
         up.lerp(_v3.set(0.02 * sign, -1, 0.16).normalize(), B.hang).normalize();
         fore.lerp(_v3.set(-0.04 * sign, -1, 0.22).normalize(), B.hang).normalize();
       }
@@ -289,7 +289,7 @@ export class HeliumAnimator {
         const [gu, gf] = this._grabArm(sign);
         up.lerp(gu, B.grab).normalize(); fore.lerp(gf, B.grab).normalize();
       }
-      if (B.limp > 0.01) {          // strings cut: arms flung out, loose
+      if (B.limp > 0.01) {          // gone limp: arms flung out, loose
         up.lerp(_v3.set(0.8 * sign, -0.35, 0.45).normalize(), B.limp).normalize();
         fore.lerp(_v3.set(0.55 * sign, -0.5, 0.65).normalize(), B.limp).normalize();
       }

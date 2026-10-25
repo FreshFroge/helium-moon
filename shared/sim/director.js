@@ -61,7 +61,9 @@ export class Director {
 
   allowChase(p) {
     const t = this.sim.time;
-    if (!playerActive(p) || this.phase === 'relax' || this.sim.state === 'intro' || this.inDread()) return false;
+    // never open a hunt on someone downed, dead or gone (PLAYTESTS_50 P0)
+    if (!playerActive(p) || p.state !== 'alive') return false;
+    if (this.phase === 'relax' || this.sim.state === 'intro' || this.inDread()) return false;
     const baseGap = this._esc(this.D.CHASE_COOLDOWN) * this.chaseGapMul;
     const chaseGap = this.extraction ? Math.min(30, baseGap) : baseGap;
     if (t - this.lastChase < chaseGap || t - this.lastAttack < this._esc(this.D.ATTACK_COOLDOWN)) return false;

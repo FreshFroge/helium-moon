@@ -62,9 +62,9 @@ export class AudioEngine {
     add('hurt', () => S.hurt(9, false)); add('down', () => S.hurt(10, true));
     // real-animal false alarms (wildlife.js)
     for (let i = 0; i < 3; i++) add('swing' + i, () => S.swing(70 + i));
-    // the Puppet: joints, crawl, knuckles, strings, the collapse and the grab
+    // the Puppet: joints, crawl, knuckles, the collapse and the grab
     for (let i = 0; i < 4; i++) { add('pop' + i, () => S.jointPop(200 + i)); add('crawl' + i, () => S.crawlPatter(210 + i)); }
-    for (let i = 0; i < 3; i++) { add('knuckle' + i, () => S.knuckleWood(220 + i)); add('snapStr' + i, () => S.stringSnap(230 + i)); add('strain' + i, () => S.stringStrain(240 + i)); }
+    for (let i = 0; i < 3; i++) { add('knuckle' + i, () => S.knuckleWood(220 + i)); }
     for (let i = 0; i < 2; i++) { add('bodyDrop' + i, () => S.bodyDrop(250 + i)); add('cloth' + i, () => S.clothGrab(260 + i)); add('choke' + i, () => S.choke(270 + i)); }
     for (let i = 0; i < 3; i++) { add('deerBlow' + i, () => S.deerBlow(40 + i)); add('owlHoot' + i, () => S.owl(50 + i)); add('wings' + i, () => S.wingFlap(60 + i)); }
     let t0 = performance.now();

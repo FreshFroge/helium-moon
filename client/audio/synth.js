@@ -221,34 +221,6 @@ export function knuckleWood(seed) {
   return normalize(out, 0.8);
 }
 
-// a taut string snapping: inharmonic pluck that drops in pitch, a whip of air
-export function stringSnap(seed) {
-  const r = rngFor(seed), d = 1.1, n = N(d), out = new Float32Array(n), f = r.range(520, 820);
-  const parts = [[1, 1], [2.04, 0.5], [3.11, 0.3], [4.3, 0.18]];
-  for (let i = 0; i < n; i++) {
-    const t = i / SR, drop = 1 - 0.35 * (1 - Math.exp(-t * 6));
-    let v = 0;
-    for (const [m, a] of parts) v += Math.sin(TAU * f * m * drop * t + m) * a * Math.exp(-t * (4 + m * 2.5));
-    out[i] = v;
-  }
-  const whip = N(0.09), nz = filter(noise(whip, r), 'hp', 2500, 0.7, SR);
-  for (let i = 0; i < whip; i++) out[i] += nz[i] * Math.exp(-i / SR * 40) * 0.6;
-  return fade(normalize(out, 0.75), SR, 0.001, 0.2);
-}
-
-// the strings straining while a beam holds the control: a thin bowed-wire whine
-export function stringStrain(seed) {
-  const r = rngFor(seed), d = 0.7, n = N(d), out = new Float32Array(n), f = r.range(170, 240);
-  let ph = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / SR, fr = f * (1 + 0.012 * Math.sin(TAU * 5.5 * t)) * (1 + 0.04 * t);
-    ph += fr / SR; ph -= Math.floor(ph);
-    const stick = (r() < 0.06 ? r.range(0.4, 1) : 0) * 0.3;
-    out[i] = (ph * 2 - 1 + stick) * Math.sin(Math.PI * t / d) ** 0.6;
-  }
-  return fade(normalize(filter(filter(out, 'bp', f * 4, 3, SR), 'lp', 3000, 0.7, SR), 0.55), SR, 0.03, 0.15);
-}
-
 // a limp body dropping into the leaves
 export function bodyDrop(seed) {
   const r = rngFor(seed), out = new Float32Array(N(0.9));

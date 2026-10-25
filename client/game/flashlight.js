@@ -45,6 +45,13 @@ export class Flashlight {
     const sway = this._sway.set(Math.sin(t * 1.3) * 0.006 + (opts.walkBob || 0) * 0.01, Math.sin(t * 0.9) * 0.008, 0);
     const q = this._q.copy(this.handQ).multiply(this._swayQ.setFromEuler(sway));
     this.dir.set(0, 0, -1).applyQuaternion(q);
+    // in his grab the beam is jammed up into his face from chest height, shaking (opts.aimAt)
+    this.drop = lerp(this.drop || 0, opts.aimAt ? 1 : 0, 1 - Math.exp(-dt * (opts.aimAt ? 12 : 3)));
+    if (opts.aimAt) {
+      this._aim = (this._aim || new THREE.Vector3()).subVectors(opts.aimAt, this.handPos).normalize();
+      this._aim.x += Math.sin(t * 23) * 0.025; this._aim.y += Math.sin(t * 17 + 1) * 0.02;
+    }
+    if (this.drop > 0.001 && this._aim) { this.dir.lerp(this._aim, this.drop).normalize(); }
     this.light.position.copy(this.handPos);
     this.light.target.position.copy(this.handPos).addScaledVector(this.dir, 10);
     this.light.target.updateMatrixWorld();
@@ -65,7 +72,7 @@ export class Flashlight {
       else { this.flicker = 1; this.flickerT = 0.08 + Math.random() * 0.4; }
     }
     const batt = this.battery < 0.3 ? lerp(0.45, 1, this.battery / 0.3) : 1;
-    const target = this.on && !opts.off ? F.INTENSITY * this.flicker * batt : 0;
+    const target = this.on && !opts.off ? F.INTENSITY * this.flicker * batt * (1 - 0.8 * (this.drop || 0)) : 0;
     this.light.intensity = lerp(this.light.intensity, target, 1 - Math.exp(-dt * 40));
     this.light.color.setRGB(1, lerp(0.82, 0.945, batt), lerp(0.6, 0.86, batt));
   }

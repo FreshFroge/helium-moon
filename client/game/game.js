@@ -408,13 +408,8 @@ export class Game {
         } else if (e.phase === 'miss' || e.phase === 'strike') A.at('swing' + (k % 3), at, { bus: 'mon', gain: 0.9, ref: 2.5, reverb: 0.08 });
         break;
       }
-      // strings cut: they snap up in the canopy, and he drops
-      case 'hv_cut': {
-        this._reactAvatar(e.pid, pos);
-        const c = this.hv.strings.last, at = c && c.y ? { x: c.x, y: c.y, z: c.z } : pos;
-        for (let i = 0; i < 3; i++) setTimeout(() => this.mode === 'playing' && A.at('snapStr' + ((e.seq + i) % 3), at, { bus: 'mon', gain: 1.25 - i * 0.25, rate: 1 + i * 0.07, ref: 6, reverb: 0.45 }), i * 70 + Math.random() * 40);
-        break;
-      }
+      // you hid and he lost you: somewhere close, a long exhale, then he drops
+      case 'hv_lost': this._reactAvatar(e.pid, pos); if (this._near(pos, 30)) this.audio.hvBreath({ ...pos, y: pos.y + 1.6 }, (e.seq || 0) + 7); break;
       case 'hv_collapse': A.at('bodyDrop' + ((e.seq || 0) % 2), { x: e.x, y: (e.y ?? this.world.heightAt(e.x, e.z)) + 0.3, z: e.z }, { bus: 'mon', gain: 1.4, ref: 4, reverb: 0.2 }); break;
       // a look back caught him: one dry crack of his joints as he locks
       case 'hv_freeze': this._reactAvatar(e.pid, pos); if (this._near(pos, 25)) A.at('pop' + ((e.seq || 0) % 4), { ...pos, y: pos.y + 0.6 }, { bus: 'mon', gain: 0.7, ref: 2, reverb: 0.1, range: { fadeStart: 8, maxDistance: 25 } }); break;
@@ -652,10 +647,7 @@ export class Game {
     // ---- monsters
     const hs = this.hvBuf.sample(this.renderT);
     const fl = this.flashlight;
-    // the strings above him catch your beam (Puppet: cut the strings)
-    this.hv.strings.flash = { on: fl.on && fl.light.intensity > 5, pos: fl.light.position, dir: fl.dir, cosOuter: Math.cos(fl.light.angle), range: fl.light.distance || CONFIG.FLASHLIGHT.RANGE, k: clamp(fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY, 0, 1) };
     this.hv.update(dt, hs, this.camera.position);
-    this._strings(dt, hs);
     let shine = 0;
     const ss = this.sfBuf.sample(this.renderT);
     if (ss && fl.on && fl.light.intensity > 5) {
@@ -685,7 +677,7 @@ export class Game {
     this._interact(dt, active && !typing && !this.reading);
     // ---- flashlight + breath + anomalies
     const walkBob = Math.sin(pl.bobT) * clamp(pl.speed / 2, 0, 1);
-    fl.update(dt, this.camera, this.terror, { walkBob, gas: this.gasFx, off: dead });
+    fl.update(dt, this.camera, this.terror, { walkBob, gas: this.gasFx, off: dead, aimAt: this._grab && this.hv.root.visible ? this.hv.headPos(this._v4 || (this._v4 = new THREE.Vector3())) : null });
     this.wildlife.update(dt, this.camera.position, { on: fl.on && fl.light.intensity > 5, pos: fl.light.position, dir: fl.dir, k: fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY });
     this.objViews.update(dt, this.sessionT, {
       on: fl.on, pos: fl.light.position, dir: fl.dir,
@@ -694,7 +686,7 @@ export class Game {
     this.breath.update(dt);
     // eye/camera adaptation: a beam landing on something close floods the view, so exposure drops
     const lit = fl.on && fl.light.intensity > 5 && !dead;
-    const expT = lit ? clamp(Math.pow(this._beamDistance() / 7.5, 1.3), 0.16, 1) : 1;
+    const expT = this._grab ? 0.45 : lit ? clamp(Math.pow(this._beamDistance() / 7.5, 1.3), 0.16, 1) : 1;   // in his grab: his face, lit from below
     this.exposure += (expT - this.exposure) * (1 - Math.exp(-dt * (expT < this.exposure ? 5 : 1.1)));
     const sawAnomaly = this.anomaly.update(dt, this.camera, this.terror);
     if (sawAnomaly && !this._anomShown) { this._anomShown = true; }
@@ -805,18 +797,6 @@ export class Game {
     pl.eyeOffset = lerp(pl.eyeOffset || 0, eye, 1 - Math.exp(-dt * 10)); pl.extraRoll = lerp(pl.extraRoll || 0, roll, 1 - Math.exp(-dt * 10));
     const fov = this.settings.fov * zoom;
     if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
-  }
-
-  // the strings strain audibly while a beam works at the control
-  _strings(dt, hs) {
-    const cut = hs && hs.length > 17 ? hs[17] : 0;
-    this._strainT = (this._strainT || 0) - dt;
-    if (cut > (this._lastCut || 0) + 0.005 && this._strainT <= 0) {
-      const c = this.hv.strings.last;
-      this.audio.at('strain' + ((this._strainN = (this._strainN || 0) + 1) % 3), { x: c.x, y: c.y, z: c.z }, { bus: 'mon', gain: 0.5 + cut * 0.9, rate: 0.9 + cut * 0.4, ref: 6, reverb: 0.35 });
-      this._strainT = 0.42;
-    }
-    this._lastCut = cut;
   }
 
   _monsterFoley(dt) {

@@ -28,9 +28,8 @@ test('a committed chase attacks a player who never looks back',()=>{
   assert.equal(sim.director.chasing,false,'the hit ends the chase');
 });
 
-// Hunts: once a hunt is on, the ONLY way to call it off is to cut his strings - hold a
-// flashlight beam on the control above him (CONFIG.HV.CONTROL_*; owner, Puppet rework).
-// Being seen, lit at any range, losing sight and time do not end it.
+// Hunts: once a hunt is on, the ONLY way to call it off is to hide from him (CONFIG.HV.HIDE_*;
+// owner, Puppet rework). Being seen, lit at any range, and time do not end it.
 function aimAt(p,q){const ey=p.y+1.6;p.yaw=Math.atan2(-(q.x-p.x),-(q.z-p.z));p.pitch=Math.atan2(q.y-ey,Math.hypot(q.x-p.x,q.z-p.z));}
 test('a glimpse at range does not call off a hunt',()=>{
   const {sim,p,hv}=encounter(10);p.yaw+=Math.PI;          // turns and looks, light on
@@ -48,40 +47,43 @@ test('the old 7-ft flashlight rule is gone: a beam in his face does not stop him
   assert.equal(collapsed,false);assert.ok(p.health<MAXH,'he gets you anyway');
 });
 
-test('holding the beam on the control above him cuts the strings: he collapses, then is gone',()=>{
-  const {sim,p,hv}=encounter(16);
-  tick(sim,.05);assert.ok(hv.controlPos(),'a hunt has a control above him');
-  const snap=hv.snapshot();assert.ok(snap[15]>=CONFIG.HV.CONTROL_UP[0]-.01,'clients receive where it hangs');
-  let cutAt=null,events=[];
-  for(let t=0;t<6&&cutAt==null;t+=.05){const c=hv.controlPos();if(c)aimAt(p,c);sim.step(.05);events.push(...sim.drainEvents());if(hv.state==='collapse')cutAt=t;}
-  assert.ok(cutAt!=null,'the strings were cut');
-  assert.ok(cutAt>=CONFIG.HV.CONTROL_TIME-.06,`not instantly (${cutAt?.toFixed(2)} s)`);
-  assert.ok(events.some(e=>e.type==='hv_cut'&&e.pid===p.id));
+// hiding fixture: the player slipped away from where he last had them and is now crouched in
+// the dark, light off, still and silent; he searches round the old spot
+function hidingFixture(sep=20){
+  const {sim,p,hv}=encounter(sep);
+  const decoy=pointAtDistance(world.trail,world.trailCum,500+sep+24);
+  Object.assign(p,{flash:false,crouch:true,hidden:true,noise:0,sprint:false,moveSpeed:0});
+  hv.lastSeenChase={x:decoy.x,z:decoy.z,t:sim.time-3};
+  return {sim,p,hv};
+}
+test('hiding ends a hunt: out of his sight, dark, still and quiet - he loses you and goes limp',()=>{
+  const {sim,p,hv}=hidingFixture();
+  let lost=null,events=[];
+  for(let t=0;t<14&&lost==null;t+=.05){p.moveSpeed=0;p.noise=0;sim.step(.05);events.push(...sim.drainEvents());if(hv.state==='collapse')lost=t;}
+  assert.ok(lost!=null,`he lost them (state ${hv.state}, hide ${hv.hide?.t?.toFixed(2)})`);
+  assert.ok(lost>=CONFIG.HV.HIDE_TIME-.06,`not instantly (${lost?.toFixed(2)} s)`);
+  assert.ok(events.some(e=>e.type==='hv_lost'&&e.pid===p.id));
   assert.equal(sim.director.chasing,false);assert.equal(p.health,MAXH);
-  assert.ok(hv.snapshot()[7]&256,'the collapse reaches every client');
-  const at=[hv.x,hv.z];
-  aimAt(p,{x:hv.x,y:hv.y+.3,z:hv.z});tick(sim,2);
-  assert.equal(hv.state,'collapse','he lies there while watched');
-  assert.ok(Math.hypot(hv.x-at[0],hv.z-at[1])<.05,'no movement while watched');
-  p.yaw+=Math.PI;tick(sim,.6);                            // look away...
-  assert.ok(Math.hypot(hv.x-at[0],hv.z-at[1])>20,'...and he is gone');
+  assert.ok(p.hideGraceUntil>sim.time,'a breather before the next hunt');
 });
 
-test('the beam has to stay on it: a sweep across the control is not enough',()=>{
-  const {sim,p,hv}=encounter(16);
-  for(let k=0;k<6;k++){for(let i=0;i<4;i++){const c=hv.controlPos();if(c)aimAt(p,c);sim.step(.05);}p.yaw+=Math.PI;tick(sim,.6);p.yaw-=Math.PI;}
-  assert.notEqual(hv.state,'collapse');
+test('your light gives you away: a lit hiding place never ends the hunt',()=>{
+  const {sim,p,hv}=hidingFixture();p.flash=true;
+  for(let t=0;t<12;t+=.05){p.moveSpeed=0;sim.step(.05);assert.notEqual(hv.state,'collapse');}
 });
 
-test('a teammate can cut the strings',()=>{
-  const {sim,p,hv}=encounter(8);                         // target facing away
-  const q=sim.addPlayer('two','Two');
-  const back=pointAtDistance(world.trail,world.trailCum,478);   // on the open trail behind him
-  Object.assign(q,{x:back.x,z:back.z,y:world.heightAt(back.x,back.z),flash:true,pitch:0,viewFov:75,viewAspect:16/9});
-  hv.target=p.id;
-  let cut=false;
-  for(let t=0;t<4&&!cut;t+=.05){const c=hv.controlPos();if(c)aimAt(q,c);sim.step(.05);cut=hv.state==='collapse';}
-  assert.ok(cut);assert.equal(p.health,MAXH);
+test('moving gives you away too',()=>{
+  const {sim,p,hv}=hidingFixture();
+  for(let t=0;t<12;t+=.05){p.moveSpeed=1.4;sim.step(.05);assert.notEqual(hv.state,'collapse');}
+});
+
+test('no hunt opens on a downed player; after hiding there is a breather',()=>{
+  const {sim,p,hv}=encounter(20);
+  p.state='downed';hv.setState('stalk');
+  assert.equal(hv.startChase(p),false);assert.equal(sim.director.allowChase(p),false);
+  p.state='alive';p.hideGraceUntil=sim.time+30;
+  assert.equal(hv.startChase(p),false,'grace after hiding from him');
+  p.hideGraceUntil=null;hv.startChase(p);assert.equal(hv.state,'chase');
 });
 
 test('losing sight or time no longer ends a hunt',()=>{

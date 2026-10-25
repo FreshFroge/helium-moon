@@ -4,7 +4,6 @@ import * as THREE from 'three';
 import { groundAt } from '../../shared/physics.js';
 import { loadCharacter } from './character.js';
 import { HeliumAnimator, SkunkAnimator } from './animators.js';
-import { PuppetStrings } from './strings.js';
 import { angleDiff, clamp, lerp } from '../../shared/math.js';
 import { makeTextTexture } from '../render/textures.js';
 import { patchMaterial } from '../render/shaderlib.js';
@@ -55,7 +54,6 @@ export class HeliumView {
     scene.add(this.root);
     this.anim = new HeliumAnimator(this.char);
     this.head = this.char.bones.head;
-    this.strings = new PuppetStrings(scene, this.char);
     this.pos = new THREE.Vector3(); this.state = 0; this.flags = 8; this.speed = 0; this.yaw = 0;
     this.stepAcc = 0;
     this.ground = (x, z) => {
@@ -63,7 +61,7 @@ export class HeliumView {
       return groundAt(this.world, this.pos.x + c * x + s * z, this.pos.z - s * x + c * z) - this.pos.y;
     };
   }
-  // s: [x,y,z,yaw,lookYaw,lookPitch,speed,flags,tilt,jaw,stateIdx, grabKind,grabPhase,peek, ctlX,ctlY,ctlZ,cut]
+  // s: [x,y,z,yaw,lookYaw,lookPitch,speed,flags,tilt,jaw,stateIdx, grabKind,grabPhase,peek]
   // flags: 1 run, 2 reach, 4 still, 8 hidden, 16 low (operated crawl), 128 frozen, 256 collapse,
   // 512 prone, 1024 rise, 2048 grab, 4096 backing away (see HeliumVoiceAI.snapshot)
   // camPos: within STUTTER_DIST his motion stutters like stop-motion (Puppet).
@@ -75,14 +73,14 @@ export class HeliumView {
     // stop-motion within a few metres: pose and position update only STUTTER_FPS times a second
     const near = camPos && this.root.visible ? Math.hypot(x - camPos.x, z - camPos.z) : 99;
     this.stutterAcc = (this.stutterAcc || 0) + dt;
-    if (near < STUTTER_DIST && this.stutterAcc < 1 / STUTTER_FPS && this._posed) { this.moved = 0; this.strings?.update(dt, this, s); return; }
+    if (near < STUTTER_DIST && this.stutterAcc < 1 / STUTTER_FPS && this._posed) { this.moved = 0; return; }
     const step = this._posed ? this.stutterAcc : dt; this.stutterAcc = 0; this._posed = true;
     const prev = this.pos.clone();
     this.pos.set(x, y, z); this.yaw = yaw;
     this.root.position.copy(this.pos);
     this.root.rotation.y = yaw;
     this.moved = prev.distanceTo(this.pos);
-    // whole-body tip about his feet: strings cut (falls forward), lying flat, the plank rise
+    // whole-body tip about his feet: goes limp (falls forward), lying flat, the plank rise
     const collapse = !!(flags & 256), prone = !!(flags & 512), rise = !!(flags & 1024);
     if (rise) { this.riseT = (this.riseT ?? 0) + step; } else this.riseT = null;
     let tipTo = 0;
@@ -100,7 +98,6 @@ export class HeliumView {
         lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st,
         ground: this.world && !tipped ? this.ground : null });
     }
-    this.strings?.update(dt, this, s);
   }
   headPos(out = new THREE.Vector3()) { this.root.updateMatrixWorld(true); return this.head.getWorldPosition(out); }
 }

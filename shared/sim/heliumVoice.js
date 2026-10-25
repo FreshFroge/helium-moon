@@ -403,13 +403,15 @@ export class HeliumVoiceAI {
         && sim.time - this.attackT >= C.ATTACK_COOLDOWN
         && (dir.allowChase(tp) || close || this.dist(tp) < C.ATTACK_RANGE * 2)) this.startChase(tp);
 
-    // Hunts: the ONLY way to call one off is to cut his strings - a flashlight held on the
-    // control above him (CONTROL_*). He collapses. Once he has you in his grab it's too late.
-    const cutBy = this.state === 'chase' && !(this.grab && this.grab.phase === 'hold') ? this.updateControl(dt) : null;
-    if (cutBy) {
-      this.say('flashed_off'); this.noteTactic(cutBy.id, 'flash');
-      sim.emit({ type: 'hv_cut', pid: cutBy.id, x: +this.x.toFixed(2), z: +this.z.toFixed(2) });
-      this.collapseFrom(cutBy);
+    // Hunts end only when the hunted player hides from him (HIDE_*; owner, Puppet rework):
+    // out of his sight, light off, still and quiet for HIDE_TIME s - he loses them and goes limp.
+    const lostBy = this.state === 'chase' && !this.grab && tp ? this.updateHide(dt, tp) : null;
+    if (lostBy) {
+      this.say('lost_target'); this.noteTactic(lostBy.id, 'hide');
+      sim.emit({ type: 'hv_lost', pid: lostBy.id, x: +this.x.toFixed(2), y: +this.y.toFixed(2), z: +this.z.toFixed(2) });
+      const grace = C.HIDE_GRACE[sim.playerList.filter(playerActive).length <= 1 ? 0 : 1];
+      lostBy.hideGraceUntil = sim.time + grace;
+      this.collapseFrom(lostBy);
     } else if (watched && !['chase', 'retreat', 'collapse', 'lie'].includes(this.state)) {
       // Watched outside a hunt: he is "worn". He freezes mid-pose and holds, head locked on
       // whoever is looking; after FREEZE s he backs away upright, facing them. Look away and
@@ -603,7 +605,7 @@ export class HeliumVoiceAI {
         if (!tp || !playerAlive(tp) || tp.state === 'downed') { if (this.grab) this.releaseGrab(tp, false); this.retreatFrom(tp || this, false); break; }
         // the grab owns him until he lets go
         if (this.grab) { this.updateGrab(dt, tp); lookP = tp; break; }
-        this.lookAtPoint(tp.x, tp.y + 1.5, tp.z);
+        if ((this.hide?.t || 0) > 0) lookP = null; else this.lookAtPoint(tp.x, tp.y + 1.5, tp.z);   // hiding: he doesn't know where to look
         const d = this.dist(tp);
         // Looking back at him (owner): each fresh look freezes him for a beat, then he comes on
         // upright with dead arms. Unwatched he runs low, on all fours (operated).
@@ -617,7 +619,8 @@ export class HeliumVoiceAI {
         if (sim.time < this.lbUntil) { this.stop(dt); anim.run = 0; anim.still = 1; anim.frozen = 1; break; }
         if (!watched) anim.low = 1;
         const vis = sightOf(this.world, this, EYE, this.lookYaw, tp, C);
-        if (vis > 0.02 || d < 12) { this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time }; this.huntUnseenT = 0; }
+        // close by he senses you - unless you are hiding (dark, still, quiet, out of sight)
+        if (vis > 0.02 || d < 2.5 || (d < 12 && !((this.hide?.t || 0) > 0))) { this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time }; this.huntUnseenT = 0; }
         else this.huntUnseenT = (this.huntUnseenT || 0) + dt;
         // remember sprinters (once per hunt, after 2 s of sprinting away)
         this.huntSprintT = tp.sprint ? (this.huntSprintT || 0) + dt : 0;
@@ -638,7 +641,8 @@ export class HeliumVoiceAI {
         // Puppet: the final rush comes when they are not looking - at the end of the prowl he
         // keeps circling (up to HUNT_PROWL_WAIT s) while they watch him
         const prowlEnd = (this.huntProwlFor ?? 0) + (seenByTarget ? C.HUNT_PROWL_WAIT : 0);
-        if (Number.isFinite(this.huntProwlFor) && this.huntProwlT < prowlEnd && pd <= prowlMax + 1) {
+        const hiding = (this.hide?.t || 0) > 0;
+        if (!hiding && Number.isFinite(this.huntProwlFor) && this.huntProwlT < prowlEnd && pd <= prowlMax + 1) {
           this.huntProwlT += dt;
           this.huntStall = null; // circling is intentional movement, never a stuck-hunt failure
           this.huntOrbitAt = (this.huntOrbitAt || 0) - dt;
@@ -663,6 +667,15 @@ export class HeliumVoiceAI {
           ls = this.lastSeenChase = { x: ls.x + tp.moveDir[0] * 10, z: ls.z + tp.moveDir[1] * 10, t: ls.t, extrap: true };
           this.path = null;
         }
+        // they are hiding: he searches round where he last had them, upright, listening
+        const searching = hiding && sim.time - ls.t > 1.2;
+        if (searching && Math.hypot(ls.x - this.x, ls.z - this.z) < 2 && sim.time >= (this.huntSearchAt || 0)) {
+          const a = this.rng.range(0, Math.PI * 2), r = this.rng.range(2, 7);
+          const sx = ls.x + Math.sin(a) * r, sz = ls.z + Math.cos(a) * r;
+          if (this.world.navWalkable(sx, sz) && this.outsideSpawn(sx, sz)) { ls = this.lastSeenChase = { x: sx, z: sz, t: ls.t, extrap: true }; this.path = null; this.replanT = 0; }
+          this.huntSearchAt = sim.time + this.rng.range(1.8, 3.2);
+        }
+        if (searching) { anim.run = 0; anim.low = 0; this.lookYaw += Math.sin(sim.time * 1.3) * dt * 2.4; this.huntStall = null; }   // searching is not being stuck
         this.replanT -= dt;
         if (this.replanT <= 0) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = d < 15 ? 0.3 : 0.7; }
         if (sim.time >= (this.huntPaceAt || 0)) {
@@ -683,7 +696,7 @@ export class HeliumVoiceAI {
         // Variable approach cadence prevents a flat, learnable chase speed.
         // Inside seven metres he never draws the final strike out with a slow beat.
         const tempo = d < 7 ? Math.max(1, this.huntPace || 1) : (this.huntPace || 1);
-        this.followPath(dt, burst * tempo * dir.chaseSpeedMul() * (1 + .12 * escalation));
+        this.followPath(dt, searching ? C.WALK * 1.5 : burst * tempo * dir.chaseSpeedMul() * (1 + .12 * escalation));
         this.freeLunge = false;
         if (d < 4 && watched) anim.reach = 1;
         if (sim.time < (this.missPauseUntil ?? -1)) { this.stop(dt); anim.still = 1; break; }
@@ -713,7 +726,8 @@ export class HeliumVoiceAI {
         // A hunt no longer ends by losing sight or by time (owner, Oct 25): with no fresh
         // sight or sound for LOSE_TIME, he re-acquires where the player really is every
         // HUNT_TRACK_EVERY s (tracking them by scent/sound) and keeps coming.
-        if (sim.time - ls.t > C.LOSE_TIME && sim.time - (this.trackT || 0) >= C.HUNT_TRACK_EVERY) {
+        // ...unless they are hiding from him: then he has to find them (see updateHide)
+        if (!hiding && sim.time - ls.t > C.LOSE_TIME && sim.time - (this.trackT || 0) >= C.HUNT_TRACK_EVERY) {
           this.trackT = sim.time; this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time - C.LOSE_TIME * 0.5 }; this.replanT = 0;
         }
         break;
@@ -808,7 +822,9 @@ export class HeliumVoiceAI {
   }
 
   startChase(p) {
-    if (!playerActive(p) || !this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
+    if (!p || !playerActive(p) || p.state !== 'alive') return false;          // never on a downed/dead player (PLAYTESTS_50 P0)
+    if (!this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
+    if (this.sim.time < (p.hideGraceUntil ?? -1) && !this.sim.dev) return false;  // just hid from him: a breather
     // Hunts start close (owner, Oct 25): farther out, mark the player and close in
     // unseen first (stalk handles the approach and commits inside the range).
     if (this.dist(p) > C.HUNT_START_RANGE) {
@@ -827,7 +843,7 @@ export class HeliumVoiceAI {
     this.huntCutMul = this.rng.range(...C.HUNT_CUTOFF_JITTER);
     this.huntProwlFor = this.rng.range(...C.HUNT_PROWL_TIME); this.huntProwlT = 0;
     this.huntOrbitDir = this.rng() < 0.5 ? -1 : 1; this.huntOrbitAt = 0;
-    this.control = this.newControl(p);
+    this.hide = { t: 0 };
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time }; this.windup = null; this.lingerUntil = null; this.grab = null; this.lbWatched = false; this.lbNext = this.sim.time + 0.4;
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
@@ -913,43 +929,21 @@ export class HeliumVoiceAI {
     this.setState('watch', { watchDur: C.LINGER + 3 }); this.lingerUntil = sim.time + C.LINGER;
   }
 
-  // world position of the control (the crossbar above him) for the current hunt
-  // the control above him for a hunt (higher and further back for players who cut him before)
-  newControl(p) {
-    const learned = p && this.counters(p.id, 'flash') ? C.CONTROL_LEARNED : 1;
-    return { up: this.rng.range(C.CONTROL_UP[0], C.CONTROL_UP[1]) * learned, back: this.rng.range(C.CONTROL_BACK[0], C.CONTROL_BACK[1]) * learned,
-      side: this.rng.range(-1.5, 1.5), lit: 0 };
-  }
-
-  controlPos() {
-    const tp = this.target != null ? this.sim.players.get(this.target) : null;
-    if (this.state !== 'chase') return null;
-    const c = this.control ||= this.newControl(tp);
-    // behind him as seen from the hunted player; it follows him through the trees
-    const a = tp ? Math.atan2(this.x - tp.x, this.z - tp.z) : this.yaw + Math.PI;
-    const bx = Math.sin(a), bz = Math.cos(a);
-    return { x: this.x + bx * c.back + bz * c.side, y: this.y + c.up, z: this.z + bz * c.back - bx * c.side };
-  }
-
-  // accumulates beam time on the control; returns the player who cut the strings, or null
-  updateControl(dt) {
-    const c = this.control, cp = this.controlPos();
-    if (!c || !cp) return null;
-    const w = this.world, cosCone = Math.cos(C.CONTROL_CONE * Math.PI / 180);
-    let by = null;
-    for (const p of this.sim.playerList) {
-      if (!playerActive(p) || !p.flash) continue;
-      const ey = p.y + eyeHeight(p), dx = cp.x - p.x, dy = cp.y - ey, dz = cp.z - p.z, d = Math.hypot(dx, dy, dz);
-      if (d > CONFIG.FLASHLIGHT.RANGE || d < 0.5) continue;
-      // view direction (camera looks down -Z at yaw 0)
-      const cpch = Math.cos(p.pitch || 0), vx = -Math.sin(p.yaw || 0) * cpch, vy = Math.sin(p.pitch || 0), vz = -Math.cos(p.yaw || 0) * cpch;
-      if ((dx * vx + dy * vy + dz * vz) / d < cosCone) continue;
-      if (w.lineOfSight(p.x, ey, p.z, cp.x, cp.y, cp.z, { brushK: 0 }) < 0.5) continue;
-      by = p; break;
+  // Hiding (how a hunt ends): the hunted player is out of his sight, light off, not moving and
+  // quiet. HIDE_TIME s of that and he has lost them. Learned hiders need HIDE_LEARNED x longer.
+  // Returns the player he lost, or null.
+  hidden(tp) {
+    if (!tp.flash && (tp.moveSpeed || 0) < C.HIDE_STILL && !tp.sprint && noiseRadius(tp, C) <= C.HIDE_NOISE) {
+      return sightOf(this.world, this, EYE, this.lookYaw, tp, C) < 0.02 && !this.observers.some((o) => o.p.id === tp.id && o.ob?.lit);
     }
-    c.lit = by ? c.lit + dt : Math.max(0, c.lit - dt * C.CONTROL_DECAY);
-    c.by = by || c.by;
-    if (by && c.lit >= C.CONTROL_TIME) { c.lit = 0; return by; }
+    return false;
+  }
+
+  updateHide(dt, tp) {
+    const h = this.hide ||= { t: 0 };
+    const need = C.HIDE_TIME * (this.counters(tp.id, 'hide') ? C.HIDE_LEARNED : 1);
+    if (this.dist(tp) > C.HIDE_MIN_DIST && this.hidden(tp)) h.t += dt; else h.t = Math.max(0, h.t - dt * 2);
+    if (h.t >= need) { h.t = 0; return tp; }
     return null;
   }
 
@@ -1239,14 +1233,7 @@ export class HeliumVoiceAI {
         | (a.frozen ? 128 : 0) | (a.collapse ? 256 : 0) | (a.prone ? 512 : 0) | (a.rise ? 1024 : 0) | (a.grab ? 2048 : 0) | (a.back ? 4096 : 0),
       +a.tilt.toFixed(2), +a.jaw.toFixed(2), HV_STATES.indexOf(this.state),
       // 11: grab kind (GRAB_KINDS index), 12: grab phase 0 none / 1 reach / 2 hold, 13: peek kind
-      a.grab ? GRAB_KINDS.indexOf(this.grab?.kind) : 0, a.grab ? (this.grab?.phase === 'hold' ? 2 : 1) : 0, a.peek || 0,
-      // 14-17: the control above him during a hunt (offset from him) and cut progress 0..1
-      ...this.controlSnap()];
+      a.grab ? GRAB_KINDS.indexOf(this.grab?.kind) : 0, a.grab ? (this.grab?.phase === 'hold' ? 2 : 1) : 0, a.peek || 0];
   }
 
-  controlSnap() {
-    const cp = this.controlPos();
-    if (!cp) return [0, 0, 0, 0];
-    return [+(cp.x - this.x).toFixed(2), +(cp.y - this.y).toFixed(2), +(cp.z - this.z).toFixed(2), +Math.min(1, this.control.lit / C.CONTROL_TIME).toFixed(2)];
-  }
 }
