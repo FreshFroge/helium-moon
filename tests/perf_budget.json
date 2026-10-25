@@ -1,31 +1,31 @@
 {
  "low": {
   "trailhead_kiosk": {
-   "calls": 407,
-   "triangles": 1054217,
+   "calls": 317,
+   "triangles": 1050537,
    "programs": 48,
-   "geometries": 317,
-   "textures": 62
+   "geometries": 234,
+   "textures": 61
   },
   "deep_forest_trail": {
-   "calls": 369,
-   "triangles": 1001769,
+   "calls": 285,
+   "triangles": 1003207,
    "programs": 48,
-   "geometries": 352,
-   "textures": 62
+   "geometries": 278,
+   "textures": 61
   },
   "forest_side_view": {
-   "calls": 341,
-   "triangles": 1561867,
+   "calls": 250,
+   "triangles": 1550493,
    "programs": 48,
-   "geometries": 390,
-   "textures": 62
+   "geometries": 316,
+   "textures": 61
   },
   "river_bend": {
-   "calls": 347,
-   "triangles": 824435,
+   "calls": 271,
+   "triangles": 812105,
    "programs": 48,
-   "geometries": 398,
+   "geometries": 325,
    "textures": 62
   }
  },
