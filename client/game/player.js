@@ -45,8 +45,9 @@ export class PlayerController {
       const l = this.lookLock;
       const ty = Math.atan2(-(l.x - this.pos.x), -(l.z - this.pos.z));
       let d = ty - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-      this.yaw += d * Math.min(1, dt * 7);
-      this.pitch = lerp(this.pitch, l.pitch ?? 0.05, Math.min(1, dt * 5));
+      const rate = l.rate || 7;
+      this.yaw += d * Math.min(1, dt * rate);
+      this.pitch = lerp(this.pitch, l.pitch ?? 0.05, Math.min(1, dt * rate * 0.7));
     }
     let fx = 0, fz = 0;
     if (!frozen) {

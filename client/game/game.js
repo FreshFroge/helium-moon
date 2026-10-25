@@ -25,6 +25,8 @@ import { LocalTransport } from '../net/transport.js';
 import { SnapBuffer, HeliumView, SkunkView, PlayerAvatar, ObjectiveViews, PLAYER_COLORS } from '../entities/views.js';
 import { WildlifeSystem } from '../entities/wildlife.js';
 
+const ATTACK_LOCK_DIST = 1.22;   // m (4 ft): the camera locks onto him only this close (owner)
+
 const T = CONFIG.TERROR;
 const PST = ['alive', 'downed', 'dead', 'escaped'];
 const REMOTE_LIGHTS = 2;
@@ -229,7 +231,7 @@ export class Game {
     const idx = Math.max(0, info.players.findIndex((p) => p.id === this.myId));
     const sp = GameSim.prototype.spawnPoint.call({ world: this.world }, idx);
     this.player.spawn(sp.x, sp.z, sp.yaw);
-    this.player.injured = 0; this.player.slow = 1; this.player.downed = 0; this.player.lookLock = null;
+    this.player.injured = 0; this.player.slow = 1; this.player.downed = 0; this.player.lookLock = null; this._attackLock = 0; this._attackLockPending = 0;
     this.flashlight.battery = 1; this.flashlight.on = true; this.flashlight.snap(this.camera);
     this.terror = 0; this.fear = 0; this.cold = 0; this.critical = 0; this.gasFx = 0; this.damage = 0; this.chasing = false;
     this.me = null; this.myState = 'alive'; this.health = CONFIG.PLAYER.MAX_HEALTH;
@@ -357,11 +359,11 @@ export class Game {
         this.chasing = !!e.on;
         break;
       case 'hit':
-        if (e.pid === this.myId) { this.damage = 1; this.player.shake = 1.2; A.ui('hurt', 0.9); this.player.injured = 1; }
+        if (e.pid === this.myId) { this.damage = 1; this.player.shake = 1.2; A.ui('hurt', 0.9); this.player.injured = 1; if (e.by === 'hv') this._attackLockPending = 1.5; }
         else { const a = this.avatars.get(e.pid); if (a) A.at('hurt', { x: a.pos.x, y: a.pos.y + 1.5, z: a.pos.z }, { gain: 1, ref: 5 }); }
         break;
       case 'downed': case 'dead':
-        if (e.pid === this.myId) { this.damage = 1; this.player.shake = 1.6; A.ui('down', 1); this.player.downed = 1; }
+        if (e.pid === this.myId) { this.damage = 1; this.player.shake = 1.6; A.ui('down', 1); this.player.downed = 1; if (e.by === 'hv') this._attackLockPending = 2.5; }
         else { const a = this.avatars.get(e.pid); if (a) A.at('down', { x: a.pos.x, y: a.pos.y + 1, z: a.pos.z }, { gain: 1.1, ref: 6 }); this.ui.toast(`${this._name(e.pid)} ${e.type === 'dead' ? 'is gone' : 'is down'}.`, 3500); }
         break;
       case 'revived': if (e.pid !== this.myId) this.ui.toast(`${this._name(e.by)} revived ${this._name(e.pid)}.`, 3000); break;
@@ -535,7 +537,23 @@ export class Game {
     pl.slow = this.gasFx > 0.3 ? 0.6 : 1;
     pl.injured = this.health < CONFIG.PLAYER.MAX_HEALTH ? 1 : 0;
     const frozen = !active || typing || downed || dead || !!this.reading;
-    if (!dead) pl.update(active && !typing ? dt : dt, frozen ? { consumeLook: () => inp.consumeLook(), down: () => false, hit: () => false } : inp, { frozen, noLook: !active || typing });
+    // Attack lock (owner, Oct 25): the instant he strikes you, the camera is pulled onto his
+    // face and held there for a moment. Only on an actual hit, so it never aims the
+    // flashlight for you during the approach (the 7-ft flashlight counter stays yours).
+    // Only once he is within ~4 ft (owner): on his strike, or while a hunt has him that close.
+    if (this.hv && (this._attackLockPending || this.chasing) && this.myState !== 'dead'
+        && Math.hypot(this.hv.pos.x - pl.pos.x, this.hv.pos.z - pl.pos.z) <= ATTACK_LOCK_DIST) {
+      this._attackLock = Math.max(this._attackLock || 0, this._attackLockPending || 1.2);
+    }
+    this._attackLockPending = 0;
+    if (this._attackLock > 0) this._attackLock -= dt;
+    const locked = this._attackLock > 0 && this.hv;
+    if (locked) {
+      const eyeY = pl.pos.y + 1.6, headY = this.hv.pos.y + 1.68;
+      const hd = Math.hypot(this.hv.pos.x - pl.pos.x, this.hv.pos.z - pl.pos.z);
+      pl.lookLock = { x: this.hv.pos.x, z: this.hv.pos.z, pitch: clamp(Math.atan2(headY - eyeY, Math.max(0.3, hd)), -0.6, 0.6), rate: 16 };
+    } else if (pl.lookLock && pl.lookLock.rate) pl.lookLock = null;
+    if (!dead) pl.update(active && !typing ? dt : dt, frozen ? { consumeLook: () => inp.consumeLook(), down: () => false, hit: () => false } : inp, { frozen, noLook: !active || typing || locked });
     else this._spectate(dt);
     // ---- interpolation clock
     if (this.snapT >= 0) {
