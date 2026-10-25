@@ -67,6 +67,12 @@ their shoulder while running, which can also put the light on him.
 - **More hunts:** keep closing in after being glimpsed while approaching,
   e.g. hide, then resume the approach instead of abandoning it. Or shorten the
   director's cooldown between hunts.
+- *Tried and reverted (Oct 25, 07:55 UTC, Claude):* "after being spotted
+  while closing in, hide and then resume the approach (up to 3 times)" gave
+  **fewer** hunts (11 vs 15) and more abandoned approaches (19 of 27). Each
+  resumed approach gives watchful players another chance to spot him.
+  Shortening the director's cooldown, or approaching from a flank instead of
+  from behind, are the remaining options.
 - **Teach the counter:** the bots *know* the 7-ft trick, but real players
   won't. A hint in the kiosk memo or a found note ("it won't stand the light up
   close") would help.
