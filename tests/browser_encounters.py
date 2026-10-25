@@ -70,11 +70,19 @@ async def play(port):
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
                 sim.state='play';sim.time=400;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.startChase(p);
+                // Owner rule (Oct 25): only a flashlight on him within 7 ft calls a hunt off.
+                // The player holds the light on him as he charges from 6 m.
+                let brokeAt=null,seenFar=false;
+                for(let i=0;i<90&&brokeAt==null;i++){
+                  game.advance(1,1/30,false);
+                  if(hv.state==='chase'&&hv.dist(p)>3)seenFar=true;
+                  if(hv.state==='retreat')brokeAt=hv.dist(p);
+                }
                 game.advance(9,1/30,false);
-                return {state:hv.state,health:p.health,flags:game.hv.flags,moved:Math.hypot(hv.x-at.x,hv.z-at.z)};
+                return {state:hv.state,brokeAt,seenFar,health:p.health,flags:game.hv.flags,moved:Math.hypot(hv.x-at.x,hv.z-at.z)};
             }''')
-            assert escape['state']=='retreat' and escape['health']==2 and escape['flags']&16 and escape['moved']>.1,escape
-            print('  ok  spotting a pursuit triggers physical reverse-crawl concealment:',escape,flush=True)
+            assert escape['seenFar'] and escape['brokeAt'] is not None and escape['brokeAt']<=2.2 and escape['health']==2 and escape['flags']&16 and escape['moved']>.1,escape
+            print('  ok  lit at range he keeps coming; the 7-ft flashlight sends him into a physical reverse crawl:',escape,flush=True)
             pose=await page.evaluate('''async()=>{
                 game.restart();game.advance(9,1/30,false);
                 const {pointAtDistance}=await import('/shared/math.js');
@@ -97,7 +105,10 @@ async def play(port):
             print('  ok  authoritative retreat renders as a low four-limb crawl:',pose,flush=True)
             output=Path(os.environ.get('HM_ARTIFACT_DIR','/tmp/helium-moon-encounters'))
             output.mkdir(parents=True,exist_ok=True)
-            await page.screenshot(path=str(output/'reverse-crawl.png'))
+            # artifact only (no assertion). HM_SKIP_ARTIFACTS=1 skips it on machines where a full
+            # software-rendered 1280x720 frame exceeds memory; the default keeps it.
+            if not os.environ.get('HM_SKIP_ARTIFACTS'):
+                await page.screenshot(path=str(output/'reverse-crawl.png'),timeout=120000)   # same artifact timeout as ground contacts (#13)
             for state in ['prowl','investigate']:
                 skunk=await page.evaluate("""async(state)=>{
                   game.restart();game.advance(9,1/30,false);
