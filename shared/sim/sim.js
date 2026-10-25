@@ -10,6 +10,7 @@ import { SkunkAI } from './skunk.js';
 import { Director } from './director.js';
 import { Objectives } from './objectives.js';
 import { MimicDirector } from './mimic.js';
+import { Wildlife } from './wildlife.js';
 
 const PSTATE = ['alive', 'downed', 'dead', 'escaped'];
 
@@ -26,6 +27,7 @@ export class GameSim {
     this.hv = new HeliumVoiceAI(this); this.hv.spawn();
     this.sf = new SkunkAI(this); this.sf.spawn();
     this.mimic = new MimicDirector(this);
+    this.wildlife = new Wildlife(this);
     this.result = null;
   }
 
@@ -156,6 +158,7 @@ export class GameSim {
       this.hv.update(dt);
       this.sf.update(dt);
       this.mimic.update(dt);
+      this.wildlife.update(dt);
     }
     for (const g of this.gas) { g.age += dt; }
     this.gas = this.gas.filter((g) => g.age < g.life);
