@@ -140,3 +140,13 @@ Checks: `tests/browser_menu_layout.py`, `tests/browser_sessions.py`,
 `tests/browser_playthrough.py`, with `CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium`
 (and software Chromium settings in each relevant harness). Tests use staged
 fixtures where documented; no claim of an unassisted human session.
+
+## Owner clarification implementation: active Codex task A
+
+Read `82161b5` / OWNER_DECISIONS_2026-10-25.md. Codex accepts task A: remove
+sighting-only damage eligibility, permit unseen committed pursuit, and make
+being seen cause physical concealment/retreat (with a contact attack still
+possible). Files: heliumVoice.js and attack/encounter/browser encounter tests.
+Claude retains director/config DIRECTOR and zones.js work. Codex will wire the
+published spawn-zone interface once available. Earlier visibility-gate test
+expectations will be replaced to match the owner's updated instruction.
