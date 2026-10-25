@@ -1,6 +1,7 @@
 // Forest rendering: procedural archetypes per species x variant x LOD, drawn with
 // GPU instancing. CPU chunk culling + per-instance distance LOD each frame.
 import * as THREE from 'three';
+import { SIGHTLINE, blocksSight } from './sightline.js';
 import { generateTree } from './treegen.js';
 import { patchMaterial, windDepthMaterial } from './shaderlib.js';
 
@@ -140,6 +141,7 @@ export class TreeSystem {
     const cx = camera.position.x, cz = camera.position.z;
     const mats = this.mats, pos = this.pos, archOf = this.archOf;
     let drawn = 0;
+    const sightOn = SIGHTLINE.on;
     for (let ci = 0; ci < chunks.length; ci++) {   // indexed + sqrt: no per-frame garbage
       const c = chunks[ci];
       const ex = (c.cx + 0.5) * CHUNK - cx, ez = (c.cz + 0.5) * CHUNK - cz;
@@ -154,6 +156,7 @@ export class TreeSystem {
         const d = Math.sqrt(dx * dx + dz * dz);
         if (d > dFar) continue;
         if (!inView && d > shadowR) continue;
+        if (sightOn && blocksSight(pos[i * 3], pos[i * 3 + 2])) continue;
         let l = d < d0 ? 0 : d < d1 ? 1 : 2;
         const a = arch[archOf[i]];
         let mm = a.meshes[l];

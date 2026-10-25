@@ -1,6 +1,7 @@
 // Undergrowth and ground clutter: bushes/thickets, tall grass, reeds, fallen logs,
 // sticks and stumps. All instanced with chunked distance culling.
 import * as THREE from 'three';
+import { SIGHTLINE, blocksSight } from './sightline.js';
 import { generateTree } from './treegen.js';
 import { patchMaterial, windDepthMaterial } from './shaderlib.js';
 import { makeRng, makeNoise2 } from '../../shared/math.js';
@@ -63,6 +64,7 @@ export class InstancedScatter {
         const i = idx[n];
         const dx = pos[i * 3] - cx, dz = pos[i * 3 + 2] - cz;
         if (dx * dx + dz * dz > maxD2) continue;
+        if (SIGHTLINE.on && blocksSight(pos[i * 3], pos[i * 3 + 2])) continue;
         const mm = meshes[vari[i]];
         if (mm.count >= mm.cap) continue;
         const o = mm.count * 16, src = i * 16, list = mm.list;

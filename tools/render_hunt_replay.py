@@ -33,7 +33,9 @@ SETUP = r"""async ({frames, target, exposure, height, treeFar}) => {
   // avatars normally appear at session start; create one per recorded player
   const ids = [...new Set(frames.flatMap((f) => f.snap.pl.map((r) => r[0])))];
   for (let i = 0; i < ids.length; i++) await game._ensureAvatar('r' + ids[i], ids[i].toUpperCase(), i + 1);
-  if (treeFar) game.env.trees.preset.treeFar = treeFar;   // far trees are lost in the dark anyway; geometry dominates software-render time
+  if (treeFar) game.env.trees.preset.treeFar = treeFar;
+  // keep trees/bushes off the camera -> Helium Voice sightline (client/render/sightline.js)
+  const { SIGHTLINE } = await import('/client/render/sightline.js'); SIGHTLINE.on = true; SIGHTLINE.r = 1.4;   // far trees are lost in the dark anyway; geometry dominates software-render time
   window.__rp = { frames, i: 0, me, target: 'r' + target, exposure, height, cam: null, look: null,
     meRow: [me, sp.x, sp.y, sp.z, 0, 0, 0, 2, 0, 0, 0] };
   const THREE_V = game.camera.position.constructor;
@@ -61,6 +63,7 @@ SETUP = r"""async ({frames, target, exposure, height, treeFar}) => {
     const k = 1 - Math.exp(-dt * 2.6);
     R.cam.lerp(want, k); R.look.lerp(look, 1 - Math.exp(-dt * 4));
     game.camera.position.copy(R.cam); game.camera.lookAt(R.look); game.camera.updateMatrixWorld();
+    Object.assign(SIGHTLINE, { ax: R.cam.x, az: R.cam.z, bx: hp.x, bz: hp.z });
     game.exposure = R.exposure;
   };
   return { me, n: frames.length, t0: frames[0].t, t1: frames[frames.length - 1].t };
