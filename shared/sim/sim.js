@@ -30,6 +30,7 @@ export class GameSim {
     this.mimic = new MimicDirector(this);
     this.wildlife = new Wildlife(this);
     this.voice = new VoiceLines(this);
+    this.dev = null;   // Developer mode options (shared/sim/dev.js), set by a local client
     this.result = null;
   }
 
@@ -125,6 +126,7 @@ export class GameSim {
 
   damagePlayer(p, by, src) {
     if (p.state !== 'alive') return;
+    if (this.dev?.invincible) { this.emit({ type: 'hit', pid: p.id, by, x: src.x, z: src.z, health: p.health, dev: true }); return; }   // Developer mode: feel the hit, take no damage
     p.health -= 1; p.hurtT = this.time;
     const solo = this.playerList.length <= 1;
     if (p.health <= 0) {

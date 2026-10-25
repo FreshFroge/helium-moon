@@ -182,3 +182,10 @@ ul.lobby-list li { padding: 8px 0; border-bottom: 1px solid var(--line); font-si
   .row select, .row input[type=text] { font-size: 12px; padding: 7px; }
   input.code { flex-basis: 100px !important; }
 }
+
+/* developer mode (owner, Oct 25) */
+#dev-overlay { position: absolute; bottom: 14px; right: 14px; text-align: right; font: 12px/1.45 'IBM Plex Mono', monospace; color: #c9e7c2; background: rgba(8, 12, 8, 0.72); padding: 6px 9px; border-left: 2px solid #6fa35d; pointer-events: none; max-width: min(92vw, 640px); z-index: 30; }
+#dev-overlay.hidden { display: none; }
+.menu-list .dev-btn { opacity: 0.55; font-size: 0.85em; }
+.menu-list .dev-btn:hover, .menu-list .dev-btn.active { opacity: 1; }
+.row.dim { opacity: 0.45; }

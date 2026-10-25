@@ -22,6 +22,8 @@ const DEFAULTS = {
   playerName: '', serverUrl: '', bindings: { ...DEFAULT_BINDINGS },
   // microphone / voice chat / mimicry (all off until the player turns them on)
   micEnabled: false, micDevice: '', voiceMode: 'ptt', micSensitivity: 0.5, mimicOptIn: false,
+  // Developer mode (owner, Oct 25): test tools, off by default
+  devMode: false, devSkipDread: true, devInvincible: false, devOverlay: true,
 };
 
 export class Settings {

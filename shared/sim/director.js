@@ -29,9 +29,9 @@ export class Director {
   // seconds of active play since the intro ended
   get playT() { return Math.max(0, this.sim.time - CONFIG.SESSION.INTRO_TIME); }
   // true during the opening dread period: cold and sounds only, he keeps his distance
-  inDread() { return this.playT < this.D.DREAD_TIME; }
+  inDread() { return !this.sim.dev?.skipDread && this.playT < this.D.DREAD_TIME; }   // Developer mode can skip it
   // 0 at the end of the dread period -> 1 at full escalation; objectives push it along too
-  escalation() { return clamp((this.playT - this.D.DREAD_TIME) / this.D.ESCALATE_TIME + this.progress * 0.08, 0, 1); }
+  escalation() { return clamp((this.playT - (this.sim.dev?.skipDread ? 0 : this.D.DREAD_TIME)) / this.D.ESCALATE_TIME + this.progress * 0.08, 0, 1); }
   // distance he should keep from every player right now (0 = no limit); for roam/observation-spot choice
   minDistance() { return this.inDread() ? this.D.DREAD_MIN_DIST : 0; }
   _esc(pair) { return lerp(pair[0], pair[1], this.escalation()); }

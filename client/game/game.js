@@ -24,6 +24,7 @@ import { VoiceSystem } from '../audio/voice.js';
 import { LocalTransport } from '../net/transport.js';
 import { SnapBuffer, HeliumView, SkunkView, PlayerAvatar, ObjectiveViews, PLAYER_COLORS } from '../entities/views.js';
 import { WildlifeSystem } from '../entities/wildlife.js';
+import { devHunt, devReveal, devRelocate } from '../../shared/sim/dev.js';
 
 const ATTACK_LOCK_DIST = 1.22;   // m (4 ft): the camera locks onto him only this close (owner)
 
@@ -279,6 +280,39 @@ export class Game {
 
   _isHost() { return !!(this.lobby && this.lobby.host === (this.net && this.net.myId())); }
 
+  // ---------------------------------------------------------------- developer mode (owner, Oct 25)
+  // Rules are applied to a locally simulated game every frame (they can be toggled mid-game).
+  _devTick() {
+    const sim = this.sim, s = this.settings;
+    if (sim) sim.dev = s.devMode ? { skipDread: !!s.devSkipDread, invincible: !!s.devInvincible } : null;
+    if (this._devHuntPending && sim && this.mode === 'playing' && sim.time > CONFIG.SESSION.INTRO_TIME + 2) {
+      // walk the player out of the protected spawn area onto the trail, then start the hunt
+      this._devHuntPending = false;
+      this.teleport(140, 0); this.player.lookLock = null;
+      const sp = sim.players.get(this.myId || 'p1'), pp = this.player.pos;   // the sim only accepts small moves: place it directly
+      if (sp) { sp.x = sp.lastX = pp.x; sp.z = sp.lastZ = pp.z; sp.y = pp.y; }
+      this._devHuntAt = sim.time + 1.5;
+    }
+    if (this._devHuntAt && sim && sim.time > this._devHuntAt) { this._devHuntAt = 0; this.devAction('hunt'); }
+  }
+  // from the main menu: a solo game with the developer rules (optionally a hunt right away)
+  devStart(hunt) {
+    if (!this.settings.devMode) return;
+    this._devHuntPending = !!hunt;
+    this.startSingle(this.settings.playerName || 'You');
+  }
+  devAction(a) {
+    const sim = this.sim;
+    if (!this.settings.devMode) return;
+    if (!sim || this.mode !== 'playing') { this.ui.toast('Developer actions work in single player.', 2500); return; }
+    sim.dev = { skipDread: !!this.settings.devSkipDread, invincible: !!this.settings.devInvincible };
+    const id = this.myId || 'p1';
+    const ok = a === 'hunt' ? devHunt(sim, id) : a === 'reveal' ? devReveal(sim, id) : a === 'relocate' ? devRelocate(sim, id) : false;
+    const label = { hunt: 'Hunt started', reveal: 'He will show himself', relocate: 'He moved ahead of you' }[a];
+    const why = typeof ok === 'string' ? ok : a === 'relocate' ? 'no hidden spot ahead' : 'try again in a moment';
+    this.ui.toast(ok === true ? `DEV: ${label}` : `DEV: couldn't do that right now (${why})`, 2500);
+  }
+
   pause(on) {
     if (this.mode !== 'playing') return;
     this.paused = on;
@@ -533,6 +567,7 @@ export class Game {
     const pl = this.player, inp = this.input, A = this.audio;
     this.sessionT += dt;
     const active = this.mode === 'playing' && !this.paused && !this.ended;
+    this._devTick();
     if (this.ended && this.mode === 'playing') { this.endDelay -= dt; if (this.endDelay <= 0) this._showEnd(); }
     // ---- input-driven actions
     const typing = inp.textFocus;
@@ -541,6 +576,12 @@ export class Game {
       if (inp.hit('flashlight') && this.myState === 'alive') { this.flashlight.toggle(); A.ui(this.flashlight.on ? 'clickOn' : 'clickOff', 0.5); }
       if (inp.hit('chat') && this.net.networked) this.ui.openChat((text) => { if (text) this.net.send({ t: 'chat', text }); });
       if (inp.hitCode('F3')) this.ui.toggleDebug();
+      if (this.settings.devMode) {
+        if (inp.hitCode('F6')) this.devAction('hunt');
+        if (inp.hitCode('F7')) this.devAction('reveal');
+        if (inp.hitCode('F8')) this.devAction('relocate');
+        if (inp.hitCode('F9')) { this.settings.devInvincible = !this.settings.devInvincible; this.settings.save(); this.ui.toast(`Invincible ${this.settings.devInvincible ? 'on' : 'off'}`, 1500); }
+      }
       if (this.reading && (inp.hit('interact') || inp.hit('forward') || inp.hit('back') || inp.hit('left') || inp.hit('right'))) { this.reading = null; this.ui.showNote(null); inp.pressed.delete(this.settings.bindings.interact); }
     }
     this.ui.showInventory(active && !typing && inp.down('inventory'), () => this._inventoryData());
@@ -859,6 +900,15 @@ export class Game {
         for (const a of this.avatars.values()) list.push({ id: a.id, name: a.name, state: PST[a.state], talking: this.voice.isSpeaking(a.id) || !!(a.flags & 16), color: this._colorOf(a.id) });
       }
       this.ui.team(list);
+      if (this.settings.devMode && this.settings.devOverlay && !this.ui.debugOn && this.sim) {
+        const hv = this.sim.hv, d = this.sim.director, me = this.sim.players.get(this.myId || 'p1');
+        const dist = me ? Math.hypot(hv.x - me.x, hv.z - me.z) : 0;
+        this.ui.devOverlay([
+          `<b>DEV</b> · Helium Voice: ${hv.state}${hv.windup ? ' (winding up)' : ''}${hv.closingOn ? ' · closing in' : ''} · ${dist.toFixed(0)} m`,
+          `director: ${d.phase}${d.inDread() ? ' · DREAD' : ''} · escalation ${(d.escalation() * 100).toFixed(0)}% · intensity ${d.intensity.toFixed(2)}${d.chasing ? ' · HUNT ON' : ''}`,
+          `skunk: ${this.sim.sf.state} · invincible ${this.sim.dev?.invincible ? 'on' : 'off'} · F6 hunt · F7 appear · F8 teleport · F9 invincible`,
+        ].join('<br>'));
+      } else this.ui.devOverlay(null);
       if (this.ui.debugOn) {
         const hs = this.hvBuf.latest(), ss = this.sfBuf.latest(), r = this.renderer.gl.info.render;
         this.ui.debug([

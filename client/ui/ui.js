@@ -68,6 +68,7 @@ export class UI {
     else if (a === 'settings') this.openSettings(this.el.panel);
     else if (a === 'controls') this.openControls(this.el.panel);
     else if (a === 'credits') this.openCredits(this.el.panel);
+    else if (a === 'developer') this.openDeveloper(this.el.panel, false);
   }
 
   closePanel() { this.el.panel.classList.add('hidden'); this.el.panel.innerHTML = ''; for (const b of document.querySelectorAll('#menu-main button')) b.classList.remove('active'); }
@@ -114,6 +115,41 @@ export class UI {
         <li>If you hear your own voice in the trees behind you, it is not you.</li>
       </ul>
       <p class="dim">Rebind keys in Settings → Controls.</p>`);
+  }
+
+  // ---------------------------------------------------------------- developer mode (owner, Oct 25)
+  // Test tools: skip the opening dread, start a hunt on demand, make him appear, invincibility
+  // and an AI overlay. Actions need the game simulated locally (single player).
+  openDeveloper(el, inGame) {
+    const s = this.s, on = s.devMode, g = this.game;
+    const local = !!(g && g.sim);
+    const check = (key, label, hint = '') => `<label class="row check ${on ? '' : 'dim'}"><span>${label}${hint ? `<small class="hint"> ${hint}</small>` : ''}</span><input type="checkbox" data-k="${key}" ${s[key] ? 'checked' : ''} ${on ? '' : 'disabled'}></label>`;
+    const act = (a, label, help) => `<div class="row"><span>${label}<small class="hint"> ${help}</small></span><button class="small" data-dev="${a}" ${on ? '' : 'disabled'}>${inGame ? 'Do it' : 'Start'}</button></div>`;
+    this._panel(el, `<h2>Developer</h2>
+      <label class="row check"><span><b>Developer mode</b></span><input type="checkbox" data-k="devMode" ${on ? 'checked' : ''}></label>
+      <p class="hint">For testing. While it's on, these rules apply to single-player games${inGame && !local ? ' <span class="warn">(this is an online game: actions are unavailable here)</span>' : ''}.</p>
+      <h3>Rules</h3>
+      ${check('devSkipDread', 'Skip the opening dread', '(he can hunt as soon as the intro ends)')}
+      ${check('devInvincible', 'Invincible', '(his hits land and startle you, but do no damage)')}
+      ${check('devOverlay', 'AI overlay', '(his state, distance and the director phase, bottom-right)')}
+      <h3>${inGame ? 'Right now' : 'Quick tests'}</h3>
+      ${inGame ? act('hunt', 'Start a hunt now', 'He appears 18-28 m behind you and hunts you.')
+               : act('test-hunt', 'Test a hunt', 'Starts a solo game; the hunt begins a few seconds after the intro.')}
+      ${inGame ? act('reveal', 'Make him appear', 'A planned watcher glimpse aimed at you.') : act('test-free', 'Solo game, no dread', 'Normal game with the developer rules.')}
+      ${inGame ? act('relocate', 'Teleport him ahead of you', 'Unseen relocation, ignoring the cooldown.') : ''}
+      <h3>Hotkeys <small class="hint">(Developer mode, in game)</small></h3>
+      <table class="controls"><tr><td><kbd>F6</kbd></td><td>Start a hunt now</td></tr><tr><td><kbd>F7</kbd></td><td>Make him appear</td></tr><tr><td><kbd>F8</kbd></td><td>Teleport him ahead of you</td></tr><tr><td><kbd>F9</kbd></td><td>Toggle invincible</td></tr></table>`);
+    el.onclick = (e) => {
+      const b = e.target.closest('[data-dev]'); if (!b || !s.devMode) return;
+      const a = b.dataset.dev;
+      if (a === 'test-hunt' || a === 'test-free') { this.closePanel(); g.devStart(a === 'test-hunt'); }
+      else { g.pause(false); g.devAction(a); }
+    };
+    el.oninput = (e) => {
+      const k = e.target.dataset.k; if (!k) return;
+      s[k] = e.target.checked; s.save();
+      if (k === 'devMode') this.openDeveloper(el, inGame);
+    };
   }
 
   // ---------------------------------------------------------------- settings
@@ -289,6 +325,7 @@ export class UI {
     else if (a === 'settings') this.openSettings(this.el.pausePanel);
     else if (a === 'controls') this.openControls(this.el.pausePanel);
     else if (a === 'restart') { if (g.net && g.net.networked && !g._isHost()) { this.toast('Only the host can restart.', 2000); return; } g.pause(false); g.restart(); }
+    else if (a === 'developer') this.openDeveloper(this.el.pausePanel, true);
     else if (a === 'quit') g.quitToMenu();
   }
 
@@ -311,6 +348,7 @@ export class UI {
     const g = this.game;
     if (a === 'restart') g.restart();
     else if (a === 'lobby') g.returnToLobby();
+    else if (a === 'developer') this.openDeveloper(this.el.pausePanel, true);
     else if (a === 'quit') g.quitToMenu();
   }
 
@@ -420,6 +458,11 @@ export class UI {
   }
 
   toggleDebug() { this.debugOn = !this.debugOn; this.el.debug.classList.toggle('hidden', !this.debugOn && !this.s.showFps); }
+  devOverlay(html) {
+    let el = this.el.dev;
+    if (!el) { el = this.el.dev = document.createElement('div'); el.id = 'dev-overlay'; this.el.hud.appendChild(el); }
+    el.classList.toggle('hidden', !html); if (html) el.innerHTML = html;
+  }
   debug(html) { if (this.debugOn || this.s.showFps) { this.el.debug.classList.remove('hidden'); this.el.debug.innerHTML = html; } }
 
   _key(e) {
