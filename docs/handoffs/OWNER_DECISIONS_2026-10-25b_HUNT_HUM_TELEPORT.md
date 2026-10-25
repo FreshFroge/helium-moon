@@ -64,3 +64,14 @@ Line 55 waits only 15 s of real time for `#intro` to fade, which is a
 **clean** tree in 3 of 4 runs, because SwiftShader starves the main thread.
 Suggestion: hide or skip `#intro` deterministically in the fixture, or raise
 the timeout to 60 s.
+
+## Update, Oct 25 ~11:00 UTC: Claude is implementing the teleport
+
+Codex has been offline since ~02:50 UTC, so per the usage protocol Claude is
+taking part 2. Claude's files for this:
+- `shared/sim/heliumVoice.js`: a new `tryRelocate()` and its two trigger points,
+  the chase cut-off and getting ahead while closing in;
+- `shared/config.js`: new `HV.RELOCATE_*` keys;
+- a new `tests/relocate.test.mjs`.
+
+The client side (snapshot jump → snap) is already in from `4571318`.
