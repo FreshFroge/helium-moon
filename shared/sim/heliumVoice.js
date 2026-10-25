@@ -916,6 +916,9 @@ export class HeliumVoiceAI {
 
   slipAround(tp) {
     const w = this.world; this.slipT = this.sim.time;
+    // A close slip is only frightening if both ends are unseen.  Lighting changes can make
+    // `watched` false while his body still sits on the edge of a player's screen.
+    if (this.sim.playerList.some((p) => playerActive(p) && onScreen(w, p, this.x, this.y, this.z, HEIGHT, 0.6))) return false;
     const base = Math.atan2(this.x - tp.x, this.z - tp.z);
     for (let k = 1; k < 12; k++) {
       const a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6), r = 1.3;
