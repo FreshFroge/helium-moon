@@ -23,6 +23,8 @@ export class Flashlight {
     this.flicker = 1; this.flickerT = 0;
     this.dir = new THREE.Vector3(0, 0, -1);
     this.clickCb = null;
+    // per-frame scratch (no garbage in update)
+    this._off = new THREE.Vector3(); this._sway = new THREE.Euler(); this._swayQ = new THREE.Quaternion(); this._q = new THREE.Quaternion();
   }
 
   snap(camera) { this.handQ.copy(camera.quaternion); }
@@ -37,11 +39,11 @@ export class Flashlight {
 
   update(dt, camera, terror, opts = {}) {
     this.handQ.slerp(camera.quaternion, 1 - Math.exp(-dt * 14));
-    const off = new THREE.Vector3(0.18, -0.2, -0.15).applyQuaternion(camera.quaternion);
+    const off = this._off.set(0.18, -0.2, -0.15).applyQuaternion(camera.quaternion);
     this.handPos.copy(camera.position).add(off);
     const t = performance.now() * 0.001;
-    const sway = new THREE.Euler(Math.sin(t * 1.3) * 0.006 + (opts.walkBob || 0) * 0.01, Math.sin(t * 0.9) * 0.008, 0);
-    const q = this.handQ.clone().multiply(new THREE.Quaternion().setFromEuler(sway));
+    const sway = this._sway.set(Math.sin(t * 1.3) * 0.006 + (opts.walkBob || 0) * 0.01, Math.sin(t * 0.9) * 0.008, 0);
+    const q = this._q.copy(this.handQ).multiply(this._swayQ.setFromEuler(sway));
     this.dir.set(0, 0, -1).applyQuaternion(q);
     this.light.position.copy(this.handPos);
     this.light.target.position.copy(this.handPos).addScaledVector(this.dir, 10);
