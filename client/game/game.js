@@ -376,6 +376,13 @@ export class Game {
 
   _name(id) { const n = this.names && this.names.get(id); return n ? n.name : 'Someone'; }
 
+  // Remote fear reactions are visual-only. Snapshot yaw and all movement stay
+  // authoritative; this just lets another player see where their teammate's
+  // attention snaps during a Helium Voice encounter.
+  _reactAvatar(pid, pos, hit = false) {
+    if (pid && pid !== this.myId) this.avatars.get(pid)?.reactToThreat(pos, hit);
+  }
+
   _onEvent(e) {
     if (this.mode !== 'playing') return;
     const A = this.audio, pos = e.x !== undefined ? { x: e.x, y: e.y ?? (this.world.heightAt(e.x, e.z) + 1), z: e.z } : null;
@@ -394,6 +401,7 @@ export class Game {
         } else if (e.phase === 'grab') {
           A.at('cloth' + (k % 2), at, { bus: 'mon', gain: 1.4, ref: 2, reverb: 0.05 });
           A.at('pop' + (k % 4), at, { bus: 'mon', gain: 0.8, ref: 2, reverb: 0.05 });
+          this._reactAvatar(e.pid, at, true);
           if (e.pid === this.myId) this._grabStart(e);
         } else if (e.phase === 'release') {
           if (e.pid === this.myId) this._grabEnd(e);
@@ -402,13 +410,14 @@ export class Game {
       }
       // strings cut: they snap up in the canopy, and he drops
       case 'hv_cut': {
+        this._reactAvatar(e.pid, pos);
         const c = this.hv.strings.last, at = c && c.y ? { x: c.x, y: c.y, z: c.z } : pos;
         for (let i = 0; i < 3; i++) setTimeout(() => this.mode === 'playing' && A.at('snapStr' + ((e.seq + i) % 3), at, { bus: 'mon', gain: 1.25 - i * 0.25, rate: 1 + i * 0.07, ref: 6, reverb: 0.45 }), i * 70 + Math.random() * 40);
         break;
       }
       case 'hv_collapse': A.at('bodyDrop' + ((e.seq || 0) % 2), { x: e.x, y: (e.y ?? this.world.heightAt(e.x, e.z)) + 0.3, z: e.z }, { bus: 'mon', gain: 1.4, ref: 4, reverb: 0.2 }); break;
       // a look back caught him: one dry crack of his joints as he locks
-      case 'hv_freeze': if (this._near(pos, 25)) A.at('pop' + ((e.seq || 0) % 4), { ...pos, y: pos.y + 0.6 }, { bus: 'mon', gain: 0.7, ref: 2, reverb: 0.1, range: { fadeStart: 8, maxDistance: 25 } }); break;
+      case 'hv_freeze': this._reactAvatar(e.pid, pos); if (this._near(pos, 25)) A.at('pop' + ((e.seq || 0) % 4), { ...pos, y: pos.y + 0.6 }, { bus: 'mon', gain: 0.7, ref: 2, reverb: 0.1, range: { fadeStart: 8, maxDistance: 25 } }); break;
       // in the grass: he unfolds - grass, joints, cloth
       case 'hv_rise': {
         A.at('fs_brush' + ((e.seq || 0) % 4), pos, { bus: 'mon', gain: 1.3, ref: 3, reverb: 0.05 });
@@ -430,11 +439,11 @@ export class Game {
         break;
       case 'hit':
         if (e.pid === this.myId) { this.damage = 1; this.player.shake = 1.2; A.ui('hurt', 0.9); this.player.injured = 1; if (e.by === 'hv') this._attackLockPending = 1.5; }
-        else { const a = this.avatars.get(e.pid); if (a) A.at('hurt', { x: a.pos.x, y: a.pos.y + 1.5, z: a.pos.z }, { gain: 1, ref: 5 }); }
+        else { this._reactAvatar(e.pid, pos, true); const a = this.avatars.get(e.pid); if (a) A.at('hurt', { x: a.pos.x, y: a.pos.y + 1.5, z: a.pos.z }, { gain: 1, ref: 5 }); }
         break;
       case 'downed': case 'dead':
         if (e.pid === this.myId) { this.damage = 1; this.player.shake = 1.6; A.ui('down', 1); this.player.downed = 1; if (e.by === 'hv') this._attackLockPending = 2.5; }
-        else { const a = this.avatars.get(e.pid); if (a) A.at('down', { x: a.pos.x, y: a.pos.y + 1, z: a.pos.z }, { gain: 1.1, ref: 6 }); this.ui.toast(`${this._name(e.pid)} ${e.type === 'dead' ? 'is gone' : 'is down'}.`, 3500); }
+        else { this._reactAvatar(e.pid, pos, true); const a = this.avatars.get(e.pid); if (a) A.at('down', { x: a.pos.x, y: a.pos.y + 1, z: a.pos.z }, { gain: 1.1, ref: 6 }); this.ui.toast(`${this._name(e.pid)} ${e.type === 'dead' ? 'is gone' : 'is down'}.`, 3500); }
         break;
       case 'revived': if (e.pid !== this.myId) this.ui.toast(`${this._name(e.by)} revived ${this._name(e.pid)}.`, 3000); break;
       case 'gas': A.sfVocal('gas', e.seq || 1, pos); break;
@@ -744,7 +753,7 @@ export class Game {
         const hp = a.handPos(this._v2 || (this._v2 = new THREE.Vector3()));
         const cp = Math.cos(a.pitch);
         L.position.copy(hp);
-        L.target.position.set(hp.x - Math.sin(a.yaw) * cp * 10, hp.y + Math.sin(a.pitch) * 10, hp.z - Math.cos(a.yaw) * cp * 10);
+        L.target.position.set(hp.x - Math.sin(a.lightYaw) * cp * 10, hp.y + Math.sin(a.pitch) * 10, hp.z - Math.cos(a.lightYaw) * cp * 10);
         L.target.updateMatrixWorld();
         L.intensity = CONFIG.FLASHLIGHT.INTENSITY * 0.8;
       }

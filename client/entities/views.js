@@ -153,6 +153,16 @@ export class PlayerAvatar {
     this.label.position.y = 2.05; this.root.add(this.label);
     this.pos = new THREE.Vector3(); this.prev = new THREE.Vector3(); this.speed = 0; this.yaw = 0; this.pitch = 0;
     this.flags = 0; this.state = 0; this.health = 2; this.stride = 0; this.lie = 0; this.first = true;
+    // Cosmetic remote reaction only: it never changes the authoritative player
+    // yaw, position or input. The game uses lightYaw solely for that avatar's
+    // rendered flashlight.
+    this.fearT = 0; this.recoil = 0; this.fearYaw = 0; this.lightYaw = 0;
+  }
+  reactToThreat(at, hit = false) {
+    if (!at) return;
+    this.fearYaw = Math.atan2(at.x - this.pos.x, at.z - this.pos.z);
+    this.fearT = Math.max(this.fearT, hit ? 1.05 : 0.62);
+    this.recoil = Math.max(this.recoil, hit ? 1 : 0.45);
   }
   // s: [id,x,y,z,yaw,pitch,flags,health,stateIdx,reviveProg,bleedT]
   update(dt, s, cameraPos) {
@@ -163,12 +173,17 @@ export class PlayerAvatar {
     const sp = dt > 0 ? Math.hypot(this.pos.x - this.prev.x, this.pos.z - this.prev.z) / dt : 0;
     this.speed = lerp(this.speed, Math.min(sp, 7), 1 - Math.exp(-dt * 8));
     this.yaw = yaw; this.pitch = pitch; this.flags = flags; this.state = st; this.health = health;
+    this.fearT = Math.max(0, this.fearT - dt);
+    this.recoil = Math.max(0, this.recoil - dt * 1.8);
+    const fear = clamp(this.fearT * 1.7, 0, 1);
+    this.lightYaw = yaw + angleDiff(yaw, this.fearYaw) * fear;
     this.root.visible = st !== 3;
     const down = st === 1 || st === 2;
     this.lie = lerp(this.lie, down ? 1 : 0, 1 - Math.exp(-dt * 4));
     this.root.position.set(x, y + this.lie * 0.18, z);
     this.root.rotation.set(-this.lie * 1.45, yaw + Math.PI, 0, 'YXZ');
-    this.anim.update(dt, { speed: down ? 0 : this.speed, run: !!(flags & 4) && this.speed > 3, crouch: flags & 1 ? 1 : 0, lookYaw: 0, lookPitch: pitch * 0.8, armSwing: 0.35 });
+    this.anim.update(dt, { speed: down ? 0 : this.speed, run: !!(flags & 4) && this.speed > 3, crouch: flags & 1 ? 1 : 0,
+      lookYaw: angleDiff(yaw, this.lightYaw), lookPitch: pitch * 0.8, reach: this.recoil * 0.25, snap: fear > 0.75, armSwing: 0.35 });
     const d = cameraPos ? cameraPos.distanceTo(this.pos) : 0;
     this.label.material.opacity = clamp(1 - (d - 6) / 14, 0, 0.85) * (st === 2 ? 0.4 : 1);
     this.label.visible = this.label.material.opacity > 0.02;
