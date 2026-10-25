@@ -73,3 +73,13 @@ test('the real refuge supplies concealed observation positions for cooperative s
   }
   assert.ok(available>=5,`concealed routes must remain practical (${available}/10 positions found)`);
 });
+
+test('retreat selection bounds expensive silhouette probes while keeping real concealment',()=>{
+  const {hv,sim,world,player}=fixture();
+  sim.playerList.push({...player,id:'two',x:5},{...player,id:'three',x:10});
+  let probes=0;world.lineOfSight=()=>{probes++;return 0;};
+  const goal=hv.coverAway(player);
+  assert.ok(goal);
+  assert.ok(probes<=120,`one retreat selection must bound multi-player LOS work, got ${probes}`);
+  assert.ok(hv.concealedAt(...goal),'bounded search still returns fully occluded cover when available');
+});

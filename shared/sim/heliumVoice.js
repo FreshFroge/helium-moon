@@ -231,17 +231,25 @@ export class HeliumVoiceAI {
   coverAway(from, minD = 12, maxD = 32) {
     const w = this.world, rng = this.rng;
     const away = Math.atan2(this.x - from.x, this.z - from.z);
-    let best = null, bestS = -1e9;
+    const candidates = [];
     for (let k = 0; k < 30; k++) {
       const a = away + rng.range(-1.2, 1.2), d = rng.range(minD, maxD);
       const x = this.x + Math.sin(a) * d, z = this.z + Math.cos(a) * d;
       if (!w.navWalkable(x, z)) continue;
       const y = groundAt(w, x, z);
       const vis = w.lineOfSight(from.x, from.y + 1.6, from.z, x, y + 1.6, z, { brushK: 0.35 });
-      const s = (1 - vis) * 3 + w.sampleGrid(w.gCover, x, z) - d / 60 + (this.concealedAt(x, z) ? 4 : 0);
-      if (s > bestS) { bestS = s; best = [x, z]; }
+      const score = (1 - vis) * 3 + w.sampleGrid(w.gCover, x, z) - d / 60;
+      candidates.push({ x, z, score });
     }
-    return best;
+    candidates.sort((a, b) => b.score - a.score);
+    // Full silhouette occlusion is expensive with several teammates. Rank by
+    // the cheap center ray first, then fully verify at most three finalists.
+    // Actual hiding poses still recheck every silhouette sample; a fallback
+    // destination is only a movement goal, never permission to stand exposed.
+    for (const candidate of candidates.slice(0, 3)) {
+      if (this.concealedAt(candidate.x, candidate.z)) return [candidate.x, candidate.z];
+    }
+    return candidates.length ? [candidates[0].x, candidates[0].z] : null;
   }
 
   roamGoal() {
