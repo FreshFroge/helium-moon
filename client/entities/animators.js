@@ -59,42 +59,89 @@ export class HeliumAnimator {
   constructor(char) {
     this.rig = new Rig(char); this.b = char.bones;
     const b = this.b;
-    this.l = {};
+    this.l = {}; this.feet = {};
     for (const s of ['L', 'R']) {
       const hip = b['upperleg01.' + s].userData.head, knee = b['lowerleg01.' + s].userData.head, ank = b['foot.' + s].userData.head;
       const sh = b['upperarm01.' + s].userData.head, el = b['lowerarm01.' + s].userData.head, wr = b['wrist.' + s].userData.head;
-      this.l[s] = { thigh: hip.distanceTo(knee), shin: knee.distanceTo(ank), upper: sh.distanceTo(el), fore: el.distanceTo(wr), hipX: hip.x, ankY: ank.y, footFwd: b['foot.' + s].userData.bindDir.clone() };
+      this.l[s] = {
+        thigh: hip.distanceTo(knee), shin: knee.distanceTo(ank),
+        thighDir: knee.clone().sub(hip).normalize(), shinDir: ank.clone().sub(knee).normalize(),
+        upperDir: el.clone().sub(sh).normalize(), foreDir: wr.clone().sub(el).normalize(),
+        hipX: hip.x, ankX: ank.x, ankY: ank.y, ankZ: ank.z,
+        footFwd: b['foot.' + s].userData.bindDir.clone(),
+      };
+      this.feet[s] = { target: ank.clone(), contact: true, roll: 0 };
     }
     this.phase = 0; this.t = 0;
     this.headYaw = 0; this.headPitch = 0; this.tilt = 0; this.jaw = 0;
-    this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0 };
+    this.speed = 0; this.accel = 0; this.turn = 0; this.lastYaw = null; this.torsoYaw = 0;
+    this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0, stalk: 0 };
   }
 
-  // p: {speed, run, crouch, reach, still, lookYaw, lookPitch, tilt, jaw, armSwing, snap}
+  // MakeHuman's thigh, shin and arms each contain intermediate bones. Aim the
+  // complete segment, not the short first bone, so the solved ankle really lands
+  // on its target instead of floating or cutting through the ground.
+  _aimSegment(bone, bindDir, dir) {
+    const parent = bone.parent && bone.parent.isBone ? this.rig.wq(bone.parent) : new THREE.Quaternion();
+    const aim = new THREE.Quaternion().setFromUnitVectors(bindDir, dir.clone().normalize());
+    bone.quaternion.copy(parent.invert()).multiply(aim);
+  }
+
+  // `unnatural` is opt-in: teammate avatars share this rig, but never receive
+  // Helium Voice's asymmetric stalking, delayed torso turns or idle weight shifts.
+  // p: {speed, run, crouch, reach, still, lookYaw, lookPitch, tilt, jaw,
+  //     armSwing, snap, unnatural, yaw, state}
   update(dt, p) {
-    const rig = this.rig, b = this.b;
+    const rig = this.rig, b = this.b, B = this.blend;
     this.t += dt;
-    const sp = p.speed || 0;
-    const B = this.blend;
+    const sp = Math.max(0, p.speed || 0), creature = p.unnatural ? 1 : 0;
     const k = 1 - Math.exp(-dt * 6);
+    const oldSpeed = this.speed;
+    this.speed = lerp(this.speed, sp, 1 - Math.exp(-dt * 9));
+    if (dt > 0) this.accel = lerp(this.accel, clamp((this.speed - oldSpeed) / dt, -8, 8), 1 - Math.exp(-dt * 7));
+    if (Number.isFinite(p.yaw)) {
+      if (this.lastYaw !== null && dt > 0) {
+        const d = Math.atan2(Math.sin(p.yaw - this.lastYaw), Math.cos(p.yaw - this.lastYaw));
+        this.turn = lerp(this.turn, clamp(d / dt, -3, 3), 1 - Math.exp(-dt * 8));
+      }
+      this.lastYaw = p.yaw;
+    } else this.turn = lerp(this.turn, 0, k);
     B.walk = lerp(B.walk, clamp(sp / 1.4, 0, 1), k);
     B.run = lerp(B.run, p.run ? 1 : 0, 1 - Math.exp(-dt * 4));
     B.crouch = lerp(B.crouch, p.crouch || 0, k);
     B.reach = lerp(B.reach, p.reach || 0, 1 - Math.exp(-dt * 10));
     B.still = lerp(B.still, p.still ? 1 : 0, 1 - Math.exp(-dt * 8));
-    const stride = lerp(0.66, 1.6, B.run);
+    const stalking = creature && !p.run && (p.state === 3 || p.state === 4 || p.state === 7 || p.state === 9);
+    B.stalk = lerp(B.stalk, stalking ? 1 : 0, k);
+    const stride = lerp(0.66, 1.1, B.run) * (1 - 0.08 * B.stalk);
     if (sp > 0.02) this.phase = (this.phase + dt * sp / (stride * 2)) % 1;
     rig.reset();
-    const moving = clamp(sp / 0.5, 0, 1);
-    const lean = 0.06 * B.walk + 0.38 * B.run + 0.25 * B.crouch + 0.3 * B.reach;
-    const bob = Math.abs(Math.sin(this.phase * Math.PI * 2)) * (0.025 * B.walk + 0.06 * B.run) * moving;
-    const breathe = (1 - B.still) * Math.sin(this.t * 1.7) * 0.012;
-    b.root.position.y = b.root.userData.restPos.y - 0.04 * B.walk - 0.12 * B.run - 0.22 * B.crouch + bob;
-    const spineBend = lean / 4;
-    for (const n of ['spine05', 'spine04', 'spine03', 'spine02']) b[n].quaternion.setFromEuler(new THREE.Euler(spineBend + breathe * 0.3, Math.sin(this.phase * Math.PI * 2) * 0.05 * moving * (1 - B.still), 0));
-    b.spine01.quaternion.setFromEuler(new THREE.Euler(breathe, 0, 0));
-    // head locked onto its target independent of the body (deliberately wrong)
-    this.headYaw = lerp(this.headYaw, clamp(p.lookYaw || 0, -1.95, 1.95), 1 - Math.exp(-dt * (p.snap ? 12 : 2.2)));
+    const moving = clamp(this.speed / 0.5, 0, 1);
+    const free = 1 - B.still;
+    const cycle = this.phase * Math.PI * 2;
+    const idle = (1 - B.walk) * free * creature;
+    const weight = (Math.sin(this.t * 0.53) + 0.35 * Math.sin(this.t * 0.19 + 0.8)) * 0.013 * idle;
+    const drive = this.accel * 0.012 * creature * free;
+    const bank = -this.turn * 0.025 * moving * creature * free;
+    const lean = 0.06 * B.walk + 0.38 * B.run + 0.25 * B.crouch + 0.3 * B.reach + drive;
+    const bob = Math.abs(Math.sin(cycle)) * (0.025 * B.walk + 0.06 * B.run) * moving;
+    const breathe = free * Math.sin(this.t * 1.7) * 0.012;
+    b.root.position.x = b.root.userData.restPos.x + weight + Math.sin(cycle) * 0.012 * B.walk * creature * free;
+    b.root.position.y = b.root.userData.restPos.y - 0.04 * B.walk - 0.15 * B.run - 0.22 * B.crouch + bob;
+    b.root.quaternion.setFromEuler(new THREE.Euler(0, 0, bank + weight * 0.55));
+    // The torso follows a glance later and less far than the head. The residual
+    // look angle stays in the neck, so turning the chest cannot double the gaze.
+    this.torsoYaw = lerp(this.torsoYaw, clamp((p.lookYaw || 0) * 0.22, -0.3, 0.3) * creature,
+      1 - Math.exp(-dt * (p.still ? 0.7 : 1.7)));
+    const gaitYaw = Math.sin(cycle) * 0.035 * moving * free;
+    for (const n of ['spine05', 'spine04', 'spine03', 'spine02']) {
+      b[n].quaternion.setFromEuler(new THREE.Euler(lean / 4 + breathe * 0.3,
+        this.torsoYaw / 5 + gaitYaw,
+        -bank * 0.18));
+    }
+    b.spine01.quaternion.setFromEuler(new THREE.Euler(breathe, this.torsoYaw / 5, -weight * 0.3));
+    this.headYaw = lerp(this.headYaw, clamp((p.lookYaw || 0) - this.torsoYaw - gaitYaw * 4 * creature, -1.95, 1.95),
+      1 - Math.exp(-dt * (p.snap ? 12 : creature ? 3.4 : 2.2)));
     this.headPitch = lerp(this.headPitch, clamp((p.lookPitch || 0) - lean * 0.7, -0.7, 0.6), 1 - Math.exp(-dt * 3));
     this.tilt = lerp(this.tilt, p.tilt || 0, 1 - Math.exp(-dt * 1.6));
     this.jaw = lerp(this.jaw, p.jaw || 0, 1 - Math.exp(-dt * 14));
@@ -103,36 +150,62 @@ export class HeliumAnimator {
     b.head.quaternion.setFromEuler(new THREE.Euler(np, ny, this.tilt * 0.6, 'YXZ'));
     if (b.jaw) b.jaw.quaternion.setFromEuler(new THREE.Euler(this.jaw * 0.45, 0, 0));
     for (const s of ['L', 'R']) {
-      const L = this.l[s];
-      const ph = (this.phase + (s === 'L' ? 0 : 0.5)) % 1;
-      const duty = lerp(0.62, 0.42, B.run);
-      let fz, fy;
-      if (ph < duty) { const t = ph / duty; fz = lerp(stride / 2, -stride / 2, t); fy = 0; }
-      else { const t = (ph - duty) / (1 - duty); fz = lerp(-stride / 2, stride / 2, t * t * (3 - 2 * t)); fy = Math.sin(Math.PI * t) * (0.09 + 0.16 * B.run); }
-      fz *= moving; fy *= moving;
+      const L = this.l[s], foot = this.feet[s], sign = s === 'L' ? 1 : -1;
+      // A small stance-time mismatch makes the stalk deliberate and uncomfortable
+      // without changing the authoritative movement speed or making a zombie gait.
+      const ph = (this.phase + (s === 'L' ? 0 : 0.5) + 1) % 1;
+      const duty = lerp(0.62, 0.42, B.run) + sign * 0.025 * B.stalk;
+      let fz, fy, roll;
+      foot.contact = ph < duty || moving < 0.03;
+      if (ph < duty) {
+        const t = ph / duty;
+        fz = lerp(stride / 2, -stride / 2, t); fy = 0;
+        // Heel strike, a flat mid-stance, then a small toe-off.
+        roll = -0.16 * Math.pow(Math.max(0, 1 - t * 4), 2)
+          + 0.23 * Math.pow(Math.max(0, (t - 0.72) / 0.28), 2);
+      } else {
+        const t = (ph - duty) / (1 - duty), ease = t * t * (3 - 2 * t);
+        fz = lerp(-stride / 2, stride / 2, ease);
+        fy = Math.sin(Math.PI * t) * (0.09 + 0.16 * B.run);
+        roll = -0.12 * Math.sin(Math.PI * t);
+      }
+      fz *= moving; fy *= moving; foot.roll = roll * moving;
       const hip = rig.wp(b['upperleg01.' + s]);
-      const target = new THREE.Vector3(L.hipX * 1.02, L.ankY + fy, hip.z + fz + 0.02 * B.crouch);
+      // Ankle targets stay on the support plane while pelvis/chest shift above
+      // them; lateral body sway no longer drags both planted feet with it.
+      const target = foot.target.set(lerp(L.ankX, L.hipX * 1.04, B.walk), L.ankY + fy,
+        L.ankZ + fz + 0.02 * B.crouch);
+      // Keep the support height when a long step approaches full extension;
+      // shorten its horizontal reach instead of lifting a planted ankle.
+      const reach = L.thigh + L.shin - 0.002;
+      const dy = target.y - hip.y, dx = target.x - hip.x, dz = target.z - hip.z;
+      const horizontal = Math.hypot(dx, dz);
+      const maxHorizontal = Math.sqrt(Math.max(0, reach * reach - dy * dy));
+      if (horizontal > maxHorizontal && horizontal > 0) {
+        target.x = hip.x + dx * maxHorizontal / horizontal;
+        target.z = hip.z + dz * maxHorizontal / horizontal;
+      }
       const knee = rig.ik2(hip, L.thigh, L.shin, target, new THREE.Vector3(0, 0, 1));
-      rig.aim(b['upperleg01.' + s], new THREE.Vector3().subVectors(knee, hip));
-      rig.aim(b['lowerleg01.' + s], new THREE.Vector3().subVectors(target, knee));
-      const f = L.footFwd.clone(); f.y = 0; f.normalize();
-      const pitch = ph > duty ? -0.25 * Math.sin(Math.PI * (ph - duty) / (1 - duty)) * moving : 0;
-      rig.aim(b['foot.' + s], new THREE.Vector3(f.x, -0.45 + pitch, f.z));
+      this._aimSegment(b['upperleg01.' + s], L.thighDir, new THREE.Vector3().subVectors(knee, hip));
+      this._aimSegment(b['lowerleg01.' + s], L.shinDir, new THREE.Vector3().subVectors(target, knee));
+      const f = L.footFwd.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), foot.roll);
+      rig.aim(b['foot.' + s], f);
     }
     for (const s of ['L', 'R']) {
-      const sign = s === 'L' ? 1 : -1;
+      const sign = s === 'L' ? 1 : -1, L = this.l[s];
       const ph = (this.phase + (s === 'L' ? 0.5 : 0)) % 1;
-      const swing = Math.sin(ph * Math.PI * 2);
+      const swing = Math.sin(ph * Math.PI * 2 + sign * B.stalk * 0.16);
       const armSwing = (p.armSwing ?? 0.08) * B.walk * (1 - B.run) + 0.85 * B.run;
-      const up = new THREE.Vector3(0.14 * sign, -1, swing * armSwing * 0.6 + 0.05).normalize();
-      const fore = new THREE.Vector3(0.05 * sign, -1, 0.12 + swing * armSwing * 0.4 + B.run * 0.9).normalize();
+      const lag = B.stalk * sign * 0.025 + this.accel * 0.005 * creature * free;
+      const up = new THREE.Vector3(0.14 * sign, -1, swing * armSwing * 0.6 + 0.05 - lag).normalize();
+      const fore = new THREE.Vector3(0.05 * sign, -1, 0.12 + swing * armSwing * 0.4 + B.run * 0.9 - lag).normalize();
       if (B.reach > 0.01) {
         up.lerp(new THREE.Vector3(0.15 * sign, -0.05, 1).normalize(), B.reach).normalize();
         fore.lerp(new THREE.Vector3(0.05 * sign, 0.02, 1).normalize(), B.reach).normalize();
       }
       rig.aim(b['clavicle.' + s], new THREE.Vector3(sign, 0.02 * B.run, 0).normalize());
-      rig.aim(b['upperarm01.' + s], up);
-      rig.aim(b['lowerarm01.' + s], fore);
+      this._aimSegment(b['upperarm01.' + s], L.upperDir, up);
+      this._aimSegment(b['lowerarm01.' + s], L.foreDir, fore);
       rig.aim(b['wrist.' + s], fore);
     }
   }

@@ -1,6 +1,6 @@
 // DOM user interface: main menu, settings (graphics, audio, microphone + mimicry
 // consent, controls/keybinds), multiplayer lobby, HUD, notes, pause and end screens.
-import { QUALITY_PRESETS } from '../../shared/config.js';
+import { CONFIG, QUALITY_PRESETS } from '../../shared/config.js';
 import { BINDING_LABELS, DEFAULT_BINDINGS } from '../core/settings.js';
 import { WSTransport, defaultServerUrl } from '../net/transport.js';
 
@@ -99,7 +99,7 @@ export class UI {
       </table>
       <h3>Surviving</h3>
       <ul class="tips">
-        <li>When the air turns cold and your breath fogs, he is within about 120 m. It gets worse the closer he comes.</li>
+        <li>Unexplained cold can mean he is within about ${CONFIG.TERROR.OUTER} m. Stronger warnings build when he is closer.</li>
         <li>He does not like being watched or lit. Keep your light on him — but don't count on it.</li>
         <li>Sprinting, working on loud machinery and talking carry far. Silence makes him curious instead of certain.</li>
         <li>Stay away from low brush near water. If the air smells like a struck match, back off.</li>
@@ -118,7 +118,7 @@ export class UI {
     let body = '';
     if (tab === 'graphics') {
       body = `<label class="row"><span>Quality</span><select data-k="quality">${Object.entries(QUALITY_PRESETS).map(([k, p]) => `<option value="${k}" ${k === s.quality ? 'selected' : ''}>${p.label}</option>`).join('')}</select></label>
-        <p class="hint">Shadows, volumetrics and render scale change immediately; forest density changes after a reload.</p>
+        <p class="hint">Render scale and volumetrics update immediately. Reload after changing quality to apply forest density and all shadow settings.</p>
         ${slider('renderScale', 'Render scale', 0.5, 1, 0.05, (v) => Math.round(v * 100) + '%')}
         ${check('adaptiveRes', 'Adaptive resolution')}
         ${slider('fov', 'Field of view', 60, 100, 1, (v) => v + '°')}
@@ -242,8 +242,13 @@ export class UI {
       const t = new WSTransport(url);
       try { await t.connect(name); } catch (e) { status(e.message + ' Is the server running?', true); return; }
       this.game.attach(t);
-      t.on('error', (m) => status(m.msg, true));
-      t.on('lobby_left', () => { this.game.quitToMenu(true); this.openMulti(); });
+      this.game.offs.push(
+        t.on('error', (m) => {
+          if (this.game.net === t) this.game.detach(); else t.close();
+          status(m.msg, true);
+        }),
+        t.on('lobby_left', () => { this.game.quitToMenu(true); this.openMulti(); }),
+      );
       t.send(join ? { t: 'join', code } : { t: 'create' });
     };
     $('#mp-create').onclick = () => go(false);

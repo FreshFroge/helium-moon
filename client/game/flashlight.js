@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../../shared/config.js';
 import { makeFlashlightCookie } from '../render/textures.js';
 import { clamp, lerp } from '../../shared/math.js';
+import { horrorCues } from '../../shared/horror.js';
 
 const F = CONFIG.FLASHLIGHT;
 
@@ -52,8 +53,13 @@ export class Flashlight {
     this.flickerT -= dt;
     if (this.flickerT <= 0) {
       const low = this.battery < F.LOW ? (1 - this.battery / F.LOW) : 0;
-      const p = low * 0.25 + clamp((terror - 0.33) * 1.2, 0, 1) * 0.35 + (opts.gas || 0) * 0.2;
-      if (Math.random() < p) { this.flicker = Math.random() < 0.4 ? 0.05 : 0.35 + Math.random() * 0.4; this.flickerT = 0.03 + Math.random() * 0.12; }
+      const p = low * 0.25 + horrorCues(terror).flicker * 0.14 + (opts.gas || 0) * 0.2;
+      if (Math.random() < p) {
+        // A healthy light only wavers near him; low battery and gas retain their
+        // stronger failure cues independently of supernatural proximity.
+        this.flicker = low > 0 || opts.gas > 0.1 ? (Math.random() < 0.4 ? 0.05 : 0.35 + Math.random() * 0.4) : 0.65 + Math.random() * 0.25;
+        this.flickerT = 0.03 + Math.random() * 0.12;
+      }
       else { this.flicker = 1; this.flickerT = 0.08 + Math.random() * 0.4; }
     }
     const batt = this.battery < 0.3 ? lerp(0.45, 1, this.battery / 0.3) : 1;

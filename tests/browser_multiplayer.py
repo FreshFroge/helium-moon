@@ -1,5 +1,7 @@
 # Two real browsers through the real server (needs: pip install playwright && playwright install chromium, ffmpeg):
 #   python3 tests/browser_multiplayer.py
+# Set CHROMIUM_EXECUTABLE_PATH to use an installed Chromium binary. A browser
+# managed policy disabling direct UDP can block WebRTC; those checks remain failures.
 # Lobby UI, game start, avatars, WebRTC voice with fake microphones playing the signature clip,
 # proximity mixing, in-memory phrase capture, forced mimicry relay, privacy opt-out, chat,
 # downed -> revive by holding E, mic off.
@@ -24,9 +26,42 @@ async def pump(pages, seconds, step=6):
         for pg in pages: await pg.evaluate(f"game.advance({step}, 1/30, false)")
         await asyncio.sleep(0.02)
 
+async def rtc_diagnostics(page):
+    return await page.evaluate("""async () => {
+        const peers = [];
+        for (const peer of game.voice.peers.values()) {
+            const stats = [...(await peer.pc.getStats()).values()];
+            peers.push({id: peer.id, connection: peer.pc.connectionState,
+                ice: peer.pc.iceConnectionState, gathering: peer.pc.iceGatheringState,
+                signalling: peer.pc.signalingState,
+                localDescription: peer.pc.localDescription?.type,
+                remoteDescription: peer.pc.remoteDescription?.type,
+                candidates: stats.filter(s => ['local-candidate', 'remote-candidate', 'candidate-pair'].includes(s.type)).map(s => ({
+                    type: s.type, candidateType: s.candidateType, protocol: s.protocol,
+                    address: s.address, port: s.port, state: s.state, nominated: s.nominated,
+                    bytesSent: s.bytesSent, bytesReceived: s.bytesReceived,
+                }))});
+        }
+        return {peers, events: window.__rtcEvents || []};
+    }""")
+
+async def received_codec(page):
+    return await page.evaluate("""async () => {
+        for (const peer of game.voice.peers.values()) {
+            const stats = await peer.pc.getStats();
+            for (const report of stats.values()) {
+                if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                    const codec = stats.get(report.codecId);
+                    if (codec) return codec.mimeType;
+                }
+            }
+        }
+        return null;
+    }""")
+
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required',
+        b = await p.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE_PATH'), args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required',
             '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', f'--use-file-for-fake-audio-capture={S}/fake_voice.wav'])
         pages = []
         for name in ['Alpha', 'Bravo']:
@@ -38,6 +73,20 @@ async def main():
         A, B = pages
         for pg in pages: await pg.wait_for_function('window.READY || window.LOAD_ERROR', timeout=300000)
         ok(not await A.evaluate('window.LOAD_ERROR') and not await B.evaluate('window.LOAD_ERROR'), 'both clients loaded')
+        for pg in pages:
+            await pg.evaluate("""() => {
+                window.__rtcEvents = [];
+                const makePeer = game.voice._makePeer.bind(game.voice);
+                game.voice._makePeer = function (id, initiator) {
+                    const peer = makePeer(id, initiator), pc = peer.pc;
+                    const record = event => __rtcEvents.push({peer: id, ...event});
+                    pc.addEventListener('icecandidate', e => record({type: 'candidate', candidate: e.candidate?.candidate || null}));
+                    pc.addEventListener('icecandidateerror', e => record({type: 'candidate-error', code: e.errorCode, text: e.errorText}));
+                    pc.addEventListener('connectionstatechange', () => record({type: 'connection', state: pc.connectionState}));
+                    pc.addEventListener('iceconnectionstatechange', () => record({type: 'ice', state: pc.iceConnectionState}));
+                    return peer;
+                };
+            }""")
         # microphones: explicit enable (fake device), A open mic + mimicry opt-in, B push-to-talk
         await A.evaluate("void (ui.clickToPlay = function () {}); game.settings.voiceMode = 'open'; game.settings.micSensitivity = 0.7; game.settings.mimicOptIn = true; game.settings.save()")
         await B.evaluate("void (ui.clickToPlay = function () {}); game.settings.voiceMode = 'ptt'; game.settings.mimicOptIn = false; game.settings.save()")
@@ -61,9 +110,20 @@ async def main():
             ok(True, 'WebRTC voice connected peer-to-peer (Opus)')
         except Exception as e:
             ok(False, 'WebRTC voice connected: ' + str(e)[:80])
-        codec = await B.evaluate("""(async () => { const p = [...game.voice.peers.values()][0]; const st = await p.pc.getStats(); let c = null; st.forEach(r => { if (r.type === 'codec' && r.mimeType) c = c || r.mimeType; }); return c; })()""")
+            policy_file = '/etc/chromium/policies/managed/misc.json'
+            try:
+                with open(policy_file) as policy:
+                    handling = json.load(policy).get('WebRtcIPHandling')
+                if handling:
+                    print(f'      Chromium managed WebRtcIPHandling={handling}; direct UDP voice may be blocked. The real connection check remains failed.')
+            except (OSError, ValueError):
+                pass
+            for name, pg in zip(('Alpha', 'Bravo'), pages):
+                print(f'      {name} RTC diagnostics:', json.dumps(await rtc_diagnostics(pg)))
+                print(f'      {name} signalling warnings:', [line for line in pg.logs if 'offer failed' in line or 'voice signalling error' in line])
+        codec = await received_codec(B)
         if not codec:
-            await asyncio.sleep(2); codec = await B.evaluate("""(async () => { const p = [...game.voice.peers.values()][0]; const st = await p.pc.getStats(); let c = null; st.forEach(r => { if (r.type === 'codec' && r.mimeType) c = c || r.mimeType; }); return c; })()""")
+            await asyncio.sleep(2); codec = await received_codec(B)
         ok(codec and 'opus' in codec.lower(), f'voice codec {codec}')
         await A.click('#lb-start')
         for pg in pages: await pg.wait_for_function("game.mode === 'playing'", timeout=10000)
@@ -103,7 +163,7 @@ async def main():
             await B.evaluate(f"mpTp({apos[0] + d}, {apos[1]})"); await pump(pages, 1.2, 4)
             gains[d] = json.loads(await B.evaluate("JSON.stringify((p => [p.e.out.gain.value, p.e.lp.frequency.value])([...game.voice.peers.values()][0]))"))
         print('      proximity gain/lowpass by distance:', {k: (round(v[0], 2), int(v[1])) for k, v in gains.items()})
-        ok(gains[3][0] > 0.85 and gains[15][0] < gains[3][0] and gains[28][1] < 6000 and gains[60][0] < 0.02, 'voice clear up close, quieter at 15 m, muffled at 28 m, silent at 60 m')
+        ok(gains[3][0] > 0.85 and gains[15][0] < gains[3][0] and gains[28][1] < 6000 and gains[60][0] < 0.02, 'proximity mix parameters: clear up close, quieter at 15 m, muffled at 28 m, silent at 60 m')
         await B.evaluate(f"mpTp({apos[0] + 4}, {apos[1]})"); await pump(pages, 1)
         # mimicry: A's phrases captured in memory only, force one, B receives processed audio
         await pump(pages, 4, 4)
@@ -111,13 +171,14 @@ async def main():
         durs = await A.evaluate("game.voice.phrases.map(p => +p.dur.toFixed(2))")
         ok(n >= 1, f'phrases captured in memory while transmitting ({n}, durations {durs})')
         ok(await B.evaluate("game.voice.phrases.length") == 0, 'nothing captured from the player who did not opt in')
-        await A.evaluate("window.__mim = 0; void (game.voice.onMimicPlayed = function () { window.__mim++; })")
+        await A.evaluate("window.__mim = 0; void (game.voice.onMimicPlayed = function (at) { window.__mim++; window.__mimAt = at; })")
         await B.evaluate("window.__mim = 0; void (game.voice.onMimicPlayed = function (at) { window.__mim++; window.__mimAt = at; })")
         await A.evaluate("game.net.send({t: 'debug', cmd: 'mimic', listener: game.myId, owner: game.myId})")
         await pump(pages, 1.5, 4)
         am = await A.evaluate("window.__mim"); bm = await B.evaluate("window.__mim")
         ok(am == 1 and bm == 1, f'mimicry played on the owner and relayed to the teammate (A {am}, B {bm})')
-        ok(await A.evaluate("game.voice.phrases.length") == n - 1, 'used phrase deleted after playback')
+        used_phrase = await A.evaluate("window.__mimAt && window.__mimAt.phrase")
+        ok(bool(used_phrase) and not await A.evaluate("id => game.voice.phrases.some(p => p.id === id)", used_phrase), 'used phrase deleted after playback (checked by ID while capture continues)')
         await A.evaluate("game.settings.mimicOptIn = false; game.settings.save()"); await pump(pages, 0.5)
         ok(await A.evaluate("game.voice.phrases.length") == 0, 'opting out deletes all stored phrases')
         await pump(pages, 3, 4)

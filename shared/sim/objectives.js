@@ -24,8 +24,15 @@ export class Objectives {
     };
     const genPoi = rng.pick(['pumphouse', 'shed']);
     const relayPoi = rng.pick(['blind', 'bench', 'fishing', 'footbridge']);
-    const genPos = genPoi === 'pumphouse' ? stationAt('pumphouse', 0.6, 2.6) : stationAt('shed', 1.2, 0.6);
-    const relayPos = relayPoi === 'footbridge' ? stationAt('footbridge', 2.0, 7.5) : relayPoi === 'blind' ? stationAt('blind', 2.6, 0.5) : stationAt(relayPoi, 1.6, -0.4);
+    // The shed has solid building collision; place equipment outside its front
+    // wall so it can be seen and worked on without interacting through timber.
+    const genPos = genPoi === 'pumphouse' ? stationAt('pumphouse', 0.6, 2.6) : stationAt('shed', 1.2, 3.0);
+    // The mapped overlook bench is in the river channel. Mount its relay on
+    // the dry, trail-facing bank nearby rather than below the water surface.
+    const relayPos = relayPoi === 'footbridge' ? stationAt('footbridge', 2.0, 7.5)
+      : relayPoi === 'blind' ? stationAt('blind', 2.6, 0.5)
+      : relayPoi === 'bench' ? stationAt('bench', -1.0, 12.0)
+      : stationAt(relayPoi, 1.6, -0.4);
     const mastPos = stationAt('mast', 1.8, 1.2);
     this.stations = [
       { id: 'gen', kind: 'generator', name: 'Start the backup generator', where: genPoi === 'pumphouse' ? 'Old Pump House' : 'Ranger Maintenance Shed', needs: ['fuel'], hold: 10, noisy: true, ...genPos, done: false, prog: 0 },
@@ -38,8 +45,8 @@ export class Objectives {
     // item spots near landmarks
     const spots = [];
     const near = (key, ox, oz, label) => { const s = w.structures.find((o) => o.type === key); if (s) { const p = stationAt(key, ox, oz); spots.push({ ...p, label }); } };
-    near('camp', -0.4, 1.2, 'camp'); near('shed', -1.8, -1.4, 'shed'); near('pumphouse', -2.3, 0.6, 'pumphouse');
-    near('blind', -1.0, 1.9, 'blind'); near('fishing', 0.8, 0.9, 'fishing'); near('bench', 1.4, 0.8, 'overlook');
+    near('camp', -0.4, 1.2, 'camp'); near('shed', -1.8, 3.0, 'shed'); near('pumphouse', -2.3, 0.6, 'pumphouse');
+    near('blind', -1.0, 1.9, 'blind'); near('fishing', 0.8, 0.9, 'fishing'); near('bench', 1.4, 12.0, 'overlook');
     near('car', 1.4, 0, 'car'); near('kiosk', 0.8, 1.0, 'kiosk');
     for (let k = 0; k < 12; k++) {
       for (let t = 0; t < 20; t++) {

@@ -32,11 +32,26 @@ export class GameSim {
   // ---------------------------------------------------------------- players
   spawnPoint(i) {
     const w = this.world;
+    const kiosk = w.structures.find((structure) => structure.type === 'kiosk');
+    if (kiosk) {
+      // Gather beside the trailhead memo, with a clear route into the refuge.
+      // Keep the kiosk off the walking line rather than placing it in front of W.
+      const ahead = pointAtDistance(w.trail, w.trailCum, 20);
+      const c = Math.cos(kiosk.rot), s = Math.sin(kiosk.rot);
+      const startX = kiosk.x + 1.5 * c + 2.2 * s;
+      const startZ = kiosk.z - 1.5 * s + 2.2 * c;
+      const distance = Math.hypot(ahead.x - startX, ahead.z - startZ);
+      const fx = (ahead.x - startX) / distance, fz = (ahead.z - startZ) / distance;
+      const row = Math.floor(i / 2) * 1.6, column = (i % 2) * 1.4;
+      const x = startX + fx * row - fz * column;
+      const z = startZ + fz * row + fx * column;
+      return { x, z, y: groundAt(w, x, z), yaw: Math.atan2(x - ahead.x, z - ahead.z) };
+    }
     const p = pointAtDistance(w.trail, w.trailCum, 3 + i * 1.6);
     const left = p.dir - Math.PI / 2;
     const off = (i % 2 ? 1 : -1) * 0.9;
     const x = p.x + Math.sin(left) * off, z = p.z + Math.cos(left) * off;
-    return { x, z, y: groundAt(w, x, z), yaw: Math.atan2(-Math.sin(p.dir), -Math.cos(p.dir)) + Math.PI };
+    return { x, z, y: groundAt(w, x, z), yaw: Math.atan2(-Math.sin(p.dir), -Math.cos(p.dir)) };
   }
 
   addPlayer(id, name) {
@@ -92,7 +107,8 @@ export class GameSim {
     return best ? { p: best, d: bd } : null;
   }
 
-  emit(ev) { ev.id = this.evSeq++; ev.t = +this.time.toFixed(2); this.events.push(ev); }
+  // Event ordering is separate from item/station IDs consumed by the client.
+  emit(ev) { ev.seq = this.evSeq++; ev.t = +this.time.toFixed(2); this.events.push(ev); }
   drainEvents() { const e = this.events; this.events = []; return e; }
 
   addGas(x, y, z) {

@@ -320,18 +320,36 @@ export class Props {
     const deckLocalY = o.deckY - o.y;
     for (let i = 0; i < Math.round(L / 0.32); i++) {
       const z = -L / 2 + 0.16 + i * 0.32;
-      B.add('wood', boxUV(2.2, 0.06, 0.28), this.W(o, 0, deckLocalY, z, 0, 0, (i % 3 - 1) * 0.01));
+      B.add('wood', boxUV(2.6, 0.06, 0.28), this.W(o, 0, deckLocalY - 0.03, z, 0, 0, (i % 3 - 1) * 0.01));
     }
-    for (const x of [-0.9, 0.9]) B.add('woodDark', boxUV(0.14, 0.22, L), this.W(o, x, deckLocalY - 0.14, 0));
+    for (const x of [-1.05, 1.05]) B.add('woodDark', boxUV(0.14, 0.22, L), this.W(o, x, deckLocalY - 0.14, 0));
     for (let i = 0; i <= 4; i++) {
       const z = -L / 2 + (L / 4) * i;
-      for (const x of [-1.05, 1.05]) {
+      for (const x of [-1.25, 1.25]) {
         const gy = w.heightAt(o.x + Math.sin(o.rot) * z + Math.cos(o.rot) * x, o.z + Math.cos(o.rot) * z - Math.sin(o.rot) * x) - o.y;
         const h = deckLocalY + 1.0 - gy + 0.3;
         B.add('woodDark', boxUV(0.12, h, 0.12), this.W(o, x, gy - 0.3 + h / 2, z));
       }
+      B.add('woodDark', boxUV(2.65, 0.16, 0.16), this.W(o, 0, deckLocalY - 0.22, z));
     }
-    for (const x of [-1.05, 1.05]) B.add('wood', boxUV(0.08, 0.1, L), this.W(o, x, deckLocalY + 0.95, 0));
+    for (const x of [-1.25, 1.25]) B.add('wood', boxUV(0.08, 0.1, L), this.W(o, x, deckLocalY + 0.95, 0));
+    // Timber approaches meet the actual banks; their geometry and deckAt()
+    // share the same endpoints so players do not climb invisible steps.
+    for (const side of [-1, 1]) {
+      const bankY = o.bankY[side < 0 ? 0 : 1] - o.y;
+      const slope = side * Math.atan2(deckLocalY - bankY, o.rampLength);
+      const count = Math.ceil(o.rampLength / 0.32), step = o.rampLength / count;
+      for (let i = 0; i < count; i++) {
+        const along = (i + 0.5) * step;
+        const y = deckLocalY + (bankY - deckLocalY) * along / o.rampLength;
+        B.add('wood', boxUV(2.6, 0.06, step - 0.025), this.W(o, 0, y - 0.03, side * (L / 2 + along), 0, slope));
+      }
+      // Grounded end sill carries the span and buries into the bank.
+      const z = side * L / 2;
+      const gy = w.heightAt(o.x + Math.sin(o.rot) * z, o.z + Math.cos(o.rot) * z) - o.y;
+      const h = Math.max(0.22, deckLocalY - gy + 0.18);
+      B.add('woodDark', boxUV(2.7, h, 0.3), this.W(o, 0, deckLocalY - h / 2 - 0.06, z));
+    }
   }
 
   _fishing(o, B) {

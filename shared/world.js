@@ -116,9 +116,11 @@ export class World {
       const pts = [];
       for (let i = -6; i <= 6; i++) {
         const s = i * 9;
-        pts.push([bridge.x + Math.sin(dir) * s + Math.sin(i * 0.5) * 6, bridge.z + Math.cos(dir) * s + Math.cos(i * 0.4) * 5]);
+        // Anchor the channel to the actual trail crossing, not the nearby map
+        // annotation. Keep its meander zero at i=0 so it runs under the span.
+        pts.push([tAt.x + Math.sin(dir) * s + Math.sin(i * 0.5) * 6, tAt.z + Math.cos(dir) * s + (Math.cos(i * 0.4) - 1) * 5]);
       }
-      this.sloughs.push({ pts, halfW: 3.2, depth: 1.5 });
+      this.sloughs.push({ pts, halfW: 2.6, depth: 1.8, bridge: true });
     }
     for (let k = 0; k < 7; k++) {
       const along = rng.range(0.08, 0.92) * this.trailLength;
@@ -264,8 +266,10 @@ export class World {
         if (fieldW > 0) base = lerp(base, 0.85 + low * 0.5, clamp(fieldW, 0, 1));
         const sw = this.sampleGrid(this.gSwamp, wx, wz);
         if (sw > 0) base -= sw * (1.15 + nz(wx / 11, wz / 11) * 0.45);
+        let bridgeChannelDist = 1e9;
         for (const sl of this.sloughs) {
           const d = this._polyDist(sl.pts, wx, wz, 30);
+          if (sl.bridge) bridgeChannelDist = d;
           if (d < sl.halfW + 6) base -= sl.depth * (1 - smoothstep(sl.halfW * 0.5, sl.halfW + 6, d));
         }
         const pw = this._ellipseSdf(this.pondWater, wx, wz);
@@ -308,10 +312,16 @@ export class World {
           let target = Math.max(smooth, C.WATER_LEVEL + 1.6) - 0.1;
           const rutOff = shp.halfW * 0.48;
           target -= 0.085 * (1 - shp.over * 0.6) * Math.exp(-(((td - rutOff) / (0.28 + shp.over * 0.1)) ** 2));
-          const t = 1 - smoothstep(shp.halfW * 0.85, shp.halfW + 2.4, td);
+          // The trail crosses this slough on a deck. Flattening it like dirt
+          // filled the channel back in and left the bridge floating on land.
+          const bridgeOpening = 1 - smoothstep(2.0, 5.2, bridgeChannelDist);
+          const t = (1 - smoothstep(shp.halfW * 0.85, shp.halfW + 2.4, td)) * (1 - bridgeOpening);
           base = lerp(base, target, t);
           if (td < shp.halfW + 2.4 && base < C.WATER_LEVEL + 1.4) base = lerp(base, C.WATER_LEVEL + 1.4, t);
         }
+        // Retain a shallow, wet channel through the crossing even where the
+        // surrounding floodplain happens to be elevated by procedural noise.
+        if (bridgeChannelDist < 5.2) base = Math.min(base, lerp(C.SWAMP_WATER_LEVEL - 0.65, base, smoothstep(2.0, 5.2, bridgeChannelDist)));
         h[i] = base;
       }
     }
@@ -522,7 +532,14 @@ export class World {
     add('shed', P.shed.x, P.shed.z, faceTrail(P.shed));
     add('camp', P.camp.x, P.camp.z, faceTrail(P.camp));
     const br = pointAtDistance(this.trail, this.trailCum, P.bridge.along);
-    add('footbridge', br.x, br.z, br.dir, { length: 13, deckY: Math.max(this.heightAt(br.x, br.z) + 0.6, 0.6) });
+    const bridgeLength = 13, rampLength = 2.4;
+    const bankY = [-1, 1].map((side) => this.heightAt(br.x + Math.sin(br.dir) * side * (bridgeLength / 2 + rampLength), br.z + Math.cos(br.dir) * side * (bridgeLength / 2 + rampLength)) + 0.035);
+    add('footbridge', br.x, br.z, br.dir, {
+      length: bridgeLength, rampLength, bankY,
+      // deckY is the planks' top and collision surface, with short ramps
+      // connecting to each existing bank instead of a floating 0.6 m step.
+      deckY: Math.max(...bankY) + 0.1,
+    });
     add('fishing', P.fishing.x, P.fishing.z, Math.atan2(...this._riverDir(P.fishing)));
     add('mast', P.mast.x, P.mast.z, 0.3);
     add('highwaybridge', 0, this.highway.z, 0);
@@ -556,7 +573,13 @@ export class World {
       const dx = x - o.x, dz = z - o.z;
       const along = dx * Math.sin(o.rot) + dz * Math.cos(o.rot);
       const across = dx * Math.cos(o.rot) - dz * Math.sin(o.rot);
-      if (Math.abs(across) < 1.15 && Math.abs(along) < o.length / 2 + 0.4) return o.deckY;
+      if (Math.abs(across) >= 1.3) continue;
+      const distance = Math.abs(along), half = o.length / 2;
+      if (distance <= half) return o.deckY;
+      if (distance < half + o.rampLength) {
+        const bankY = o.bankY[along < 0 ? 0 : 1];
+        return lerp(o.deckY, bankY, (distance - half) / o.rampLength);
+      }
     }
     return null;
   }
@@ -832,7 +855,7 @@ export class World {
       if (z < this.highway.z + this.highway.halfW + 2) c = 0;
       if (c) {
         const water = this.waterAt(x, z);
-        if (water !== null) { const d = water - this.heightAt(x, z); if (d > CONFIG.DEEP_WATER) c = 0; else c += d * 6; }
+        if (water !== null && this.deckAt(x, z) === null) { const d = water - this.heightAt(x, z); if (d > CONFIG.DEEP_WATER) c = 0; else c += d * 6; }
       }
       if (c) {
         if (this.gTrunk[i] > 0.55) c = 0; // big trunk fills the cell

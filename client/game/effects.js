@@ -2,6 +2,7 @@
 // the cold, and peripheral apparitions that are gone when you look straight at them.
 import * as THREE from 'three';
 import { clamp, lerp } from '../../shared/math.js';
+import { horrorCues } from '../../shared/horror.js';
 
 function puffTexture() {
   const cv = document.createElement('canvas'); cv.width = cv.height = 128;
@@ -71,9 +72,9 @@ export class AnomalyFX {
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 1.9), m);
     this.mesh.geometry.translate(0, 0.95, 0);
     this.mesh.visible = false; scene.add(this.mesh);
-    this.cool = 30; this.life = 0; this.count = 0;
+    this.cool = 60; this.life = 0; this.count = 0;
   }
-  reset() { this.mesh.visible = false; this.cool = 30; this.count = 0; }
+  reset() { this.mesh.visible = false; this.cool = 60; this.count = 0; }
   update(dt, camera, terror) {
     const m = this.mesh;
     const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
@@ -81,12 +82,13 @@ export class AnomalyFX {
       this.life -= dt;
       const to = m.position.clone().setY(m.position.y + 1.2).sub(camera.position).normalize();
       const looked = to.dot(fwd) > Math.cos(THREE.MathUtils.degToRad(24));
-      if (looked || this.life <= 0 || terror < 0.25) { m.visible = false; this.cool = lerp(70, 28, terror) + Math.random() * 30; }
+      if (looked || this.life <= 0 || terror < 0.75) { m.visible = false; this.cool = 90 + Math.random() * 50; }
       else m.lookAt(camera.position.x, m.position.y, camera.position.z);
       return m.visible;
     }
-    this.cool -= dt * (terror > 0.45 ? 1 : 0);
-    if (this.cool > 0 || terror < 0.45) return false;
+    const eligible = horrorCues(terror).anomaly;
+    this.cool -= dt * (eligible ? 1 : 0);
+    if (this.cool > 0 || !eligible) return false;
     // somewhere 55-80 degrees off the view axis, 18-32 m out, standing in the trees
     const yaw = Math.atan2(fwd.x, fwd.z), side = Math.random() < 0.5 ? -1 : 1;
     for (let k = 0; k < 8; k++) {

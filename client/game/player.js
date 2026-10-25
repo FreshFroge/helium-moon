@@ -97,7 +97,9 @@ export class PlayerController {
     this.pos.y += this.vel.y * dt;
     const support = supportHeight(this.world, this.pos.x, this.pos.z, this.pos.y);
     if (this.pos.y <= support + 0.02) {
-      if (!this.grounded && this.vel.y < -4) { this.landDip = Math.min(0.25, -this.vel.y * 0.025); this.onLand && this.onLand(-this.vel.y); }
+      // A normal jump lands below 4 m/s after discrete gravity integration.
+      // Include it without adding footfalls for tiny grounded height changes.
+      if (!this.grounded && this.vel.y < -2) { this.landDip = Math.min(0.25, -this.vel.y * 0.025); this.onLand && this.onLand(-this.vel.y); }
       this.pos.y = this.grounded && support - this.pos.y < P.STEP_HEIGHT ? lerp(this.pos.y, support, Math.min(1, dt * 18)) : support;
       if (support > this.pos.y) this.pos.y = support;
       this.vel.y = 0; this.grounded = true;

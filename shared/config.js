@@ -43,11 +43,15 @@ export const CONFIG = {
 
   // ---------------------------------------------------------------- Helium Voice terror radius
   TERROR: {
-    OUTER: 120, MIDDLE: 80, INNER: 40, CRITICAL: 15,
+    OUTER: 80, MIDDLE: 50, INNER: 25, CRITICAL: 10,
     SMOOTH_IN: 0.35,               // how fast the felt terror rises (per second, exponential)
-    SMOOTH_OUT: 0.12,              // how slowly it fades back
+    SMOOTH_OUT: 0.2,               // recover after moving away rather than carrying every cue far out
     BASE_TEMP_C: 14,               // late October night
     MIN_TEMP_C: -4,                // temperature felt at the critical ring
+    STRONG_CUE_START: 0.68,        // distant proximity should suggest cold, not broadcast a location
+    FLICKER_START: 0.78,
+    ANOMALY_START: 0.84,
+    SIGHT_STINGER_DISTANCE: 25, SIGHT_STINGER_COOLDOWN: 50,
   },
 
   // ---------------------------------------------------------------- monsters
@@ -58,11 +62,17 @@ export const CONFIG = {
     ATTACK_RANGE: 1.7, ATTACK_COOLDOWN: 2.4, LOSE_TIME: 6.5, SEARCH_TIME: 24,
     OBSERVE_MIN: 35, OBSERVE_MAX: 70, // preferred observation distance band
     SIGNATURE_PROB: 0.4, SIGNATURE_FIRST_PROB: 0.75, SIGNATURE_COOLDOWN: 95, // uploaded .ogg on first sighting
+    FOOTSTEP_FADE_START: 6, FOOTSTEP_MAX_DISTANCE: 22,
+    FOOTSTEP_STALK_GAIN: 0.45, FOOTSTEP_CHASE_GAIN: 0.8,
   },
   SF: {
+    MODEL_SCALE: 0.6,               // keep the creature low and partially concealed in undergrowth
     SNEAK: 1.1, SCURRY: 4.6, DART: 7.0,
     SENSE_RADIUS: 26, AMBUSH_RADIUS: 7.5, GAS_RADIUS: 9, GAS_LIFE: 24, GAS_COOLDOWN: 28,
     BITE_RANGE: 1.4,
+    FOOTSTEP_FADE_START: 3, FOOTSTEP_MAX_DISTANCE: 12, FOOTSTEP_GAIN: 0.6,
+    VOCAL_FADE_START: 6, VOCAL_MAX_DISTANCE: 18, VOCAL_GAIN: 0.6,
+    DANGER_FADE_START: 12, DANGER_MAX_DISTANCE: 26,
   },
 
   // ---------------------------------------------------------------- voice chat + mimicry

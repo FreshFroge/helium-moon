@@ -7,6 +7,7 @@ import * as S from './synth.js';
 import { impulse, rngFor } from './dsp.js';
 import { assetUrl } from '../render/textures.js';
 import { clamp, lerp, smoothstep } from '../../shared/math.js';
+import { horrorCues, distanceGain, creatureFootstepCue, skunkVocalCue } from '../../shared/horror.js';
 import { SURFACE } from '../../shared/world.js';
 
 const SURF_NAME = { [SURFACE.LITTER]: 'litter', [SURFACE.DIRT]: 'dirt', [SURFACE.MUD]: 'mud', [SURFACE.GRASS]: 'grass', [SURFACE.SILT]: 'silt', [SURFACE.WATER]: 'water', [SURFACE.GRAVEL]: 'gravel', [SURFACE.WOOD]: 'wood', [SURFACE.ASPHALT]: 'asphalt' };
@@ -54,7 +55,7 @@ export class AudioEngine {
     for (let i = 0; i < 3; i++) { add('owl' + i, () => S.owl(20 + i)); add('creak' + i, () => S.creak(30 + i)); add('snap' + i, () => S.twigSnap(40 + i)); add('frog' + i, () => S.frog(50 + i)); }
     add('coyote0', () => S.coyotes(60)); add('coyote1', () => S.coyotes(61)); add('train', () => S.trainHorn(62)); add('dog0', () => S.dogBark(63));
     for (const k of ['litter', 'dirt', 'mud', 'grass', 'silt', 'water', 'gravel', 'wood', 'asphalt', 'brush']) for (let i = 0; i < 4; i++) add(`fs_${k}${i}`, () => S.footstep(k, 100 + i * 7 + k.length));
-    for (let i = 0; i < 3; i++) { add('in' + i, () => S.breath(200 + i, true, false)); add('out' + i, () => S.breath(210 + i, false, false)); add('inH' + i, () => S.breath(220 + i, true, true)); add('outH' + i, () => S.breath(230 + i, false, true)); }
+    for (let i = 0; i < S.PLAYER_BREATH_VARIANTS; i++) { add('in' + i, () => S.playerBreath(200 + i, true, false)); add('out' + i, () => S.playerBreath(210 + i, false, false)); add('inH' + i, () => S.playerBreath(220 + i, true, true)); add('outH' + i, () => S.playerBreath(230 + i, false, true)); }
     add('heart', () => S.heartbeat()); add('clickOn', () => S.click(1, true)); add('clickOff', () => S.click(2, false)); add('paper', () => S.paper(3)); add('clink', () => S.clink(4));
     for (const k of ['gen', 'relay', 'mast']) add('work_' + k, () => S.work(k, 5));
     add('genLoop', () => S.generatorLoop(6)); add('hum', () => S.humLoop()); add('siren', () => S.sirenLoop()); add('radio', () => S.radioCall(7));
@@ -152,15 +153,17 @@ export class AudioEngine {
   play(buf, o = {}) {
     if (!this.ready || !buf || !this.ctx) return null;
     const ctx = this.ctx;
+    const rangeGain = o.pos && o.range ? distanceGain(Math.hypot(o.pos.x - this.listener.x, o.pos.y - this.listener.y, o.pos.z - this.listener.z), o.range) : 1;
+    if (rangeGain === 0) return null;
     const src = ctx.createBufferSource(); src.buffer = buf;
     src.playbackRate.value = o.rate || 1; src.loop = !!o.loop;
     let h;
     if (o.pos) {
-      const e = this.emitter({ bus: o.bus || 'sfx', ref: o.ref || 4, rolloff: o.rolloff ?? 1.15, reverb: o.reverb ?? 0.25, gain: o.gain ?? 1 });
+      const e = this.emitter({ bus: o.bus || 'sfx', ref: o.ref || 4, rolloff: o.rolloff ?? 1.15, reverb: o.reverb ?? 0.25, gain: (o.gain ?? 1) * rangeGain });
       e.setPos(o.pos.x, o.pos.y, o.pos.z);
       e.occlude(o.occlude === false ? 1 : this.visibility(o.pos.x, o.pos.y, o.pos.z), 0.001);
       src.connect(e.input);
-      h = { src, e };
+      h = { src, e, range: o.range, baseGain: o.gain ?? 1 };
     } else {
       const gn = ctx.createGain(); gn.gain.value = o.gain ?? 1;
       let node = src;
@@ -170,6 +173,7 @@ export class AudioEngine {
       h = { src, gn };
     }
     h.stop = (fadeT = 0.05) => {
+      h.stopping = true;
       try {
         const g = h.e ? h.e.out.gain : h.gn.gain; g.setTargetAtTime(0, ctx.currentTime, fadeT / 3);
         src.stop(ctx.currentTime + fadeT + 0.05);
@@ -197,6 +201,15 @@ export class AudioEngine {
       L.forwardX.setValueAtTime(f.x, t); L.forwardY.setValueAtTime(f.y, t); L.forwardZ.setValueAtTime(f.z, t);
       L.upX.setValueAtTime(up.x, t); L.upY.setValueAtTime(up.y, t); L.upZ.setValueAtTime(up.z, t);
     } else { L.setPosition(p.x, p.y, p.z); L.setOrientation(f.x, f.y, f.z, up.x, up.y, up.z); }
+    // Re-evaluate range for already-playing creature sounds too: walking away
+    // should not leave a loud step or skunk call hanging beyond its cutoff.
+    for (const h of this.active) {
+      if (!h.e || !h.range || h.stopping) continue;
+      const e = h.e, t = this.ctx.currentTime;
+      const gain = distanceGain(Math.hypot(e.x - p.x, e.y - p.y, e.z - p.z), h.range) * h.baseGain;
+      if (gain === 0) { e.out.gain.cancelScheduledValues(t); e.out.gain.setValueAtTime(0, t); }
+      else e.out.gain.setTargetAtTime(gain, t, 0.025);
+    }
   }
 
   // ---------------------------------------------------------------- loops (ambience + fear layer)
@@ -237,25 +250,26 @@ export class AudioEngine {
     const ctx = this.ctx, t = ctx.currentTime, w = this.world, L = this.listener;
     Object.assign(this.state, st);
     const terr = st.terror || 0;
+    const cues = horrorCues(terr);
     // the night goes quiet as he gets close: insects first, then everything
-    const insects = (1 - smoothstep(0.04, 0.32, terr)) * (st.menu ? 0.6 : 1);
+    const insects = cues.insects * (st.menu ? 0.6 : 1);
     this.setLoopGain(this.loops.crickets, 0.55 * insects, 0.6);
     this.setLoopGain(this.loops.katydids, 0.32 * insects * (0.7 + 0.3 * Math.sin(t * 0.05)), 0.6);
     const rd = w ? w.riverDistAt(L.x, L.z) : 100;
     this.setLoopGain(this.loops.river, 0.55 * Math.pow(clamp(1 - rd / 75, 0, 1), 2) * (1 - 0.6 * terr), 0.5);
-    this.setLoopGain(this.loops.wind, (0.28 + 0.12 * Math.sin(t * 0.13)) * (1 - 0.5 * smoothstep(0.5, 1, terr)) + 0.15 * (st.cold || 0), 0.8);
+    this.setLoopGain(this.loops.wind, (0.28 + 0.12 * Math.sin(t * 0.13)) * (1 - 0.35 * smoothstep(0.7, 1, terr)) + 0.06 * (st.cold || 0), 0.8);
     const hw = w?.poi?.highway;
     const hd = hw ? Math.hypot(L.x - hw.x, L.z - hw.z) : 800;
     this.setLoopGain(this.loops.traffic, (0.1 + 0.4 * clamp(1 - hd / 500, 0, 1)) * (1 - smoothstep(0.55, 0.9, terr)), 1);
     // fear layer
     const cold = st.cold || 0;
-    this.cold.g.gain.setTargetAtTime(0.09 * cold * cold, t, 0.5);
+    this.cold.g.gain.setTargetAtTime(0.04 * cold * cold, t, 0.5);
     this.cold.bp.frequency.setTargetAtTime(1500 + 700 * Math.sin(t * 0.37) + 300 * Math.sin(t * 1.1), t, 0.3);
     this.cold.bp2.frequency.setTargetAtTime(2500 + 600 * Math.sin(t * 0.23 + 1), t, 0.3);
-    this.drone.g.gain.setTargetAtTime(0.16 * smoothstep(0.25, 0.9, terr), t, 0.8);
+    this.drone.g.gain.setTargetAtTime(0.065 * cues.drone, t, 0.8);
     this.drone.lp.frequency.setTargetAtTime(120 + 260 * terr, t, 0.5);
-    this.drone.high.gain.setTargetAtTime(0.012 * smoothstep(0.45, 1, terr), t, 1.2);
-    this.drone.tin.gain.setTargetAtTime(0.008 * (st.critical || 0) + 0.006 * (st.gas || 0), t, 0.6);
+    this.drone.high.gain.setTargetAtTime(0.004 * cues.highTone, t, 1.2);
+    this.drone.tin.gain.setTargetAtTime(0.003 * (st.critical || 0) + 0.006 * (st.gas || 0), t, 0.6);
     const muffle = Math.max(st.gas || 0, (st.downed || 0) * 0.6);
     this.hear.frequency.setTargetAtTime(lerp(20000, 650, muffle), t, 0.3);
     if (!st.inGame) return;
@@ -263,24 +277,24 @@ export class AudioEngine {
     const exert = st.exert || 0, fear = st.fear || 0;
     this.breathT -= dt;
     if (this.breathT <= 0) {
-      const heavy = exert > 0.45 || fear > 0.6;
-      const vol = clamp(exert * 0.55 + fear * 0.45 + (st.downed ? 0.4 : 0), 0, 1);
-      const rate = 1 + exert * 0.9 + fear * 0.6;
-      const k = (Math.random() * 3) | 0;
-      const name = (this.breathIn ? 'in' : 'out') + (heavy ? 'H' : '') + k;
-      if (vol > 0.06) this.play(this.lib[name], { bus: 'sfx', gain: vol * 0.55, rate: lerp(0.95, 1.1, exert) });
-      if (!this.breathIn && this.onExhale) this.onExhale(vol);
-      const dur = this.lib[name].duration / lerp(0.95, 1.1, exert);
-      this.breathT = (this.breathIn ? dur * 0.9 : dur + 0.6) / rate;
+      const mix = S.playerBreathMix(exert, fear, st.downed || 0);
+      const k = (Math.random() * S.PLAYER_BREATH_VARIANTS) | 0;
+      const name = (this.breathIn ? 'in' : 'out') + (mix.heavy ? 'H' : '') + k;
+      this.play(this.lib[name], { bus: 'sfx', gain: mix.gain, rate: mix.rate });
+      if (!this.breathIn && this.onExhale) this.onExhale(mix.visualStrength);
+      const dur = this.lib[name].duration / mix.rate;
+      const gap = this.breathIn ? mix.inhaleGap : mix.exhaleGap;
+      this.breathT = (dur + gap) * (0.94 + Math.random() * 0.12);
       this.breathIn = !this.breathIn;
     }
     // heartbeat
-    if (fear > 0.12) {
+    const heart = Math.max(cues.heartbeat * 0.7, smoothstep(0.8, 1, fear), st.downed ? 0.8 : 0);
+    if (heart > 0.02) {
       this.heartT -= dt;
       if (this.heartT <= 0) {
         const bpm = 68 + 95 * fear;
         this.heartT = 60 / bpm;
-        this.play(this.lib.heart, { bus: 'sfx', gain: 0.9 * smoothstep(0.12, 0.65, fear), rate: 1 + fear * 0.1 });
+        this.play(this.lib.heart, { bus: 'sfx', gain: 0.55 * heart, rate: 1 + fear * 0.1 });
         if (this.onBeat) this.onBeat();
       }
     }
@@ -295,7 +309,7 @@ export class AudioEngine {
   }
 
   _wildlife(dt, terr) {
-    const T = this.timers, quiet = terr > 0.2;
+    const T = this.timers, quiet = horrorCues(terr).quietWildlife;
     for (const k in T) T[k] -= dt * (quiet ? 0.15 : 1);
     if (quiet) return;
     if (T.owl <= 0) { T.owl = 25 + Math.random() * 55; this.play(this.pick('owl', 3, (Math.random() * 9) | 0), { pos: this._randPos(50, 140, 9), gain: 0.55, ref: 12, reverb: 0.5, occlude: false }); }
@@ -316,13 +330,15 @@ export class AudioEngine {
     const name = info.water > 0.12 ? 'water' : SURF_NAME[info.surface] || 'dirt';
     const k = (Math.random() * 4) | 0;
     const g = (0.25 + info.loud * 0.55) * (pos ? 1.3 : 0.75);
+    const cue = pos ? creatureFootstepCue(info.creature, info.speed) : null;
+    const sourceGain = cue ? cue.gain : 1;
     const rate = 0.92 + Math.random() * 0.16;
-    if (pos) this.play(this.lib[`fs_${name}${k}`], { pos, gain: g, rate, ref: 3, reverb: 0.15 });
+    if (pos) this.play(this.lib[`fs_${name}${k}`], { pos, gain: g * sourceGain, rate, ref: 3, reverb: cue ? 0.07 : 0.15, range: cue });
     else this.play(this.lib[`fs_${name}${k}`], { gain: g, rate, pan: (this._foot = !this._foot) ? -0.12 : 0.12 });
     if (info.brush > 0.35 && info.speed > 0.6) {
       const b = this.lib[`fs_brush${(Math.random() * 4) | 0}`];
       const bg = clamp((info.brush - 0.3) * 1.2, 0, 1) * (0.25 + info.loud * 0.5);
-      if (pos) this.play(b, { pos, gain: bg * 1.3, rate, ref: 3 }); else this.play(b, { gain: bg * 0.7, rate });
+      if (pos) this.play(b, { pos, gain: bg * 1.3 * sourceGain, rate, ref: 3, ...(cue ? { reverb: 0.07, range: cue } : {}) }); else this.play(b, { gain: bg * 0.7, rate });
     }
   }
 
@@ -336,10 +352,12 @@ export class AudioEngine {
   signature(pos) { return this.play(this.lib.signature, { pos, bus: 'mon', gain: 1.35, ref: 7, reverb: 0.4 }); }
 
   sfVocal(kind, seed, pos) {
+    const cue = skunkVocalCue(kind);
+    if (pos && distanceGain(Math.hypot(pos.x - this.listener.x, pos.y - this.listener.y, pos.z - this.listener.z), cue) === 0) return null;
     const key = `sf_${kind}_${seed % 4}`;
     if (!this.var[key]) this.var[key] = this.toBuffer(S.sfVocal(SF_KINDS.includes(kind) ? kind : 'breath', seed % 4 + 1));
     const loud = { rumble: 2.0, growl: 1.5, warn: 1.4, gas: 1.6, bite: 1.6, chitter: 0.8, breath: 0.6, rustle: 0.9 }[kind] || 1;
-    return this.play(this.var[key], { pos, bus: 'mon', gain: loud, ref: kind === 'rumble' ? 8 : 3, reverb: 0.3 });
+    return this.play(this.var[key], { pos, bus: 'mon', gain: loud * cue.gain, ref: kind === 'rumble' ? 5 : 3, reverb: 0.15, range: cue });
   }
 
   stinger(kind, gain = 0.8) { return this.play(this.lib['st_' + kind], { bus: 'sfx', gain, reverb: 0.3 }); }

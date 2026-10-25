@@ -9,6 +9,7 @@ import { NOTES } from '../../shared/sim/objectives.js';
 import { HV_STATES } from '../../shared/sim/heliumVoice.js';
 import { SF_STATES } from '../../shared/sim/skunk.js';
 import { clamp, lerp, smoothstep, pointAtDistance } from '../../shared/math.js';
+import { terrorAtDistance, horrorCues } from '../../shared/horror.js';
 import { Renderer } from '../render/renderer.js';
 import { TextureBank } from '../render/textures.js';
 import { G } from '../render/shaderlib.js';
@@ -95,6 +96,11 @@ export class Game {
     progress(0.72, 'Recording the night');
     this.audio = new AudioEngine(set);
     await this.audio.init(world, (f) => progress(0.72 + f * 0.16, 'Recording the night'));
+    this.player.onFootstep = (info) => this.audio.footstep(info);
+    this.player.onLand = (impact) => this.audio.footstep({
+      surface: this.player.surface, water: this.player.inWater, brush: this.player.inBrush,
+      loud: clamp(impact / 8, 0.5, 1), speed: 0,
+    });
     this.audio.onExhale = (v) => this._exhale(v);
     this.audio.onBeat = () => { this.heartPulse = 1; };
     this.voice = new VoiceSystem(this.audio, set, {
@@ -167,7 +173,15 @@ export class Game {
     ];
   }
 
-  detach() { for (const f of this.offs) f(); this.offs = []; }
+  detach() {
+    for (const f of this.offs) f(); this.offs = [];
+    const previous = this.net;
+    this.net = null; this.lobby = null; this.myId = null;
+    // Unsubscribe before closing so an intentional mode change cannot trigger
+    // the old connection's disconnect handler and send us back to the menu.
+    if (previous) previous.close();
+    this.voice && this.voice.dropAllPeers();
+  }
 
   startSingle(name) {
     this.audio.resume();
@@ -241,9 +255,8 @@ export class Game {
 
   quitToMenu(silent = false) {
     this._endSessionCleanup();
-    if (this.net) { if (this.net.networked) this.net.send({ t: 'leave' }); this.net.close(); }
-    this.detach(); this.net = null; this.lobby = null;
-    this.voice.dropAllPeers();
+    if (this.net && this.net.networked) this.net.send({ t: 'leave' });
+    this.detach();
     for (const a of this.avatars.values()) a.dispose(this.scene);
     this.avatars.clear();
     this.objViews.clear();
@@ -325,7 +338,7 @@ export class Game {
       case 'hv_vocal': A.hvVocal(e.k, e.s, pos); if (this._near(pos, 45)) this.voice.suppress(2); break;
       case 'hv_sig': A.signature(pos); this.voice.suppress(2.6); this.fearKick = Math.max(this.fearKick || 0, this._near(pos, 60) ? 0.5 : 0.2); break;
       case 'sf_vocal': A.sfVocal(e.k, e.s, pos); break;
-      case 'snap': A.at('snap' + ((e.id || 0) % 3), { x: e.x, y: e.y + 0.2, z: e.z }, { gain: 1.2, ref: 6 }); break;
+      case 'snap': A.at('snap' + ((e.seq || 0) % 3), { x: e.x, y: e.y + 0.2, z: e.z }, { gain: 1.2, ref: 6 }); break;
       case 'chase':
         this.chasing = !!e.on;
         if (e.on && (e.pid === this.myId || this.hvDist < 70)) { A.stinger('chase', 0.9); this.fearKick = 1; }
@@ -339,7 +352,7 @@ export class Game {
         else { const a = this.avatars.get(e.pid); if (a) A.at('down', { x: a.pos.x, y: a.pos.y + 1, z: a.pos.z }, { gain: 1.1, ref: 6 }); this.ui.toast(`${this._name(e.pid)} ${e.type === 'dead' ? 'is gone' : 'is down'}.`, 3500); }
         break;
       case 'revived': if (e.pid !== this.myId) this.ui.toast(`${this._name(e.by)} revived ${this._name(e.pid)}.`, 3000); break;
-      case 'gas': A.sfVocal('gas', e.id || 1, pos); break;
+      case 'gas': A.sfVocal('gas', e.seq || 1, pos); break;
       case 'objective': {
         const s = this.objViews.stations.get(e.id);
         this.ui.toast({ gen: 'The generator coughs and catches.', relay: 'The relay box hums back to life.', mast: 'Distress call sent. A county unit is responding to the highway bridge.' }[e.id] || 'Objective complete.', 5000);
@@ -408,11 +421,15 @@ export class Game {
 
   step(dt, render = true) {
     const t0 = performance.now();
-    G.uTime.value += dt;
+    // A solo pause freezes both the sim and client-owned gameplay (battery,
+    // movement, session clock and effects). Keep real time for UI/audio and
+    // rendering; multiplayer continues while a player's pause menu is open.
+    const gameplayDt = this.paused && this.net && !this.net.networked ? 0 : dt;
+    G.uTime.value += gameplayDt;
     if (this.net && this.net.tick && !(this.paused && !this.net.networked)) this.net.tick(dt);
-    if (this.mode === 'playing' || this.mode === 'ended') this._updatePlaying(dt);
+    if (this.mode === 'playing' || this.mode === 'ended') this._updatePlaying(gameplayDt);
     else this._menuCamera(dt);
-    this.env.update(dt, this.camera, this.terror);
+    this.env.update(gameplayDt, this.camera, this.terror);
     this.audio.setListener(this.camera);
     this.audio.update(dt, { terror: this.terror, fear: this.fear, cold: this.cold, exert: this.exert || 0, gas: this.gasFx, downed: this.player.downed, critical: this.critical, inGame: this.mode === 'playing' && !this.paused, menu: this.mode !== 'playing' });
     const meP = this.player.pos;
@@ -516,6 +533,10 @@ export class Game {
     // ---- flashlight + breath + anomalies
     const walkBob = Math.sin(pl.bobT) * clamp(pl.speed / 2, 0, 1);
     fl.update(dt, this.camera, this.terror, { walkBob, gas: this.gasFx, off: dead });
+    this.objViews.update(dt, this.sessionT, {
+      on: fl.on, pos: fl.light.position, dir: fl.dir,
+      k: fl.light.intensity / CONFIG.FLASHLIGHT.INTENSITY,
+    });
     this.breath.update(dt);
     // eye/camera adaptation: a beam landing on something close floods the view, so exposure drops
     const lit = fl.on && fl.light.intensity > 5 && !dead;
@@ -589,32 +610,28 @@ export class Game {
     const hv = this.hv, w = this.world;
     if (hv.root.visible && hv.speed > 2.2 && hv.moved < 3) {
       hv.stepAcc += hv.moved;
-      if (hv.stepAcc > 1.35) { hv.stepAcc = 0; this.audio.footstep({ surface: w.surfaceAt(hv.pos.x, hv.pos.z), water: 0, brush: w.gridAt(w.gBrush, hv.pos.x, hv.pos.z), loud: 1, speed: hv.speed }, { x: hv.pos.x, y: hv.pos.y + 0.1, z: hv.pos.z }); }
+      if (hv.stepAcc > 1.35) { hv.stepAcc = 0; this.audio.footstep({ creature: 'hv', surface: w.surfaceAt(hv.pos.x, hv.pos.z), water: 0, brush: w.gridAt(w.gBrush, hv.pos.x, hv.pos.z), loud: hv.speed >= CONFIG.HV.CHASE * 0.8 ? 1 : 0.35, speed: hv.speed }, { x: hv.pos.x, y: hv.pos.y + 0.1, z: hv.pos.z }); }
     }
     const sf = this.sf;
     if (sf.root.visible && sf.speed > 0.6) {
       sf._acc = (sf._acc || 0) + sf.speed * dt;
-      if (sf._acc > 0.9) { sf._acc = 0; const b = w.gridAt(w.gBrush, sf.pos.x, sf.pos.z); this.audio.footstep({ surface: w.surfaceAt(sf.pos.x, sf.pos.z), water: 0, brush: Math.max(0.5, b), loud: 0.2, speed: 2 }, { x: sf.pos.x, y: sf.pos.y + 0.2, z: sf.pos.z }); }
+      if (sf._acc > 0.9) { sf._acc = 0; const b = w.gridAt(w.gBrush, sf.pos.x, sf.pos.z); this.audio.footstep({ creature: 'sf', surface: w.surfaceAt(sf.pos.x, sf.pos.z), water: 0, brush: Math.max(0.5, b), loud: 0.2, speed: 2 }, { x: sf.pos.x, y: sf.pos.y + 0.2, z: sf.pos.z }); }
     }
   }
 
   _terror(dt, hs) {
     const pl = this.player;
     let d = 1e9;
-    if (hs && !(hs[7] & 8)) d = Math.hypot(hs[0] - pl.pos.x, hs[2] - pl.pos.z);
+    if (hs && !(hs[7] & 8)) d = Math.hypot(hs[0] - pl.pos.x, hs[1] - pl.pos.y, hs[2] - pl.pos.z);
     this.hvDist = d;
-    let target;
-    if (d >= T.OUTER) target = 0;
-    else if (d >= T.MIDDLE) target = lerp(0, 0.3, (T.OUTER - d) / (T.OUTER - T.MIDDLE));
-    else if (d >= T.INNER) target = lerp(0.3, 0.6, (T.MIDDLE - d) / (T.MIDDLE - T.INNER));
-    else if (d >= T.CRITICAL) target = lerp(0.6, 0.88, (T.INNER - d) / (T.INNER - T.CRITICAL));
-    else target = lerp(0.88, 1, (T.CRITICAL - d) / T.CRITICAL);
+    let target = terrorAtDistance(d);
     if (this.myState === 'dead' || this.ended) target = 0;
     this.terror = target > this.terror ? Math.min(target, this.terror + dt * T.SMOOTH_IN) : Math.max(target, this.terror - dt * T.SMOOTH_OUT);
     const tr = this.terror;
-    this.cold = smoothstep(0.0, 0.32, tr);                         // outer ring: the air goes cold first
+    const cues = horrorCues(tr);
+    this.cold = cues.cold;                                       // outer ring: subtle cold before stronger cues
     this.temp = lerp(T.BASE_TEMP_C, T.MIN_TEMP_C, smoothstep(0, 0.9, tr));
-    this.critical = smoothstep(0.86, 1, tr);
+    this.critical = smoothstep(0.9, 1, tr);
     // did I just see him?
     this.sightCool -= dt;
     let seen = 0;
@@ -628,13 +645,13 @@ export class Game {
         seen = los * (lit || dl < 14 ? 1 : clamp(1 - dl / 40, 0, 1) * 0.6);
       }
     }
-    if (seen > 0.35 && this.sightCool <= 0) { this.audio.stinger('snap', lerp(0.5, 1, clamp(1 - d / 50, 0, 1))); this.sightCool = 28; this.fearKick = Math.max(this.fearKick || 0, 0.8); }
+    if (seen > 0.35 && d < T.SIGHT_STINGER_DISTANCE && this.sightCool <= 0) { this.audio.stinger('snap', lerp(0.35, 0.65, clamp(1 - d / T.SIGHT_STINGER_DISTANCE, 0, 1))); this.sightCool = T.SIGHT_STINGER_COOLDOWN; this.fearKick = Math.max(this.fearKick || 0, 0.55); }
     this.fearKick = Math.max(0, (this.fearKick || 0) - dt * 0.12);
-    const want = Math.max(tr * 0.85, this.chasing && d < 80 ? 0.95 : 0, this.fearKick || 0, this.damage * 0.8, this.myState === 'downed' ? 0.8 : 0, seen * 0.9);
+    const want = Math.max(smoothstep(0.5, 1, tr) * 0.5, this.chasing && d < T.INNER ? 0.95 : 0, this.fearKick || 0, this.damage * 0.8, this.myState === 'downed' ? 0.8 : 0, seen * 0.8);
     this.fear = lerp(this.fear, want, 1 - Math.exp(-dt * (want > this.fear ? 2.5 : 0.25)));
-    pl.tremor = smoothstep(0.55, 1, tr) * 0.55 + this.critical * 0.4;
+    pl.tremor = cues.tremor * 0.25 + this.critical * 0.15;
     const stam = 1 - pl.stamina / CONFIG.PLAYER.STAMINA_MAX;
-    this.exert = clamp(Math.max(stam * 1.1, pl.sprinting ? 0.6 : 0, smoothstep(0.3, 0.9, tr) * 0.7), 0, 1);
+    this.exert = clamp(Math.max(stam * 1.1, pl.sprinting ? 0.6 : 0, smoothstep(0.7, 1, tr) * 0.4), 0, 1);
     G.uTerror.value = tr; G.uCold.value = this.cold;
   }
 
@@ -644,7 +661,7 @@ export class Game {
     const tmp = this._qtmp || (this._qtmp = []);
     const bodies = this._bodies || (this._bodies = []); bodies.length = 0;
     if (this.hv.root.visible) bodies.push([this.hv.pos.x, this.hv.pos.y, this.hv.pos.z, 0.4, 1.95]);
-    if (this.sf.root.visible) bodies.push([this.sf.pos.x, this.sf.pos.y, this.sf.pos.z, 0.55, 1.0]);
+    if (this.sf.root.visible) bodies.push([this.sf.pos.x, this.sf.pos.y, this.sf.pos.z, 0.55 * CONFIG.SF.MODEL_SCALE, CONFIG.SF.MODEL_SCALE]);
     for (const a of this.avatars.values()) if (a.root.visible) bodies.push([a.pos.x, a.pos.y, a.pos.z, 0.35, 1.8]);
     for (let k = 1; k < 48; k++) {
       const t = k * 0.3, x = p.x + d.x * t, y = p.y + d.y * t, z = p.z + d.z * t;
@@ -691,7 +708,7 @@ export class Game {
     if (best) {
       if (best.type === 'pickup') {
         const it = best.it.def;
-        prompt = `<b>${key}</b> ${it.kind === 'note' ? 'Read' : 'Pick up'} ${it.kind === 'note' ? 'note' : it.name.toLowerCase()}`;
+        prompt = `<b>${key}</b> ${it.kind === 'note' ? 'Read' : 'Pick up'} ${it.name.toLowerCase()}`;
         if (inp.hit('interact')) this.net.send({ t: 'act', a: 'pickup', id: best.id });
       } else if (best.type === 'station') {
         const s = best.s.def;

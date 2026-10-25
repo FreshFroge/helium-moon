@@ -92,7 +92,7 @@ export class SkunkAI {
     }
     // flashlight in its eyes up close makes it bolt
     let lit = null;
-    for (const p of sim.playerList) if (playerActive(p)) { const ob = observedBy(this.world, p, this.x, this.y, this.z, 0.7); if (ob.lit && ob.d < 12 && ob.vis > 0.3) lit = p; }
+    for (const p of sim.playerList) if (playerActive(p)) { const ob = observedBy(this.world, p, this.x, this.y, this.z, 0.7 * C.MODEL_SCALE); if (ob.lit && ob.d < 12 && ob.vis > 0.3) lit = p; }
     if (lit && !['retreat', 'rear', 'ambush'].includes(this.state) && this.state !== 'lurk') this.flee(lit);
     // gas lingering players hiding nearby out of cover
     switch (this.state) {
@@ -222,7 +222,7 @@ export class SkunkAI {
     const sim = this.sim;
     if (!force && sim.time - this.vocalT < 8) return;
     this.vocalT = sim.time;
-    sim.emit({ type: 'sf_vocal', k: kind, x: this.x, y: this.y + 0.4, z: this.z, s: (this.rng() * 1e9) | 0 });
+    sim.emit({ type: 'sf_vocal', k: kind, x: this.x, y: this.y + 0.4 * C.MODEL_SCALE, z: this.z, s: (this.rng() * 1e9) | 0 });
   }
 
   snapshot() {

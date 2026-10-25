@@ -7,6 +7,7 @@ import { angleDiff, clamp, lerp } from '../../shared/math.js';
 import { makeTextTexture } from '../render/textures.js';
 import { patchMaterial } from '../render/shaderlib.js';
 import { NOTES } from '../../shared/sim/objectives.js';
+import { CONFIG } from '../../shared/config.js';
 
 // ------------------------------------------------------------------ interpolation
 export class SnapBuffer {
@@ -62,7 +63,7 @@ export class HeliumView {
     this.root.rotation.y = yaw;
     this.moved = prev.distanceTo(this.pos);
     if (this.root.visible) {
-      this.anim.update(dt, { speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4) });
+      this.anim.update(dt, { speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st });
     }
   }
   headPos(out = new THREE.Vector3()) { return out.set(this.pos.x, this.pos.y + 1.78, this.pos.z); }
@@ -74,6 +75,7 @@ export class SkunkView {
   async _load(scene) {
     this.char = await loadCharacter('sf6');
     this.root = this.char.root; this.root.visible = false;
+    this.root.scale.setScalar(CONFIG.SF.MODEL_SCALE);
     scene.add(this.root);
     this.anim = new SkunkAnimator(this.char);
     this.pos = new THREE.Vector3(); this.flags = 16; this.state = 0; this.speed = 0;
@@ -87,11 +89,11 @@ export class SkunkView {
     this.pos.set(x, y, z); this.flags = flags; this.state = st; this.speed = speed;
     this.root.visible = !(flags & 16);
     this.root.position.copy(this.pos); this.root.rotation.y = yaw;
-    if (this.root.visible) this.anim.update(dt, { speed, fast: !!(flags & 1), rear: !!(flags & 2), gas: !!(flags & 4), low: !!(flags & 8), lookYaw: angleDiff(yaw, lookYaw), jaw });
+    if (this.root.visible) this.anim.update(dt, { speed: speed / CONFIG.SF.MODEL_SCALE, fast: !!(flags & 1), rear: !!(flags & 2), gas: !!(flags & 4), low: !!(flags & 8), lookYaw: angleDiff(yaw, lookYaw), jaw });
     // tapetum eyeshine: the eyes throw the flashlight back
     if (this.eyeMat) { const k = 0.45 + shine * 9; this.eyeMat.color.setRGB(k * 0.9, k * 0.85, k * 0.55); }
   }
-  headPos(out = new THREE.Vector3()) { return out.set(this.pos.x + Math.sin(this.root.rotation.y) * 0.55, this.pos.y + 0.42, this.pos.z + Math.cos(this.root.rotation.y) * 0.55); }
+  headPos(out = new THREE.Vector3()) { return this.char.bones.head.getWorldPosition(out); }
 }
 
 // ------------------------------------------------------------------ teammates
