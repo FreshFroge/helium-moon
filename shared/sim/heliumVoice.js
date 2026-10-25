@@ -635,7 +635,10 @@ export class HeliumVoiceAI {
         // The timer advances only while he is truly close; running makes him
         // catch up. A player can still charge into the seven-foot light counter.
         const pd = this.dist(tp), [prowlMin, prowlMax] = C.HUNT_PROWL_RANGE;
-        if (Number.isFinite(this.huntProwlFor) && this.huntProwlT < this.huntProwlFor && pd <= prowlMax + 1) {
+        // Puppet: the final rush comes when they are not looking - at the end of the prowl he
+        // keeps circling (up to HUNT_PROWL_WAIT s) while they watch him
+        const prowlEnd = (this.huntProwlFor ?? 0) + (seenByTarget ? C.HUNT_PROWL_WAIT : 0);
+        if (Number.isFinite(this.huntProwlFor) && this.huntProwlT < prowlEnd && pd <= prowlMax + 1) {
           this.huntProwlT += dt;
           this.huntStall = null; // circling is intentional movement, never a stuck-hunt failure
           this.huntOrbitAt = (this.huntOrbitAt || 0) - dt;
@@ -684,9 +687,14 @@ export class HeliumVoiceAI {
         this.freeLunge = false;
         if (d < 4 && watched) anim.reach = 1;
         if (sim.time < (this.missPauseUntil ?? -1)) { this.stop(dt); anim.still = 1; break; }
-        if (d < C.GRAB_REACH && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
-            && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2) {
-          this.startGrab(tp);
+        // Pinned behind a trunk next to them and nobody is looking: he is simply on their side
+        // of it the next moment (the Puppet moves when unwatched)
+        if (!watched && d < 5 && this.huntStall && sim.time - this.huntStall.t > 1.5 && sim.time - (this.slipT ?? -9) > 3) this.slipAround(tp);
+        // still pinned: his arms reach round it (GRAB_AROUND)
+        const around = d < C.GRAB_AROUND && this.huntStall && sim.time - this.huntStall.t > 1.5;
+        if ((d < C.GRAB_REACH || around) && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
+            && (around || this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2)) {
+          this.startGrab(tp, around);
           lookP = tp;
           break;
         }
@@ -699,7 +707,7 @@ export class HeliumVoiceAI {
         // hold him off that long, so running never ends a hunt.
         const st = this.huntStall || (this.huntStall = { x: this.x, z: this.z, d, t: sim.time });
         if (d < st.d - 0.5) { st.x = this.x; st.z = this.z; st.d = d; st.t = sim.time; }
-        else if (d > C.ATTACK_RANGE && ((sim.time - st.t > C.HUNT_STALL_TIME && Math.hypot(this.x - st.x, this.z - st.z) < 4) || sim.time - st.t > 3 * C.HUNT_STALL_TIME)) {
+        else if (d > C.GRAB_REACH && ((sim.time - st.t > C.HUNT_STALL_TIME && Math.hypot(this.x - st.x, this.z - st.z) < 4) || sim.time - st.t > 3 * C.HUNT_STALL_TIME)) {
           dir.onChaseEnd(false); this.retreatFrom(tp, false); break;
         }
         // A hunt no longer ends by losing sight or by time (owner, Oct 25): with no fresh
@@ -824,7 +832,7 @@ export class HeliumVoiceAI {
   }
 
   // ---- the grab (owner, Puppet rework): replaces the swing. Survive two; the third kills.
-  startGrab(tp) {
+  startGrab(tp, around = false) {
     const sim = this.sim;
     const [fx, fz] = playerFwd(tp);
     const ex = this.x - tp.x, ez = this.z - tp.z, el = Math.hypot(ex, ez) || 1;
@@ -836,7 +844,7 @@ export class HeliumVoiceAI {
       const options = set.filter((k) => k !== this.lastGrabKind);
       kind = options[Math.floor(this.rng() * options.length) % options.length];
     }
-    this.grab = { kind, phase: 'reach', t: sim.time, pid: tp.id };
+    this.grab = { kind, phase: 'reach', t: sim.time, pid: tp.id, around };
     this.anim.grab = 1;
     this.vocalT = sim.time; sim.director.onVocal();   // the scream rides on the hv_attack event
     sim.emit({ type: 'hv_attack', phase: 'reach', kind, pid: tp.id, x: +this.x.toFixed(2), z: +this.z.toFixed(2) });
@@ -851,8 +859,8 @@ export class HeliumVoiceAI {
     if (g.phase === 'reach') {
       if (d > 0.9) moveCharacter(w, this, Math.sin(this.yaw) * 2.4 * dt, Math.cos(this.yaw) * 2.4 * dt, 0.32, { nav: true, slope: false, step: C.STEP_OVER });
       if (sim.time - g.t < C.GRAB_WINDUP) return;
-      const lands = this.dist(tp) < C.GRAB_LAND && Math.abs(this.y - tp.y) < 1.8 && tp.state === 'alive'
-        && w.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2;
+      const lands = this.dist(tp) < (g.around ? C.GRAB_AROUND + 0.3 : C.GRAB_LAND) && Math.abs(this.y - tp.y) < 1.8 && tp.state === 'alive'
+        && (g.around || w.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2);
       if (!lands) {
         sim.emit({ type: 'hv_attack', phase: 'miss', kind: g.kind, pid: tp.id, x: +this.x.toFixed(2), z: +this.z.toFixed(2) });
         this.grab = null; this.attackT = sim.time; this.missPauseUntil = sim.time + C.MISS_PAUSE; return;
@@ -894,6 +902,25 @@ export class HeliumVoiceAI {
     this.awareness.set(tp.id, 0.5);
     // he stays over them, staring, then backs away into the dark facing them
     this.setState('watch', { watchDur: C.LINGER + 3 }); this.lingerUntil = sim.time + C.LINGER;
+  }
+
+  slipAround(tp) {
+    const w = this.world; this.slipT = this.sim.time;
+    const base = Math.atan2(this.x - tp.x, this.z - tp.z);
+    for (let k = 1; k < 12; k++) {
+      const a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6), r = 1.3;
+      const x = tp.x + Math.sin(a) * r, z = tp.z + Math.cos(a) * r;
+      if (!this.outsideSpawn(x, z) || !w.isPlayable?.(x, z)) continue;
+      const fit = moveCharacter(w, { x, y: groundAt(w, x, z), z }, 0, 0, 0.32, { nav: false, slope: false, step: C.STEP_OVER });
+      if (Math.hypot(fit.x - x, fit.z - z) > 0.05) continue;     // inside a trunk
+      if (w.lineOfSight(x, groundAt(w, x, z) + 1, z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) < 0.5) continue;
+      const y = groundAt(w, x, z);
+      if (this.sim.playerList.some((p) => playerActive(p) && onScreen(w, p, x, y, z, HEIGHT, 0.6))) continue;   // never pops into view
+      if (this.place(x, z) === false) continue;
+      this.yaw = this.lookYaw = Math.atan2(tp.x - x, tp.z - z); this.path = null; this.huntStall = null;
+      return true;
+    }
+    return false;
   }
 
   // ---- flashlight inside 7 ft: strings cut

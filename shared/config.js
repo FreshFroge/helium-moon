@@ -85,6 +85,7 @@ export const CONFIG = {
     HUNT_PACE: [0.88, 1.18], HUNT_PACE_INTERVAL: [0.9, 2.3],
     HUNT_CUTOFF_JITTER: [0.65, 1.25],
     HUNT_PROWL_RANGE: [3.66, 4.57], HUNT_PROWL_TIME: [26, 34], // 12-15 ft for about 30 s before the final rush
+    HUNT_PROWL_WAIT: 6,   // Puppet: at the end of the prowl he waits (<= this long) for them to look away before rushing
     HUNT_LUNGE_DIST: 4,   // within this (clear line), the final lunge uses real collision, not the 2 m nav grid
     HUNT_STALL_TIME: 8,   // fail-safe: stuck (moved <1.5 m in 8 s, not in attack range) ends a hunt
     HUNT_HUM_RANGE: 50,
@@ -121,7 +122,7 @@ export const CONFIG = {
     // The grab replaces the swing (owner): reach (GRAB_WINDUP s, the 7-ft flashlight still
     // breaks it), then he holds you for GRAB_HOLD[kind] s and lets go. Damage lands on release.
     // MAX_HEALTH 3: two grabs survived, the third kills (the 'final' grab).
-    GRAB_REACH: 1.5, GRAB_LAND: 2.1, GRAB_WINDUP: 0.45, GRAB_STAND: 0.75,
+    GRAB_REACH: 1.8, GRAB_LAND: 2.3, GRAB_AROUND: 3.1, GRAB_WINDUP: 0.45, GRAB_STAND: 0.75,
     GRAB_HOLD: { shoulders: 1.7, throat: 2.0, face: 1.4, turn: 1.6, drag: 1.5, final: 3.2 },
     // Flashlight within 7 ft: he collapses like his strings were cut. Once nobody has watched
     // him for COLLAPSE_GONE_AFTER s he is gone (unseen, COLLAPSE_AWAY m off). Watched for

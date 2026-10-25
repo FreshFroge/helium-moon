@@ -96,8 +96,9 @@ test('fail-safe: a hunt on a target he cannot reach ends instead of running fore
   const at = pointAtDistance(world.trail, world.trailCum, spot.a - 20); hv.place(at.x, at.z);
   hv.startChase(p);
   let ended = null;
-  for (let t = 0; t < 40 && ended == null; t += 0.05) { sim.step(0.05); for (const e of sim.drainEvents()) if (e.type === 'chase' && !e.on) ended = t; }
-  assert.ok(ended != null && ended < CONFIG.HV.HUNT_STALL_TIME * 3 + 10, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
+  for (let t = 0; t < 60 && ended == null; t += 0.05) { sim.step(0.05); for (const e of sim.drainEvents()) if (e.type === "chase" && !e.on) ended = t; }
+  // the Puppet prowl (+ its wait for them to look away) comes first, then the fail-safe
+  assert.ok(ended != null && ended < CONFIG.HV.HUNT_PROWL_TIME[1] + CONFIG.HV.HUNT_PROWL_WAIT + CONFIG.HV.HUNT_STALL_TIME + 6, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
   assert.equal(sim.director.chasing, false);
 });
 
