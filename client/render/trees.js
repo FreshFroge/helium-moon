@@ -129,8 +129,13 @@ export class TreeSystem {
   _barkMat(bank, b) {
     const mat = new THREE.MeshStandardMaterial({
       map: bank.tex[`bark_${b}_c`], normalMap: bank.tex[`bark_${b}_n`], roughnessMap: bank.tex[`bark_${b}_r`],
-      roughness: 1.0, metalness: 0, normalScale: new THREE.Vector2(1.4, 1.4), envMapIntensity: 0.25,
+      // Render the inward face too. Collision keeps the normal camera outside,
+      // but thin pass-through saplings, camera shake and joined branch shells
+      // must never turn invisible when viewed from their interior side.
+      side: THREE.DoubleSide, roughness: 1.0, metalness: 0,
+      normalScale: new THREE.Vector2(1.4, 1.4), envMapIntensity: 0.25,
     });
+    mat.shadowSide = THREE.FrontSide;
     patchMaterial(mat, {
       wind: 0.35, key: 'bark-' + b,
       onShader: (sh) => {

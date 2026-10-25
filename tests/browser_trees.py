@@ -20,7 +20,9 @@ async def play(port):
             await page.evaluate("game.startSingle('Tree test')")
             result = await page.evaluate('''async()=>{
               const {CONFIG}=await import('/shared/config.js');
+              const THREE=await import('three');
               const ts=game.env.trees,w=game.world;
+              const inwardBark=Object.values(ts.barkMats).every(m=>m.side===THREE.DoubleSide);
               let maxIntrusion=-Infinity,checked=0,worst=null;
               // At standing camera height, every rendered main trunk must stay
               // inside the physical trunk + player capsule clearance. This is
@@ -72,12 +74,13 @@ async def play(port):
                 for(const start of adj.keys())if(!seen.has(start)){loops++;const stack=[start];seen.add(start);while(stack.length){for(const n of adj.get(stack.pop())||[])if(!seen.has(n)){seen.add(n);stack.push(n);}}}
                 maxBoundaryRatio=Math.max(maxBoundaryRatio,loops/components.size);geometries++;
               }
-              return {checked,maxIntrusion,cameraMargin,worst,maxBoundaryRatio,geometries};
+              return {checked,maxIntrusion,cameraMargin,worst,maxBoundaryRatio,geometries,inwardBark};
             }''')
             assert result['checked'] > 100, result
             assert result['cameraMargin'] > .08, result
             assert result['maxBoundaryRatio'] <= 1.01, result
             assert result['geometries'] > 20, result
+            assert result['inwardBark'], result
             assert not errors, errors
             print('PASS closed tree tips and camera-safe bark scale:', result, flush=True)
         finally:

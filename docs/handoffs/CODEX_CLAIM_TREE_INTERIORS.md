@@ -29,6 +29,9 @@ Tree instances now scale horizontally from the same authoritative `trunkR` used
 by the world. Each tube gets a tangent-normal cap with its own planar UVs. A
 camera-only collision allowance covers the trunk's lean through standing eye
 height without widening creature collision or changing AI navigation.
+All bark materials also render their inward face. This final guard prevents a
+thin pass-through sapling, camera shake or a joined branch overlap from making
+the shell disappear when viewed from the back side.
 
 Validation:
 
@@ -40,4 +43,9 @@ Validation:
   within the existing +25% workload budget; quality tiers remain ordered.
 - `npm test`: full suite passes, including deterministic world generation,
   end-to-end trail/objective reachability and both creature stuck regressions.
+
+Follow-up after Claude's Puppet commits through `6dab9ae`: the tree browser
+regression still passes with inward-facing bark. The merged `npm test` now has
+one unrelated deterministic Puppet simulation failure, recorded in
+`CODEX_REVIEW_PUPPET_SLIP_EVENT.md`; the same headless failure reproduces alone.
 
