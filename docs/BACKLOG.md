@@ -27,6 +27,8 @@ possible without waiting on each other:
 
 | 20 | Helium Voice stuck beside fallen log during late-session approach despite director presence requests | shared creature local avoidance, `heliumVoice.js`/`skunk.js` follow methods, route/browser checks | Codex |
 
+| 22 | **Wading exploit (found Oct 25, Claude):** players can stand in the river shallows (e.g. by River Bend Overlook), which are not walkable for Helium Voice, so he can never reach them. A stuck-hunt fail-safe now ends such hunts after ~12 s instead of letting them run forever (`HUNT_STALL_TIME`), but the real fix is letting him wade where players can | `shared/world.js` nav / `heliumVoice.js` paths (Codex #20 area) | — |
+
 ## Done
 
 | # | Item | Commit / evidence |
@@ -57,3 +59,4 @@ possible without waiting on each other:
 | 18 | Solid-trunk nav blocking and corner-safe route shortcuts | Codex; 114 reopened trunk cells → 0, five navigation regressions, full npm/objective reachability, 16-session pacing, full browser gameplay and planned glimpses; CODEX_NAVIGATION_BLOCKING.md |
 
 | 19 | Downed camera/visibility sampling matches real 0.35 m pose behind low cover | Codex; failing-before actual-camera and four low-cover checks now pass, attack/hiding/server lifecycle pass; CODEX_DOWNED_PERCEPTION.md |
+| 23 | `sim.test` worst-tick check is flaky (33–167 ms on the same commit, also fails on 45dfbf9). Rare spike, not a regression | tests | noted by Claude |

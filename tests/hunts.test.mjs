@@ -52,3 +52,41 @@ test('a hunt requested inside the range starts immediately', () => {
   assert.equal(hv.state, 'chase');
   assert.equal(sim.director.chasing, true);
 });
+
+test('fail-safe: a hunt on a player he cannot reach (wading in the river) ends instead of running forever', () => {
+  // the shallows by the River Bend Overlook: playable for players, not walkable for him
+  let spot = null;
+  for (let a = 220; a < 270 && !spot; a += 7) for (const side of [6, 10, 14, 18]) {
+    const q = pointAtDistance(world.trail, world.trailCum, a);
+    const x = q.x + Math.cos(q.dir) * side, z = q.z - Math.sin(q.dir) * side;
+    if (!world.navWalkable(x, z) && world.isPlayable(x, z) && world.waterAt(x, z) !== null) { spot = { a, x, z }; break; }
+  }
+  assert.ok(spot, 'fixture: a wadeable river spot exists');
+  const { sim, p, hv } = fixture(20, 3);
+  Object.assign(p, { x: spot.x, z: spot.z, y: world.heightAt(spot.x, spot.z) });
+  const at = pointAtDistance(world.trail, world.trailCum, spot.a - 20); hv.place(at.x, at.z);
+  hv.startChase(p);
+  let ended = null;
+  for (let t = 0; t < 40 && ended == null; t += 0.05) { sim.step(0.05); for (const e of sim.drainEvents()) if (e.type === 'chase' && !e.on) ended = t; }
+  assert.ok(ended != null && ended < CONFIG.HV.HUNT_STALL_TIME + 10, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
+  assert.equal(sim.director.chasing, false);
+});
+
+test('running away is not an escape: a sprinting player (9 s stamina) still gets caught', () => {
+  for (const seed of [3, 4, 5]) {
+    const { sim, p, hv } = fixture(30, seed);
+    hv.startChase(p);
+    let along = 530, stamina = CONFIG.PLAYER.STAMINA_MAX, ended = null;
+    for (let t = 0; t < 60 && ended == null; t += 0.05) {
+      const sprint = stamina > 0.2; stamina -= sprint ? 0.05 : -0.05 * CONFIG.PLAYER.STAMINA_REGEN;
+      along += (sprint ? CONFIG.PLAYER.SPRINT : CONFIG.PLAYER.WALK) * 0.05;
+      const q = pointAtDistance(world.trail, world.trailCum, along), back = pointAtDistance(world.trail, world.trailCum, along - 3);
+      Object.assign(p, { x: q.x, z: q.z, y: world.heightAt(q.x, q.z), lastX: q.x, lastZ: q.z, sprint, noise: sprint ? 1 : 0.45 });
+      p.yaw = Math.atan2(back.x - q.x, back.z - q.z);   // facing where they run (away from him)
+      sim.step(0.05);
+      for (const e of sim.drainEvents()) if (e.type === 'chase' && !e.on) ended = t;
+    }
+    assert.ok(ended != null, `seed ${seed}: the hunt ends`);
+    assert.ok(p.health < 2, `seed ${seed}: it ends with a hit, not by outrunning him (ended at ${ended?.toFixed(1)} s)`);
+  }
+});

@@ -558,6 +558,18 @@ export class HeliumVoiceAI {
           this.retreatFrom(tp, false, true);
           break;
         }
+        // Fail-safe, not counterplay: if he is physically stuck (target somewhere he
+        // can't path to, e.g. wading in the river) and has barely moved for
+        // HUNT_STALL_TIME s outside attack range, end the hunt instead of
+        // standing there forever with the hunt hum on.
+        // "Stuck" = not 0.5 m closer for HUNT_STALL_TIME while barely moving (jittering at an
+        // edge), or not closer at all for 3x that. A sprinting player's 9 s of stamina can't
+        // hold him off that long, so running never ends a hunt.
+        const st = this.huntStall || (this.huntStall = { x: this.x, z: this.z, d, t: sim.time });
+        if (d < st.d - 0.5) { st.x = this.x; st.z = this.z; st.d = d; st.t = sim.time; }
+        else if (d > C.ATTACK_RANGE && ((sim.time - st.t > C.HUNT_STALL_TIME && Math.hypot(this.x - st.x, this.z - st.z) < 4) || sim.time - st.t > 3 * C.HUNT_STALL_TIME)) {
+          dir.onChaseEnd(false); this.retreatFrom(tp, false); break;
+        }
         // A hunt no longer ends by losing sight or by time (owner, Oct 25): with no fresh
         // sight or sound for LOSE_TIME, he re-acquires where the player really is every
         // HUNT_TRACK_EVERY s (tracking them by scent/sound) and keeps coming.
@@ -626,7 +638,7 @@ export class HeliumVoiceAI {
       if (this.state !== 'stalk') { this.setState('stalk'); this.replanT = 0; }
       return false;
     }
-    this.closingOn = null; this.trackT = 0;
+    this.closingOn = null; this.trackT = 0; this.huntStall = null;
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time };
     this.setState('chase'); this.replanT = 0;
     this.closeCommitted = true;
