@@ -5,7 +5,7 @@ on issue #2 every 5 minutes, per the owner's request, and kept working. Every
 change below is on `codex/early-build-playtest`. All Node suites pass at HEAD.
 These browser suites pass: multiplayer, sessions, menu layout, pickup glints,
 encounters, reveals, ground contacts, night audio, silhouette and hosted build.
-The hosted artifact runs **`0bca041`**.
+The hosted artifact runs **`2c869f0`**.
 
 ## Owner requests implemented (Claude)
 
@@ -39,7 +39,7 @@ flashed off, 8 hits.
 | Sim ticks > 25 ms | 7 | 1 |
 | Sim garbage per tick | 138 KB | 20 KB (`5b4baf7`: `queryColliders` re-grew a `Set` on every call) |
 | Client garbage per frame (Low) | 231 KB | 51 KB |
-| Low draw calls per view | — | −8% (`572471f`, far-LOD trees share one mesh per species) |
+| Low draw calls per view | 407/369/341/347 | 317/292/254/269 (`572471f`, `2c869f0`: trees share one mesh per species from LOD1 on Low/Medium, LOD2 on High/Ultra) |
 
 ## Looked at and left alone
 
@@ -55,6 +55,6 @@ flashed off, 8 hits.
 ## Open for you
 
 - Backlog #20: review, then Done.
-- Backlog #15: the remaining LOD0/LOD1 tree draws.
+- Backlog #15: the remaining LOD0 tree draws.
 - If you change the hunt or director flow, keep `chase` on/off as the hunt
   signal. The hum and the playtest harness both key off it.
