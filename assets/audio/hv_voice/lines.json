@@ -1,0 +1,78 @@
+{
+ "lines": {
+  "gen_hello": [
+   "gen/hello_1.ogg",
+   "gen/hello_2.ogg"
+  ],
+  "gen_hey": [
+   "gen/hey_1.ogg",
+   "gen/hey_2.ogg"
+  ],
+  "gen_wait": [
+   "gen/wait_1.ogg",
+   "gen/wait_2.ogg"
+  ],
+  "gen_come_here": [
+   "gen/come_here_1.ogg",
+   "gen/come_here_2.ogg"
+  ],
+  "gen_where_are_you": [
+   "gen/where_are_you_1.ogg",
+   "gen/where_are_you_2.ogg"
+  ],
+  "gen_i_heard_you": [
+   "gen/i_heard_you_1.ogg",
+   "gen/i_heard_you_2.ogg"
+  ],
+  "gen_was_that_you": [
+   "gen/was_that_you_1.ogg",
+   "gen/was_that_you_2.ogg"
+  ],
+  "gen_are_you_still_there": [
+   "gen/are_you_still_there_1.ogg",
+   "gen/are_you_still_there_2.ogg"
+  ],
+  "gen_i_can_see_you": [
+   "gen/i_can_see_you_1.ogg",
+   "gen/i_can_see_you_2.ogg"
+  ],
+  "gen_you_left_me": [
+   "gen/you_left_me_1.ogg",
+   "gen/you_left_me_2.ogg"
+  ],
+  "gen_dont_leave": [
+   "gen/dont_leave_1.ogg",
+   "gen/dont_leave_2.ogg"
+  ],
+  "gen_come_back": [
+   "gen/come_back_1.ogg",
+   "gen/come_back_2.ogg"
+  ],
+  "gen_there_you_are": [
+   "gen/there_you_are_1.ogg",
+   "gen/there_you_are_2.ogg"
+  ],
+  "gen_found_you": [
+   "gen/found_you_1.ogg",
+   "gen/found_you_2.ogg"
+  ],
+  "gen_too_slow": [
+   "gen/too_slow_1.ogg",
+   "gen/too_slow_2.ogg"
+  ],
+  "gen_hold_still": [
+   "gen/hold_still_1.ogg",
+   "gen/hold_still_2.ogg"
+  ],
+  "gen_got_you": [
+   "gen/got_you_1.ogg",
+   "gen/got_you_2.ogg"
+  ],
+  "gen_again": [
+   "gen/again_1.ogg",
+   "gen/again_2.ogg"
+  ]
+ },
+ "model": "ZipVoice-Distill (k2-fsa sherpa-onnx ONNX export, zh-en emilia), onnxruntime, 8 Euler steps, guidance 3.0, t_shift 0.5",
+ "prompt": "rec dont_care + got_a_wire (5.85 s) with IPA transcript"
+}

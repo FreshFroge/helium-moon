@@ -29,3 +29,19 @@ per-line timing. No biometric speaker embedding is stored.
 
 If he ever asks for his voice to be removed, delete this folder; the game falls
 back to the synthesized vocals automatically.
+
+## Cloned lines (`gen/`)
+
+At the owner's request ("recreate his voice"), and with the same consent, these
+18 lines were synthesized in his voice:
+- **Model:** zero-shot cloning with ZipVoice-Distill, the k2-fsa sherpa-onnx ONNX
+  export, run on onnxruntime. The model files came from k2-fsa's GitHub releases.
+- **Prompt:** `hv_dont_care` + `hv_got_a_wire` (5.85 s), with its IPA transcript.
+- **Lines:** taken from Codex's recommended list in
+  `docs/SCARE_RESEARCH_CODEX.md`.
+- **Takes:** 3 per line. The 2 best were kept, chosen by a whisper transcript
+  match and wespeaker similarity to his real clips. The kept takes score 0.44–0.74
+  against his voice; his own clips score about 0.78, and an unrelated speaker 0.17.
+
+`lines.json` maps line ids to files. The game chooses lines on the server in
+`shared/sim/voiceLines.js`.
