@@ -110,7 +110,18 @@ export class AudioEngine {
   hvLine(id, pos, take = 0) {
     const bufs = this.lineBufs && this.lineBufs[id];
     if (!bufs || !bufs.length) return null;
-    return this.play(bufs[take % bufs.length], { pos, bus: 'mon', gain: 1.15, rate: 0.97, ref: 3, reverb: 0.2, range: { fadeStart: 12, maxDistance: 24 } });
+    const buf = bufs[take % bufs.length], L = this.listener;
+    const d = Math.hypot(pos.x - L.x, pos.y - L.y, pos.z - L.z);
+    // Codex's near treatment: inside 15 m most (not all) lines turn dry and intimate, with
+    // nonlinear roughness and one unstable double 18-35 ms behind. Texture, never louder, and
+    // some close lines stay clean so the processing never becomes a rangefinder.
+    if (d < 15 && take % 3 !== 0) {
+      const opts = { pos, bus: 'mon', gain: 1.0, rate: 0.97, ref: 3, reverb: 0.04, range: { fadeStart: 12, maxDistance: 24 } };
+      const h = this.play(buf, { ...opts, roughness: 0.18 + (take % 5) * 0.02 });
+      this.play(buf, { ...opts, gain: 0.28, rate: 0.955 + (take % 4) * 0.004, delay: 0.018 + (take % 7) * 0.0025 });
+      return h;
+    }
+    return this.play(buf, { pos, bus: 'mon', gain: 1.15, rate: 0.97, ref: 3, reverb: 0.2, range: { fadeStart: 12, maxDistance: 24 } });
   }
 
   async loadPlayerBreathing() {
@@ -216,7 +227,16 @@ export class AudioEngine {
       const e = this.emitter({ bus: o.bus || 'sfx', ref: o.ref || 4, rolloff: o.rolloff ?? 1.15, reverb: o.reverb ?? 0.25, gain: (o.gain ?? 1) * rangeGain });
       e.setPos(o.pos.x, o.pos.y, o.pos.z);
       e.occlude(o.occlude === false ? 1 : this.visibility(o.pos.x, o.pos.y, o.pos.z), 0.001);
-      src.connect(e.input);
+      if (o.roughness) {
+        // nonlinear "voice past its limits" (Blumstein): irregular 30-60 Hz amplitude roughness
+        const am = ctx.createGain(); am.gain.value = 1 - o.roughness;
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 30 + Math.random() * 25;
+        lfo.frequency.setValueAtTime(lfo.frequency.value, ctx.currentTime);
+        lfo.frequency.linearRampToValueAtTime(30 + Math.random() * 30, ctx.currentTime + (buf.duration || 1));
+        const depth = ctx.createGain(); depth.gain.value = o.roughness;
+        lfo.connect(depth); depth.connect(am.gain); src.connect(am); am.connect(e.input);
+        lfo.start(); lfo.stop(ctx.currentTime + (buf.duration || 1) / (o.rate || 1) + 0.2);
+      } else src.connect(e.input);
       h = { src, e, range: o.range, baseGain: o.gain ?? 1 };
     } else {
       const gn = ctx.createGain(); gn.gain.value = o.gain ?? 1;

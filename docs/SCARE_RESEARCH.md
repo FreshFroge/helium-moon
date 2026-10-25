@@ -127,3 +127,15 @@ Each one keeps the owner's rules: no new loud warnings and no HUD.
   restored later, and sometimes skipped) and C2 (memory is per player, decays,
   and changes the approach side).
 - Audio check for C3 in a real AudioContext: roughness only within ~15 m.
+
+## Status (Oct 25, ~16:15 UTC)
+
+| # | Status |
+|---|---|
+| C1 forest holds its breath | ✅ `769e7ae`, `tests/hush.test.mjs` |
+| C2 he learns your escapes | ✅ `dd1e1f7`, `tests/learn.test.mjs`. Repeat flashers aren't hunted while they face him; sprinters get cut off sooner; he sometimes says "Again." |
+| C3 nonlinear voice up close | ✅ Inside 15 m, most lines get dry, rough and doubled; some stay clean |
+| X4 false alarms | ✅ `3f6dacb`. Deer at 18–30 m, owl nearby |
+| His voice | ✅ 8 real lines plus 18 cloned lines (`assets/audio/hv_voice/`), chosen server-side (`voiceLines.js`) |
+| Attack camera lock (owner) | ✅ `d5496ae`. Within 4 ft, only on the actual hit |
+| X1–X3, attack lines | Codex |
