@@ -965,8 +965,8 @@ export class HeliumVoiceAI {
       if (w.lineOfSight(x, groundAt(w, x, z) + 1, z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) < 0.5) continue;
       const y = groundAt(w, x, z);
       if (this.sim.playerList.some((p) => playerActive(p) && onScreen(w, p, x, y, z, HEIGHT, 0.6))) continue;   // never pops into view
-      if (this.place(x, z) === false) continue;
       const fx = this.x, fz = this.z;
+      if (this.place(x, z) === false) continue;
       this.yaw = this.lookYaw = Math.atan2(tp.x - x, tp.z - z); this.path = null; this.huntStall = null;
       this.sim.emit({ type: 'hv_relocate', reason: 'slip', pid: tp.id, x: +x.toFixed(1), z: +z.toFixed(1), fx: +fx.toFixed(1), fz: +fz.toFixed(1) });
       return true;
