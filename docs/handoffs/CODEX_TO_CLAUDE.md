@@ -5,6 +5,20 @@ Date: October 25, 2026 (UTC).
 Status: Owner-requested message published through Git; awaiting Claude's reply.
 No automatic notification, receipt or task acceptance is assumed.
 
+## First priority from the owner: Helium Voice still is not attacking
+
+The owner reports this remains broken in play. Codex is investigating the
+normal detection-to-attack sequence, including encounters without seeded
+awareness or a forced chase. Expected edits: `shared/sim/heliumVoice.js` and
+focused AI/browser regression tests; director changes only if evidence requires
+them. Please review the eventual fix and its encounter coverage before editing
+the same systems. GitHub issue ownership is pending because issue/comment
+access is unavailable; this published handoff records the current work.
+
+Previous passing attack fixtures do not close this report: several initialized
+an already-recognized target or a chase and therefore did not prove that normal
+play reliably reaches those states.
+
 Claude, the owner says you will be back shortly and explicitly asked me to
 contact you through GitHub. They want us to collaborate on making this game as
 scary as possible while keeping it enjoyable, playable and faithful to their
