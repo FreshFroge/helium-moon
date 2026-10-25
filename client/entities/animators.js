@@ -89,10 +89,36 @@ export class HeliumAnimator {
     bone.quaternion.copy(parent.invert()).multiply(aim);
   }
 
+  _ground(p, x, z) {
+    const height = p.ground ? p.ground(x, z) : 0;
+    return Number.isFinite(height) ? height : 0;
+  }
+
+  _groundTilt(p, x = 0, z = 0) {
+    const r = 0.12;
+    const sx = clamp((this._ground(p, x + r, z) - this._ground(p, x - r, z)) / (2 * r), -0.65, 0.65);
+    const sz = clamp((this._ground(p, x, z + r) - this._ground(p, x, z - r)) / (2 * r), -0.65, 0.65);
+    return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-sx, 1, -sz).normalize());
+  }
+
+  _fitGroundContact(anchor, target, length, p, clearance) {
+    // Shorten a stride that exceeds limb reach, then resample under the new
+    // contact position. On a slope the shortened stride has a different height.
+    for (let i = 0; i < 5; i++) {
+      target.y = this._ground(p, target.x, target.z) + clearance;
+      const dy = target.y - anchor.y, dx = target.x - anchor.x, dz = target.z - anchor.z;
+      const horizontal = Math.hypot(dx, dz), reach = Math.sqrt(Math.max(0, length * length - dy * dy));
+      if (horizontal <= reach || horizontal < 1e-6) break;
+      target.x = anchor.x + dx * reach / horizontal;
+      target.z = anchor.z + dz * reach / horizontal;
+    }
+    target.y = clamp(this._ground(p, target.x, target.z) + clearance, anchor.y - length, anchor.y + length);
+  }
+
   // `unnatural` is opt-in: teammate avatars share this rig, but never receive
   // Helium Voice's asymmetric stalking, delayed torso turns or idle weight shifts.
   // p: {speed, run, crouch, reach, still, lookYaw, lookPitch, tilt, jaw,
-  //     armSwing, snap, unnatural, yaw, state}
+  //     armSwing, snap, unnatural, yaw, state, ground(localX,localZ)}
   update(dt, p) {
     const rig = this.rig, b = this.b, B = this.blend;
     this.t += dt;
@@ -131,6 +157,12 @@ export class HeliumAnimator {
     const breathe = free * Math.sin(this.t * 1.7) * 0.012;
     b.root.position.x = b.root.userData.restPos.x + weight + Math.sin(cycle) * 0.012 * B.walk * creature * free;
     b.root.position.y = b.root.userData.restPos.y - 0.04 * B.walk - 0.15 * B.run - 0.22 * B.crouch + bob;
+    if (creature && p.ground) {
+      // Lower the pelvis toward the downhill support rather than stretching
+      // the downhill leg or leaving its foot suspended above the terrain.
+      const low = Math.min(this._ground(p, 0.2, 0), this._ground(p, -0.2, 0), this._ground(p, 0, -0.4));
+      b.root.position.y += clamp(low, -0.25, 0.12);
+    }
     b.root.quaternion.setFromEuler(new THREE.Euler(0, 0, bank + weight * 0.55));
     // The torso follows a glance later and less far than the head. The residual
     // look angle stays in the neck, so turning the chest cannot double the gaze.
@@ -180,18 +212,12 @@ export class HeliumAnimator {
         L.ankZ + fz + 0.02 * B.crouch);
       // Keep the support height when a long step approaches full extension;
       // shorten its horizontal reach instead of lifting a planted ankle.
-      const reach = L.thigh + L.shin - 0.002;
-      const dy = target.y - hip.y, dx = target.x - hip.x, dz = target.z - hip.z;
-      const horizontal = Math.hypot(dx, dz);
-      const maxHorizontal = Math.sqrt(Math.max(0, reach * reach - dy * dy));
-      if (horizontal > maxHorizontal && horizontal > 0) {
-        target.x = hip.x + dx * maxHorizontal / horizontal;
-        target.z = hip.z + dz * maxHorizontal / horizontal;
-      }
+      this._fitGroundContact(hip, target, L.thigh + L.shin - 0.002, p, L.ankY + fy);
       const knee = rig.ik2(hip, L.thigh, L.shin, target, new THREE.Vector3(0, 0, 1));
       this._aimSegment(b['upperleg01.' + s], L.thighDir, new THREE.Vector3().subVectors(knee, hip));
       this._aimSegment(b['lowerleg01.' + s], L.shinDir, new THREE.Vector3().subVectors(target, knee));
       const f = L.footFwd.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), foot.roll);
+      if (p.ground) f.applyQuaternion(this._groundTilt(p, target.x, target.z));
       rig.aim(b['foot.' + s], f);
     }
     for (const s of ['L', 'R']) {
@@ -211,15 +237,16 @@ export class HeliumAnimator {
       this._aimSegment(b['lowerarm01.' + s], L.foreDir, fore);
       rig.aim(b['wrist.' + s], fore);
     }
-    if (B.crawl > 0.001) this._reverseCrawl(B.crawl, sp);
+    if (B.crawl > 0.001) this._reverseCrawl(B.crawl, sp, p);
   }
 
-  _reverseCrawl(blend, speed) {
+  _reverseCrawl(blend, speed, p) {
     const rig = this.rig, b = this.b, cycle = this.phase * Math.PI * 2;
     // Hips high, chest low, head craned back toward the player. The body faces
     // opposite authoritative travel; planted limbs sweep forward in local space.
     b.root.position.y = lerp(b.root.position.y, 0.78 + Math.sin(cycle * 2) * 0.025, blend);
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(1.95, 0, Math.sin(cycle) * 0.045));
+    if (p.ground) q.premultiply(this._groundTilt(p));
     b.root.quaternion.slerp(q, blend);
     for (const n of ['spine05', 'spine04', 'spine03', 'spine02', 'spine01']) {
       q.setFromEuler(new THREE.Euler(-0.015, Math.sin(cycle + 0.7) * 0.015, 0));
@@ -242,28 +269,23 @@ export class HeliumAnimator {
       foot.target.lerp(new THREE.Vector3(sign * 0.28, L.ankY + f.y, -0.4 + f.z), blend);
       foot.contact = f.planted; foot.roll = 0;
       const hip = rig.wp(b['upperleg01.' + side]);
+      this._fitGroundContact(hip, foot.target, L.thigh + L.shin - 0.002, p, L.ankY + f.y);
       const knee = rig.ik2(hip, L.thigh, L.shin, foot.target, new THREE.Vector3(sign * 0.65, 0, 1));
       this._aimSegment(b['upperleg01.' + side], L.thighDir, new THREE.Vector3().subVectors(knee, hip));
       this._aimSegment(b['lowerleg01.' + side], L.shinDir, new THREE.Vector3().subVectors(foot.target, knee));
-      rig.aim(b['foot.' + side], new THREE.Vector3(0, 0, 1));
+      rig.aim(b['foot.' + side], new THREE.Vector3(0, 0, 1).applyQuaternion(this._groundTilt(p, foot.target.x, foot.target.z)));
       // Diagonal hand/foot pairs scuttle in a reverse bear gait. Solve the arms
       // as well as the legs, keeping palms close to the actual support plane.
       const hand = contact(this.phase + (side === 'L' ? 0.5 : 0));
       const target = rig.wp(b['wrist.' + side]).lerp(new THREE.Vector3(sign * 0.36, 0.11 + hand.y, 0.62 + hand.z), blend);
       const shoulder = rig.wp(b['upperarm01.' + side]);
-      const delta = target.clone().sub(shoulder), max = L.upper + L.fore - 0.002;
-      if (delta.length() > max) {
-        // Preserve the hand's support height; shorten an overlong horizontal
-        // stride rather than pulling a planted palm up off the ground.
-        const horizontal = Math.hypot(delta.x, delta.z);
-        const reach = Math.sqrt(Math.max(0, max * max - delta.y * delta.y));
-        if (horizontal > 0) { target.x = shoulder.x + delta.x * reach / horizontal; target.z = shoulder.z + delta.z * reach / horizontal; }
-        target.y = clamp(target.y, shoulder.y - max, shoulder.y + max);
-      }
+      // Blend the support height during the quick upright-to-crawl transition.
+      const clearance = lerp(target.y - this._ground(p, target.x, target.z), 0.11 + hand.y, blend);
+      this._fitGroundContact(shoulder, target, L.upper + L.fore - 0.002, p, clearance);
       const elbow = rig.ik2(shoulder, L.upper, L.fore, target, new THREE.Vector3(sign, 0.2, -0.4));
       this._aimSegment(b['upperarm01.' + side], L.upperDir, new THREE.Vector3().subVectors(elbow, shoulder));
       this._aimSegment(b['lowerarm01.' + side], L.foreDir, new THREE.Vector3().subVectors(target, elbow));
-      rig.aim(b['wrist.' + side], new THREE.Vector3(sign * 0.1, -0.4, 1));
+      rig.aim(b['wrist.' + side], new THREE.Vector3(sign * 0.1, -0.4, 1).applyQuaternion(this._groundTilt(p, target.x, target.z)));
       this.hands[side] = { target, contact: hand.planted };
     }
   }

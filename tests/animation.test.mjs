@@ -101,4 +101,30 @@ for(let i=0;i<120;i++){crawler.update(1/60,{speed:2,unnatural:true,state:3});fin
 assert.ok(crawler.blend.crawl<.001,'crawl blends back to the normal stalk');
 console.log('  ok  reverse bear crawl has finite grounded hands/feet and returns to walking');
 
+for(const [sx,sz] of [[.3,.2],[-.3,-.2],[.3,-.2],[-.3,.2]]) {
+  for(const crawl of [false,true]) {
+    const slope=new HeliumAnimator(character()),ground=(x,z)=>sx*x+sz*z;
+    let footSupportError=0,handSupportError=0,limbError=0;
+    for(let i=0;i<240;i++) {
+      slope.update(1/60,{speed:crawl?10.5:1.35,crawl,unnatural:true,state:crawl?6:3,yaw:0,ground});
+      finitePose(slope);
+      if(i<60)continue;
+      for(const side of ['L','R']) {
+        const foot=slope.feet[side],ankle=slope.rig.wp(slope.b['foot.'+side]);
+        limbError=Math.max(limbError,ankle.distanceTo(foot.target));
+        if(foot.contact)footSupportError=Math.max(footSupportError,Math.abs(ankle.y-slope.l[side].ankY-ground(ankle.x,ankle.z)));
+        if(crawl){
+          const hand=slope.hands[side],wrist=slope.rig.wp(slope.b['wrist.'+side]);
+          limbError=Math.max(limbError,wrist.distanceTo(hand.target));
+          if(hand.contact)handSupportError=Math.max(handSupportError,Math.abs(wrist.y-.11-ground(wrist.x,wrist.z)));
+        }
+      }
+    }
+    assert.ok(limbError<.012,`all limbs reach their slope targets (${sx},${sz}, crawl=${crawl}): ${limbError}`);
+    assert.ok(footSupportError<.012,`feet follow uphill/downhill and cross-slope support: ${footSupportError}`);
+    assert.ok(handSupportError<.02,`palms follow the actual support height: ${handSupportError}`);
+  }
+}
+console.log('  ok  walk and reverse crawl plant on uphill, downhill and cross-slope terrain');
+
 console.log('\nall animation tests passed');

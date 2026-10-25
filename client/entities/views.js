@@ -1,6 +1,7 @@
 // Client-side views of networked state: snapshot interpolation, the two creatures,
 // teammates' avatars, and the objective / item / extraction props.
 import * as THREE from 'three';
+import { groundAt } from '../../shared/physics.js';
 import { loadCharacter } from './character.js';
 import { HeliumAnimator, SkunkAnimator } from './animators.js';
 import { angleDiff, clamp, lerp } from '../../shared/math.js';
@@ -42,7 +43,7 @@ export class SnapBuffer {
 
 // ------------------------------------------------------------------ Helium Voice
 export class HeliumView {
-  static async create(scene) { const v = new HeliumView(); await v._load(scene); return v; }
+  static async create(scene, world) { const v = new HeliumView(); await v._load(scene); v.world = world; return v; }
   async _load(scene) {
     this.char = await loadCharacter('helium');
     this.root = this.char.root; this.root.visible = false;
@@ -51,6 +52,10 @@ export class HeliumView {
     this.head = this.char.bones.head;
     this.pos = new THREE.Vector3(); this.state = 0; this.flags = 8; this.speed = 0; this.yaw = 0;
     this.stepAcc = 0;
+    this.ground = (x, z) => {
+      const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
+      return groundAt(this.world, this.pos.x + c * x + s * z, this.pos.z - s * x + c * z) - this.pos.y;
+    };
   }
   // s: [x,y,z,yaw,lookYaw,lookPitch,speed,flags,tilt,jaw,stateIdx]
   update(dt, s) {
@@ -63,7 +68,7 @@ export class HeliumView {
     this.root.rotation.y = yaw;
     this.moved = prev.distanceTo(this.pos);
     if (this.root.visible) {
-      this.anim.update(dt, { speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), crawl: !!(flags & 16), lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st });
+      this.anim.update(dt, { speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), crawl: !!(flags & 16), lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st, ground: this.world ? this.ground : null });
     }
   }
   headPos(out = new THREE.Vector3()) { this.root.updateMatrixWorld(true); return this.head.getWorldPosition(out); }

@@ -114,7 +114,7 @@ export class Game {
     Object.defineProperty(this.voice.net, 'networked', { get: () => !!(this.net && this.net.networked) });
     this.voice.onChange = (st) => this.ui.voiceStatus(st);
     progress(0.9, 'Something is in the trees');
-    const [hv, sf] = await Promise.all([HeliumView.create(this.scene), SkunkView.create(this.scene)]);
+    const [hv, sf] = await Promise.all([HeliumView.create(this.scene, world), SkunkView.create(this.scene)]);
     this.hv = hv; this.sf = sf;
     this.hvBuf = new SnapBuffer([3, 4], [7, 10]); this.sfBuf = new SnapBuffer([3, 4], [6, 8]);
     progress(0.97, 'Compiling shaders');
