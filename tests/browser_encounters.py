@@ -75,14 +75,17 @@ async def play(port):
                 const sim=game.sim,p=sim.players.get(game.myId),hv=sim.hv;
                 sim.state='play';sim.time=400;sim.director.update=()=>{};sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.startChase(p);
-                // Puppet (owner): a hunt ends only when the hunted player hides from him (dark, still,
-                // quiet, out of his sight; the rule itself is covered in tests/encounters.test.mjs).
-                // Here the rendered result: he goes limp, lies there while watched, gone once unwatched.
+                // Stage the last second of a survived search to inspect the rendered ending.
+                // Full 15–20 / 30–40 s phase timing is exercised in hunt_search.test.mjs.
+                hv.huntHideUntil=sim.time;hv.huntPhase='search';hv.huntEndsAt=sim.time+1;
                 game.flashlight.on=false;hv.hidden=()=>true;
                 let lost=null,start=null;
                 for(let i=0;i<1850&&lost==null;i++){game.advance(1,1/30,false);if(hv.state==='collapse'){lost=i/30;start=[hv.x,hv.z];}}
-                const fell={flags:game.hv.flags};
-                game.look(Math.atan2(-(hv.x-p.x),-(hv.z-p.z)),-.2);game.advance(45,1/30,false);
+                if(!start)return {lost,health:p.health,state:hv.state};
+                const pitch=Math.atan2(hv.y+.25-(p.y+1.62),Math.hypot(hv.x-p.x,hv.z-p.z));
+                game.look(Math.atan2(-(hv.x-p.x),-(hv.z-p.z)),pitch);
+                game.advance(6,1/30,false); // let the collapse snapshot reach the view buffer
+                const fell={flags:game.hv.flags};game.advance(45,1/30,false);
                 const stayed=Math.hypot(hv.x-start[0],hv.z-start[1]);
                 game.look(game.player.yaw+Math.PI,0);game.advance(30,1/30,false);
                 return {lost,fell,stayed,gone:Math.hypot(hv.x-start[0],hv.z-start[1]),health:p.health,state:hv.state};
