@@ -39,13 +39,31 @@ async def play(port):
                         chased ||= hv.state==='chase';
                         aborted ||= hv.state==='collapse'&&p.health===MAXH;
                     }
-                    game.advance(6,1/30,false);
-                    return {initial,chased,aborted,server:p.health,client:game.health,chasing:sim.director.chasing};
+                    const released={state:hv.state,held:p.heldUntil,x:hv.x,z:hv.z,flags:hv.snapshot()[7]};
+                    let maxSpeed=0,maxStep=0,maxStepRatio=0,crawlSeen=false;
+                    for(let i=0;i<45;i++){
+                        game.look(Math.atan2(-(hv.x-game.player.pos.x),-(hv.z-game.player.pos.z)),0);
+                        const x=hv.x,z=hv.z,time=sim.time;game.advance(1,1/30,false);
+                        maxSpeed=Math.max(maxSpeed,hv.speed);
+                        maxStep=Math.max(maxStep,Math.hypot(hv.x-x,hv.z-z));
+                        // The simulation ticks independently of render frames;
+                        // allow its existing 1.5x collision-correction bound.
+                        const budget=CONFIG.HV.RETREAT*(sim.time-time)*1.5+.0001;
+                        maxStepRatio=Math.max(maxStepRatio,Math.hypot(hv.x-x,hv.z-z)/budget);
+                        crawlSeen ||= !!(game.hv.flags&16) && game.hv.anim.blend.crawl>.5;
+                    }
+                    return {initial,chased,aborted,server:p.health,client:game.health,chasing:sim.director.chasing,
+                        clientChasing:game.chasing,hum:game.audio.huntHum?.level,released,
+                        escape:{maxSpeed,maxStep,maxStepRatio,crawlSeen,moved:Math.hypot(hv.x-released.x,hv.z-released.z)}};
                 }''',[seed,flash])
                 assert first['initial']=={'seed':seed,'target':None,'awareness':0},first
                 assert first['chased'] and first['client']==first['server'] and not first['chasing'],first
                 # Puppet: a beam in his face no longer stops him (only hiding from him does)
                 assert first['server']<3 and not first['aborted'],first
+                assert first['released']['state']=='retreat' and first['released']['held'] is None,first
+                assert not first['released']['flags']&2048 and first['released']['flags']&16,first
+                assert first['escape']['maxSpeed']>8 and first['escape']['moved']>2 and first['escape']['maxStepRatio']<1.01,first
+                assert first['escape']['crawlSeen'] and not first['clientChasing'] and first['hum']==0,first
                 print(f'  ok  normal first sighting becomes a long hunt that ends in his grab (seed {seed}, flashlight {flash}):',first,flush=True)
             await page.evaluate('game.restart()')
             result=await page.evaluate('''async()=>{
@@ -122,7 +140,9 @@ async def play(port):
                   game.restart();game.advance(9,1/30,false);
                   const {pointAtDistance}=await import('/shared/math.js');
                   const at=pointAtDistance(game.world.trail,game.world.trailCum,500);
-                  const to=pointAtDistance(game.world.trail,game.world.trailCum,510);
+                  // Exercise close light/ambush acquisition inside the current
+                  // 6.5 m lighter range, rather than a random 10 m investigation.
+                  const to=pointAtDistance(game.world.trail,game.world.trailCum,503);
                   game.tp(to.x,to.z,at.x,at.z);game.flashlight.on=true;
                   const sim=game.sim,p=sim.players.get(game.myId),sf=sim.sf;
                   sim.state='play';sim.time=400;sim.director.update=()=>{};sim.director.enter('build');

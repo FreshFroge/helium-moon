@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
 import { CONFIG } from '../shared/config.js';
-import { pointAtDistance } from '../shared/math.js';
+import { pointAtDistance, makeRng } from '../shared/math.js';
+import { HeliumVoiceAI } from '../shared/sim/heliumVoice.js';
 
 const world = new World({}); const L = world.trailLength, DT = 0.05, C = CONFIG.HV;
 const DREAD_END = CONFIG.SESSION.INTRO_TIME + CONFIG.DIRECTOR.DREAD_TIME;
@@ -33,8 +34,24 @@ for (const seed of [1001, 1002, 1003, 1004, 1005, 1006]) {
 }
 
 test('hush happens, but not on every approach', () => {
-  assert.ok(hushes.length >= 3, `${hushes.length} hushes`);
+  // A successful grab now ends in an immediate escape, changing how many
+  // approaches occur in these sessions. Distribution is tested separately.
+  assert.ok(hushes.length > 0, `${hushes.length} hushes`);
   assert.ok(hushes.length < attempts, `${hushes.length} hushes for ${attempts} close approaches: some must be skipped`);
+});
+
+test('hush preserves its skip rate and RNG independence across a thousand approaches',()=>{
+  const events=[],rng=makeRng(17),control=makeRng(17);
+  const actor=new HeliumVoiceAI({world,seed:17,rng,emit:e=>events.push(e)});
+  for(let i=0;i<1000;i++){
+    actor.closingOn={pid:'one',t:400+i*11};
+    const count=events.length;
+    actor.maybeHush({id:'one'},C.HUSH_DIST-1);
+    actor.maybeHush({id:'one'},C.HUSH_DIST-1);
+    assert.ok(events.length-count<=1,'at most one hush per approach');
+  }
+  assert.ok(events.length>=600 && events.length<=850,`${events.length}/1000 hushes preserves the configured 25% skip`);
+  assert.equal(rng(),control(),'cosmetic hush must not advance the AI RNG');
 });
 test('only while closing in, within HUSH_DIST, after the dread', () => {
   for (const h of hushes) {

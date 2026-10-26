@@ -4,6 +4,7 @@ import test from 'node:test';
 import { World } from '../shared/world.js';
 import { GameSim } from '../shared/sim/sim.js';
 import { pointAtDistance } from '../shared/math.js';
+import { GRAB_KINDS } from '../shared/sim/heliumVoice.js';
 const MAXH = CONFIG.PLAYER.MAX_HEALTH;
 
 const world = new World();
@@ -31,6 +32,87 @@ for(const creature of ['hv','sf']) test(`${creature} actually closes distance an
   assert.ok(events.some(e=>e.type==='hit'&&e.by===creature));
   if(creature==='sf') assert.ok(events.some(e=>e.type==='sf_vocal'&&e.k==='growl'),'ambush announces its windup at the server tick rate');
   assert.ok(Math.hypot(actor.x-p.x,actor.z-p.z)<initial);
+});
+
+function grabbed(kind='shoulders',coop=false) {
+  const {sim,p,actor}=encounter('hv',1.2);
+  if(coop)sim.addPlayer('helper','Helper');
+  if(kind==='final')p.health=1;
+  p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));
+  actor.startChase(p);actor.huntHideUntil=sim.time;actor.huntPhase='search';
+  actor.startGrab(p);actor.grab.kind=kind;
+  const health=p.health,events=[];
+  for(let t=0;t<6 && p.health===health;t+=.05){sim.step(.05);events.push(...sim.drainEvents());}
+  return {sim,p,actor,events};
+}
+
+for(const kind of GRAB_KINDS.slice(1))test(`a completed ${kind} grab ends the hunt and immediately retreats`,()=>{
+  const {sim,p,actor,events}=grabbed(kind,true);
+  assert.equal(actor.grab,null);assert.equal(p.heldUntil,null);
+  assert.equal(p.health,kind==='final'?0:MAXH-1,'damage is applied once at release');
+  assert.equal(p.state,kind==='final'?'downed':'alive');
+  assert.equal(actor.state,'retreat','no lingering beside the released victim');
+  assert.equal(actor.anim.grab,0,'the release snapshot must not keep a grab pose');
+  assert.equal(sim.director.chasing,false);
+  assert.equal(events.filter(e=>e.type==='chase'&&!e.on).length,1,'one unambiguous chase ending');
+  assert.equal(events.filter(e=>e.type==='hv_attack'&&e.phase==='release').length,1);
+  assert.ok(events.some(e=>e.type==='hv_hunt_phase'&&e.phase==='end'&&e.reason==='grab'));
+});
+
+test('the post-grab escape stays fast while watched and cannot immediately restart a hunt',()=>{
+  const {sim,p,actor}=encounter('hv',1.2);
+  const away=pointAtDistance(world.trail,world.trailCum,470);
+  actor.coverAway=()=>[away.x,away.z];actor.concealedAt=()=>false;
+  p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));
+  actor.startChase(p);actor.huntHideUntil=sim.time;actor.huntPhase='search';actor.startGrab(p);
+  while(p.health===MAXH)sim.step(.05);
+  const from={x:actor.x,z:actor.z},before=actor.dist(p),endedAt=sim.time;
+  sim.drainEvents();
+  assert.ok(p.hideGraceUntil>sim.time,'the released victim gets the normal hunt-ending breather');
+  const other=sim.addPlayer('observer','Observer');Object.assign(other,{x:p.x+1,y:p.y,z:p.z,yaw:p.yaw});
+  assert.equal(actor.startChase(other),false,'the escape cannot be replaced with a hunt on a teammate');
+  let maximumStep=0,watched=false;
+  for(let i=0;i<30;i++){
+    p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));other.yaw=p.yaw;
+    const previous={x:actor.x,z:actor.z};sim.step(.05);
+    maximumStep=Math.max(maximumStep,Math.hypot(actor.x-previous.x,actor.z-previous.z));
+    watched ||= actor.observers.length>0;
+  }
+  assert.ok(watched,'the fast escape is exercised in the player view');
+  assert.equal(actor.state,'retreat');assert.ok(actor.speed>8,'looking at him cannot slow the post-grab escape');
+  assert.equal(actor.anim.low,1);assert.equal(actor.anim.back,0);
+  assert.ok(actor.dist(p)>before+8 && Math.hypot(actor.x-from.x,actor.z-from.z)>8);
+  assert.ok(maximumStep<=CONFIG.HV.RETREAT*.05+.01,'escape is physical movement, not a teleport');
+  assert.equal(p.health,MAXH-1);assert.equal(sim.director.chasing,false);
+  assert.equal(sim.drainEvents().filter(e=>e.type==='chase'&&e.on&&e.t>endedAt).length,0);
+});
+
+test('a dodged grab does not count as a catch or terminate the ongoing hunt',()=>{
+  const {sim,p,actor}=encounter('hv',1.2);
+  actor.startChase(p);actor.huntHideUntil=sim.time;actor.huntPhase='search';actor.startGrab(p);
+  p.x+=20;p.lastX=p.x;
+  for(let t=0;t<.6;t+=.05)sim.step(.05);
+  assert.equal(p.health,MAXH);assert.equal(actor.grab,null);
+  assert.equal(actor.state,'chase');assert.equal(sim.director.chasing,true);
+  assert.ok(sim.drainEvents().some(e=>e.type==='hv_attack'&&e.phase==='miss'));
+});
+
+test('a post-grab escape keeps planning when the first endpoint is still exposed',()=>{
+  const {sim,p,actor}=encounter('hv',1.2);let plans=0;
+  actor.concealedAt=()=>false;
+  actor.coverAway=()=>{
+    plans++;
+    const along=world.trailInfo(actor.x,actor.z).along;
+    const next=pointAtDistance(world.trail,world.trailCum,along-8);
+    return[next.x,next.z];
+  };
+  actor.startChase(p);actor.huntHideUntil=sim.time;actor.huntPhase='search';actor.startGrab(p);
+  while(p.health===MAXH)sim.step(.05);
+  const from={x:actor.x,z:actor.z};
+  for(let i=0;i<80;i++){p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));sim.step(.05);}
+  assert.ok(plans>=3,`a visible escape needs another goal, not a postponed retry (${plans} plans)`);
+  assert.ok(Math.hypot(actor.x-from.x,actor.z-from.z)>18,'he keeps moving away through successive escape legs');
+  assert.equal(actor.state,'retreat');assert.equal(sim.director.chasing,false);
 });
 
 test('a close flashlight encounter remains dangerous during the director cooldown',()=>{
