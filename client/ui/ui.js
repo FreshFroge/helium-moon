@@ -429,11 +429,12 @@ export class UI {
     const fieldMap=map?`<h3>East Trail field map</h3><div class="field-map"><svg viewBox="0 0 500 300" role="img" aria-label="East Trail, landmarks and your position">
       <path d="${map.river}" fill="none" stroke="#587985" stroke-width="5" opacity=".5"/>
       <path d="${map.path}" fill="none" stroke="#c7ba8c" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="${map.service||''}" fill="none" stroke="#c19568" stroke-width="2" stroke-dasharray="4 3"/>
       ${map.markers.map(p=>`<g><circle cx="${p.at[0]}" cy="${p.at[1]}" r="5" fill="#b8c59a"/><text x="${p.at[0]+8}" y="${p.at[1]+4}" fill="#e1dac5" font-size="12">${p.n}</text></g>`).join('')}
       <circle cx="${map.player[0]}" cy="${map.player[1]}" r="5.5" fill="#eeb36e" stroke="#191e17" stroke-width="2"/>
       <text x="465" y="24" fill="#c7ba8c" font-size="12">N ↑</text></svg>
       <div class="map-legend">${map.markers.map(p=>`<span><b>${p.n}</b> ${esc(p.name)}</span>`).join('')}</div>
-      <p class="map-key">Amber dot: you · pale line: East Trail · scroll to read</p></div>`:'';
+      <p class="map-key">Amber dot: you · pale line: East Trail · dashed line: river service path · scroll to read</p></div>`:'';
     const supplies=d.supplyHints?`<div class="supply-register"><b>Tonight's supply register</b><div>Gas can — ${esc(d.supplyHints.fuel)}</div><div>Fuse kit — ${esc(d.supplyHints.fuse)}</div></div>`:'';
     el.innerHTML = `${fieldMap}${supplies}<h3>Rescue plan</h3>${d.objectives.map((l) => `<div class="obj ${l.done ? 'done' : ''}"><span class="box">${l.done ? '✓' : ''}</span><div><div>${esc(l.text)}</div>${l.sub ? `<div class="sub">${esc(l.sub)}</div>` : ''}</div></div>`).join('')}
       <div class="inv-grid"><div><span class="dim">Team carries</span><br>${d.team.fuel ? 'Gas can' : '<span class="dim">—</span>'}${d.team.fuse ? '<br>Fuse kit' : ''}</div>

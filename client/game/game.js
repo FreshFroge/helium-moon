@@ -1024,7 +1024,7 @@ export class Game {
       const padX=(500-(maxX-minX)*scale)/2,padZ=(300-(maxZ-minZ)*scale)/2;
       const project=(x,z)=>[+(padX+(x-minX)*scale).toFixed(1),+(padZ+(z-minZ)*scale).toFixed(1)];
       const path=points=>points.map((p,i)=>(i?'L':'M')+project(...p).join(',')).join(' ');
-      this._trailMap={project,path:path(w.trail),river:path(w.river),
+      this._trailMap={project,path:path(w.trail),river:path(w.river),service:path(w.servicePath),
         markers:Object.values(w.poi).map((p,i)=>({n:i+1,name:p.name,at:project(p.x,p.z)}))};
     }
     return {...this._trailMap,player:this._trailMap.project(this.player.pos.x,this.player.pos.z)};

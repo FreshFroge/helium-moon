@@ -91,6 +91,22 @@ export class World {
       const nt = nearestOnPolyline(this.trail, this.trailCum, p[0], p[1]);
       this.poi[k] = { key: k, name: v.name, x: p[0], z: p[1], along: nt.along, trailDist: nt.d };
     }
+    // A fictional refuge maintenance crossing supplies gameplay access to the
+    // opposite bank. The traced river and the owner's original trail stay put.
+    const fishing = this.poi.fishing, nearest = this.riverInfo(fishing.x, fishing.z);
+    const riverPoint = pointAtDistance(this.river, this.riverCum, nearest.along);
+    const rot = riverPoint.dir + Math.PI / 2, sx = Math.sin(rot), sz = Math.cos(rot);
+    this.riverCrossing = { x: riverPoint.x, z: riverPoint.z, rot, length: 32, rampLength: 6, width: 3.8 };
+    const crossPoint = along => [riverPoint.x + sx * along, riverPoint.z + sz * along];
+    const trailJoin = this.trailInfo(fishing.x, fishing.z);
+    this.servicePath = [[trailJoin.x, trailJoin.z], crossPoint(27), crossPoint(22), crossPoint(-22), crossPoint(-33)];
+    for (const [key, name, point] of [
+      ['rivercrossing', 'River Maintenance Crossing', crossPoint(0)],
+      ['farbank', 'Far-bank Service Landing', crossPoint(-33)],
+    ]) {
+      const n = this.trailInfo(...point);
+      this.poi[key] = {key,name,x:point[0],z:point[1],along:n.along,trailDist:n.d};
+    }
     // fence line: trail offset to the right (field side)
     const off = CONFIG.FENCE_OFFSET;
     this.fence = [];
@@ -161,6 +177,8 @@ export class World {
     this.gTrail = distanceTransform(m, gw, gh); for (let i = 0; i < n; i++) this.gTrail[i] *= R;
     m.fill(0); rasterPolyline(m, gw, gh, this.river.map(toCell));
     this.gRiver = distanceTransform(m, gw, gh); for (let i = 0; i < n; i++) this.gRiver[i] *= R;
+    m.fill(0); rasterPolyline(m, gw, gh, this.servicePath.map(toCell));
+    this.gService = distanceTransform(m, gw, gh); for (let i = 0; i < n; i++) this.gService[i] *= R;
     this.gField = new Uint8Array(n);
     this.gSwamp = new Float32Array(n);
     this.gClearing = new Uint8Array(n);
@@ -448,7 +466,7 @@ export class World {
         const wx = this.minX + x * R; const i = y * hw + x;
         const g = this.heights[i];
         const td = this.trailD[i];
-        let trail = td;
+        let trail = Math.min(td, this.sampleGrid(this.gService, wx, wz) + .35);
         if (this._inParking(wx, wz, 0)) trail = 0.0;
         const hwy = this.highway;
         let mud = 0, grass = 0, silt = 0;
@@ -489,6 +507,7 @@ export class World {
     if (this.deckAt(x, z) !== null) return SURFACE.WOOD;
     const w = this.waterAt(x, z);
     if (w !== null && w - this.heightAt(x, z) > 0.04) return SURFACE.WATER;
+    if (this.sampleGrid(this.gService, x, z) < 1.4) return SURFACE.DIRT;
     const R = CONFIG.HEIGHT_RES;
     const ix = clamp(Math.round((x - this.minX) / R), 0, this.hw - 1), iz = clamp(Math.round((z - this.minZ) / R), 0, this.hh - 1);
     const i = (iz * this.hw + ix) * 4, sp = this.splat;
@@ -546,6 +565,17 @@ export class World {
       // connecting to each existing bank instead of a floating 0.6 m step.
       deckY: Math.max(...bankY) + 0.1,
     });
+    const crossing = this.riverCrossing, end = crossing.length / 2 + crossing.rampLength;
+    const riverBankY = [-1,1].map(side => this.heightAt(crossing.x + Math.sin(crossing.rot)*side*end,
+      crossing.z + Math.cos(crossing.rot)*side*end) + .035);
+    this.riverCrossing = add('riverbridge', crossing.x, crossing.z, crossing.rot,
+      {...crossing,bankY:riverBankY,deckY:Math.max(...riverBankY)+.12});
+    for (const [i,along] of [[0,end+3.5],[1,-end-6]]) {
+      const x=crossing.x+Math.sin(crossing.rot)*along,z=crossing.z+Math.cos(crossing.rot)*along;
+      // Wayfinding posts stand beside the route, not in its walking cylinder.
+      add('riverpost',x+Math.cos(crossing.rot)*2.3,z-Math.sin(crossing.rot)*2.3,
+        crossing.rot+(i?Math.PI:0),{farBank:!!i});
+    }
     add('fishing', P.fishing.x, P.fishing.z, Math.atan2(...this._riverDir(P.fishing)));
     add('mast', P.mast.x, P.mast.z, 0.3);
     add('highwaybridge', 0, this.highway.z, 0);
@@ -575,11 +605,11 @@ export class World {
   deckAt(x, z) {
     if (!this.structures) return null;
     for (const o of this.structures) {
-      if (o.type !== 'footbridge') continue;
+      if (o.type !== 'footbridge' && o.type !== 'riverbridge') continue;
       const dx = x - o.x, dz = z - o.z;
       const along = dx * Math.sin(o.rot) + dz * Math.cos(o.rot);
       const across = dx * Math.cos(o.rot) - dz * Math.sin(o.rot);
-      if (Math.abs(across) >= 1.3) continue;
+      if (Math.abs(across) >= (o.width || 2.6)/2) continue;
       const distance = Math.abs(along), half = o.length / 2;
       if (distance <= half) return o.deckY;
       if (distance < half + o.rampLength) {
@@ -598,6 +628,9 @@ export class World {
     const nz = this.noise2;
     const structClear = (x, z, r) => {
       for (const o of this.structures) {
+        // Clear the new service route after generation. Skipping RNG draws
+        // here would regenerate distant trees and change established cover.
+        if(o.type==='riverbridge'||o.type==='riverpost')continue;
         const rr = o.type === 'lot' ? 30 : o.type === 'highwaybridge' ? 0 : o.type === 'mast' ? 7 : o.type === 'footbridge' ? 9 : o.type === 'monument' ? 3.5 : 6;
         if (rr && Math.hypot(x - o.x, z - o.z) < rr + r) return false;
       }
@@ -708,6 +741,20 @@ export class World {
       if (rng() < 0.4) stumps.push([x + Math.sin(yaw) * (len / 2 + 0.6), 0, z + Math.cos(yaw) * (len / 2 + 0.6), rad * 1.1]);
     }
     for (const s of stumps) s[1] = this.heightAt(s[0], s[2]);
+    const clearService = (list, location, radius) => {
+      let count=0;
+      for(const item of list){
+        const [x,z]=location(item);
+        if(this.sampleGrid(this.gService,x,z)<radius(item))continue;
+        list[count++]=item;
+      }
+      list.length=count;
+    };
+    clearService(trees,t=>[t.x,t.z],t=>1.9+t.collisionR);
+    for(const list of [grass,reeds,debris])clearService(list,t=>[t[0],t[2]],()=>1.8);
+    clearService(bushes,t=>[t[0],t[2]],t=>1.8+1.5*t[3]);
+    clearService(logs,t=>[t[0],t[2]],t=>t[3]/2+t[4]+2);
+    clearService(stumps,t=>[t[0],t[2]],t=>2+t[3]);
     this.trees = trees; this.bushes = bushes; this.grass = grass; this.reeds = reeds;
     this.logs = logs; this.debris = debris; this.stumps = stumps;
     this.log(`vegetation: ${trees.length} trees, ${bushes.length} bushes, ${grass.length} grass, ${reeds.length} reeds, ${logs.length} logs`);

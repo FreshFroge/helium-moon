@@ -79,3 +79,61 @@ test('creature navigation can traverse the deck despite deep water below it', ()
     assert.ok(Math.hypot(p.x - endPoint.x, p.z - endPoint.z) < 0.15, 'creature reaches the opposite bank');
   }
 });
+
+const river = world.riverCrossing;
+const acrossRiver = (along, across=0) => ({
+  x:river.x+Math.sin(river.rot)*along+Math.cos(river.rot)*across,
+  z:river.z+Math.cos(river.rot)*along-Math.sin(river.rot)*across,
+});
+
+test('the separate maintenance crossing spans the main river between dry playable banks', () => {
+  assert.equal(river.type,'riverbridge');
+  assert.ok(world.riverInfo(river.x,river.z).d<.01);
+  assert.ok(world.waterAt(river.x,river.z)-world.heightAt(river.x,river.z)>CONFIG.DEEP_WATER);
+  const end=river.length/2+river.rampLength;
+  for(const side of [-1,1]) {
+    const p=acrossRiver(side*(end+.1));
+    assert.equal(world.waterAt(p.x,p.z),null,'both exits are on dry ground');
+    assert.ok(world.isPlayable(p.x,p.z) && world.navWalkable(p.x,p.z),'both exits are reachable by players and creatures');
+    const edge=acrossRiver(side*(end-.001));
+    assert.ok(Math.abs(groundAt(world,edge.x,edge.z)-world.heightAt(p.x,p.z))<.06,'ramp ends join the existing bank');
+  }
+});
+
+test('both banks and the full service path are physically walkable in both directions', () => {
+  for(const direction of [1,-1]) {
+    const route=direction===1?world.servicePath:[...world.servicePath].reverse();
+    let p={x:route[0][0],z:route[0][1],y:groundAt(world,...route[0])};
+    for(const [x,z] of route.slice(1)) {
+      for(let i=0;i<2000;i++) {
+        const d=Math.hypot(x-p.x,z-p.z);
+        if(d<.05)break;
+        const q=moveCharacter(world,p,(x-p.x)/d*Math.min(.1,d),(z-p.z)/d*Math.min(.1,d),CONFIG.PLAYER.RADIUS,{boundary:true,cameraSafe:true});
+        assert.ok(Math.hypot(q.x-p.x,q.z-p.z)>.02,'vegetation/water cannot block the marked approach');
+        const y=supportHeight(world,q.x,q.z,p.y);
+        assert.ok(Math.abs(y-p.y)<CONFIG.PLAYER.STEP_HEIGHT,'no invisible bank/deck step');
+        p={...q,y};
+      }
+      assert.ok(Math.hypot(x-p.x,z-p.z)<.05,'each approach waypoint is reached');
+    }
+  }
+});
+
+test('creature paths cross the main river without treating it as a safe island', () => {
+  const a=world.servicePath[0],b=world.servicePath.at(-1);
+  for(const [from,to] of [[a,b],[b,a]]) {
+    const route=world.findPath(...from,...to);
+    assert.ok(route && route.length>1,'a connected route joins the original trail and the opposite bank');
+    assert.ok(nearestOnPolyline(route,cumulativeLengths(route),river.x,river.z).d<river.width/2,'the route uses the main-river bridge');
+    let p={x:from[0],z:from[1],y:groundAt(world,...from)};
+    for(const [x,z] of route) {
+      for(let i=0;i<1500;i++) {
+        const d=Math.hypot(x-p.x,z-p.z);if(d<.15)break;
+        const q=moveCharacter(world,p,(x-p.x)/d*Math.min(.1,d),(z-p.z)/d*Math.min(.1,d),.3,{nav:true,slope:false,step:.5});
+        assert.ok(Math.hypot(q.x-p.x,q.z-p.z)>.01,'a real creature cylinder can follow the planned bridge route');
+        p={...q,y:groundAt(world,q.x,q.z)};
+      }
+    }
+    assert.ok(Math.hypot(to[0]-p.x,to[1]-p.z)<.2,'the creature reaches the other bank');
+  }
+});

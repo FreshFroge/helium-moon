@@ -62,3 +62,25 @@ hardware FPS or owner acceptance of the animation style.
 Animation/scheduler source published at `f7322b2`; animation files are released
 unless subsequent crossing integration needs them. Main-river crossing and
 objective/UI/world file reservations remain active for the next increment.
+
+Main-river crossing increment: a 32 m timber maintenance span plus two 6 m
+ramps joins both existing banks near Fishing Bank, with a cleared service path
+and return signs. Kiosk and Tab maps show the service route and both new
+landmarks. This is a fictional gameplay addition; it does not claim that this
+bridge exists in the real refuge. The reference river/trail geometry is retained.
+
+Seven bridge regressions pass, including real player-cylinder traversal of the
+complete service path and creature-cylinder traversal of the planned river
+route, both directions. Two real browser clients cross and return with W input
+and agree with server positions. First broad run exposed an RNG perturbation:
+clearing new structures during vegetation generation reshuffled other trees and
+failed the integrated hush check. Clearing is now a final local filter instead;
+46,194 retained tree records compare exactly with the prior world, only 23
+trees removed for access; hush and bridge checks pass. Broad recheck is running.
+
+Next #33 increment: a recoverable handwheel at the far-bank service landing and
+a manually aligned rescue antenna, required before the existing mast call. This
+adds an exploration goal and a compass/dial interaction rather than another
+hold-E repair. Codex reserves `client/entities/views.js` and `shared/sim/sim.js`
+again for its interaction/replication and antenna animation, alongside the
+existing objective/UI reservations. Preserve the completed player/enemy poses.

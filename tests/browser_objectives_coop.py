@@ -4,6 +4,7 @@ Run with HM_TEST=1 for the server's explicit freeze/position fixtures.
 import asyncio
 import math
 import os
+from pathlib import Path
 import time
 from playwright.async_api import async_playwright
 import browser_playthrough as harness
@@ -108,6 +109,38 @@ async def play(port):
             for page in pages:await page.keyboard.up('e')
             await pump(.3)
             assert all([await p.evaluate("game.objViews.stations.get('gen').done")for p in pages])
+            # Fixture only stages the starting banks. Actual W input crosses
+            # the entire river and ramps, then both clients walk back.
+            bridge=await a.evaluate('game.world.riverCrossing')
+            for i,page in enumerate(pages):
+                await page.evaluate('''({i})=>{
+                    const br=game.world.riverCrossing,along=24+i*1.5;
+                    const x=br.x+Math.sin(br.rot)*along,z=br.z+Math.cos(br.rot)*along;
+                    game.tp(x,z,br.x,br.z);game.net.send({t:'debug',cmd:'tp',x,z});
+                }''',{'i':i})
+            await pump(.5)
+            for direction in [-1,1]:
+                if direction==1:
+                    for page in pages:await page.evaluate('game.look(game.player.yaw+Math.PI,-.1)')
+                for page in pages:await page.keyboard.down('w')
+                deadline=time.monotonic()+25
+                while True:
+                    await pump(.25)
+                    positions=[await p.evaluate('''()=>{const br=game.world.riverCrossing,p=game.player.pos;
+                        return {along:(p.x-br.x)*Math.sin(br.rot)+(p.z-br.z)*Math.cos(br.rot),
+                            y:p.y,serverY:game.me[2],serverX:game.me[1],serverZ:game.me[3],x:p.x,z:p.z};}''')for p in pages]
+                    if all(p['along']*direction>24 for p in positions):break
+                    assert time.monotonic()<deadline,positions
+                for page in pages:await page.keyboard.up('w')
+                await pump(.3)
+                for page in pages:
+                    assert await page.evaluate('''()=>{const p=game.player.pos;
+                        return Math.hypot(game.me[1]-p.x,game.me[3]-p.z)<.35 && Math.abs(game.me[2]-p.y)<.12;}'''),positions
+            output=Path(os.environ.get('HM_ARTIFACT_DIR','/tmp/helium-overnight/coop'))
+            output.mkdir(parents=True,exist_ok=True)
+            await a.evaluate('game.advance(1,1/30,true)')
+            await a.screenshot(path=str(output/'river-crossing.png'),timeout=60000)
+            print('  ok  both real clients walk across the main river and back; authoritative positions agree',flush=True)
             assert not errors,errors
             print('  ok  cooperative work completes on the authoritative server and both clients; no page errors',flush=True)
         finally:

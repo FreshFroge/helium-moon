@@ -163,15 +163,17 @@ export class Props {
     g.save();g.beginPath();g.rect(40,90,620,420);g.clip();
     g.strokeStyle = '#5b7da3'; g.lineWidth = 7; g.beginPath();
     w.river.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
+    g.strokeStyle='#a76e33';g.lineWidth=3;g.setLineDash([5,4]);g.beginPath();
+    w.servicePath.forEach((p,i)=>{const[x,y]=P(p);if(i)g.lineTo(x,y);else g.moveTo(x,y);});g.stroke();g.setLineDash([]);
     g.strokeStyle = '#8a2d1d'; g.lineWidth = 4; g.setLineDash([10, 6]); g.beginPath();
     w.trail.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke(); g.setLineDash([]);
     const [sx, sy] = P(w.trail[0]);
     g.fillStyle = '#c0261d'; g.beginPath(); g.arc(sx, sy, 9, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#222'; g.font = 'bold 16px Arial'; g.textAlign = 'left'; g.fillText('TRAILHEAD', Math.max(46,Math.min(540,sx+12)), Math.min(495,sy+6));
-    for(const key of ['pumphouse','shed','bridge','mast','camp']){
+    for(const key of ['pumphouse','shed','bridge','mast','camp','rivercrossing']){
       const p=w.poi[key];if(!p)continue;
       const [x,y]=P([p.x,p.z]);g.fillStyle='#f2e7c8';g.fillRect(x-4,y-4,8,8);
-      g.fillStyle='#273326';g.font='bold 13px Arial';g.fillText(({pumphouse:'PUMP',shed:'SHED',bridge:'BRIDGE',mast:'MAST',camp:'CAMP'})[key],x+7,y+4);
+      g.fillStyle='#273326';g.font='bold 13px Arial';g.fillText(({pumphouse:'PUMP',shed:'SHED',bridge:'BRIDGE',mast:'MAST',camp:'CAMP',rivercrossing:'RIVER CROSSING'})[key],x+7,y+4);
     }
     g.restore();
     g.fillStyle='#273326';g.font='bold 18px Arial';g.fillText('N',620,116);g.beginPath();g.moveTo(626,123);g.lineTo(621,138);g.lineTo(631,138);g.fill();
@@ -362,23 +364,24 @@ export class Props {
   }
 
   _footbridge(o, B) {
-    const L = o.length, w = this.world;
+    const L = o.length, w = this.world, width = o.width || 2.6, rail = width/2-.05;
     const deckLocalY = o.deckY - o.y;
     for (let i = 0; i < Math.round(L / 0.32); i++) {
       const z = -L / 2 + 0.16 + i * 0.32;
-      B.add('wood', boxUV(2.6, 0.06, 0.28), this.W(o, 0, deckLocalY - 0.03, z, 0, 0, (i % 3 - 1) * 0.01));
+      B.add('wood', boxUV(width, 0.06, 0.28), this.W(o, 0, deckLocalY - 0.03, z, 0, 0, (i % 3 - 1) * 0.01));
     }
-    for (const x of [-1.05, 1.05]) B.add('woodDark', boxUV(0.14, 0.22, L), this.W(o, x, deckLocalY - 0.14, 0));
-    for (let i = 0; i <= 4; i++) {
-      const z = -L / 2 + (L / 4) * i;
-      for (const x of [-1.25, 1.25]) {
+    for (const x of [-rail+.2, rail-.2]) B.add('woodDark', boxUV(0.14, 0.22, L), this.W(o, x, deckLocalY - 0.14, 0));
+    const supports = o.type==='riverbridge'?Math.ceil(L/4):4;
+    for (let i = 0; i <= supports; i++) {
+      const z = -L / 2 + (L / supports) * i;
+      for (const x of [-rail, rail]) {
         const gy = w.heightAt(o.x + Math.sin(o.rot) * z + Math.cos(o.rot) * x, o.z + Math.cos(o.rot) * z - Math.sin(o.rot) * x) - o.y;
         const h = deckLocalY + 1.0 - gy + 0.3;
         B.add('woodDark', boxUV(0.12, h, 0.12), this.W(o, x, gy - 0.3 + h / 2, z));
       }
-      B.add('woodDark', boxUV(2.65, 0.16, 0.16), this.W(o, 0, deckLocalY - 0.22, z));
+      B.add('woodDark', boxUV(width+.05, 0.16, 0.16), this.W(o, 0, deckLocalY - 0.22, z));
     }
-    for (const x of [-1.25, 1.25]) B.add('wood', boxUV(0.08, 0.1, L), this.W(o, x, deckLocalY + 0.95, 0));
+    for (const x of [-rail, rail]) B.add('wood', boxUV(0.08, 0.1, L), this.W(o, x, deckLocalY + 0.95, 0));
     // Timber approaches meet the actual banks; their geometry and deckAt()
     // share the same endpoints so players do not climb invisible steps.
     for (const side of [-1, 1]) {
@@ -388,14 +391,40 @@ export class Props {
       for (let i = 0; i < count; i++) {
         const along = (i + 0.5) * step;
         const y = deckLocalY + (bankY - deckLocalY) * along / o.rampLength;
-        B.add('wood', boxUV(2.6, 0.06, step - 0.025), this.W(o, 0, y - 0.03, side * (L / 2 + along), 0, slope));
+        B.add('wood', boxUV(width, 0.06, step - 0.025), this.W(o, 0, y - 0.03, side * (L / 2 + along), 0, slope));
       }
       // Grounded end sill carries the span and buries into the bank.
       const z = side * L / 2;
       const gy = w.heightAt(o.x + Math.sin(o.rot) * z, o.z + Math.cos(o.rot) * z) - o.y;
       const h = Math.max(0.22, deckLocalY - gy + 0.18);
-      B.add('woodDark', boxUV(2.7, h, 0.3), this.W(o, 0, deckLocalY - h / 2 - 0.06, z));
+      B.add('woodDark', boxUV(width+.1, h, 0.3), this.W(o, 0, deckLocalY - h / 2 - 0.06, z));
     }
+  }
+
+  _riverbridge(o,B) {
+    this._footbridge(o,B);
+    const y=o.deckY-o.y,rail=o.width/2-.05;
+    for(const side of [-1,1]) {
+      const z=side*(o.length/2-.4);
+      for(const x of [-rail,rail]) {
+        // Braced portals and buried bank sills support the longer river span.
+        B.add('woodDark',boxUV(.2,2.3,.2),this.W(o,x,y+1,z));
+        B.add('metal',boxUV(.12,.04,.45),this.W(o,x,y+.22,z));
+      }
+      B.add('metal',boxUV(o.width+.15,.12,.14),this.W(o,0,y+2.08,z));
+    }
+  }
+
+  _riverpost(o,B) {
+    B.add('woodDark',boxUV(.12,1.7,.12),this.W(o,0,.75,0));
+    B.add('orange',boxUV(.6,.25,.045),this.W(o,0,1.48,0));
+    const texture=makeTextTexture([
+      {text:o.farBank?'EAST TRAIL →':'RIVER CROSSING',font:'bold 25px Arial',color:'#e6dfc9'},
+      {text:o.farBank?'Across the bridge':'Far-bank service landing',font:'18px Arial',color:'#c7c8b3'},
+    ],{w:512,h:180,bg:'#26362d',pad:20});
+    const mat=new THREE.MeshStandardMaterial({map:texture,roughness:.95,side:THREE.DoubleSide});
+    const sign=new THREE.Mesh(new THREE.PlaneGeometry(.95,.34),mat);
+    sign.matrix.copy(this.W(o,0,1.04,.075));sign.matrixAutoUpdate=false;this.group.add(sign);
   }
 
   _fishing(o, B) {
