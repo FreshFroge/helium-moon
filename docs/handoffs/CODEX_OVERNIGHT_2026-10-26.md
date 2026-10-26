@@ -78,3 +78,17 @@ Follow-up claimed by Codex: cover-safe leaning. `client/game/player.js`,
 `shared/sim/sim.js` / `client/game/game.js`, relevant camera/perception tests.
 Current Q/R camera offset is unswept and absent from server perception; fix
 both together, preserving all behavior when lean is zero.
+
+Delivered source increments: hunts `2945b6c`, trailhead `72f9a62`, objectives
+`471f215`; soak/ending evidence `b2a0375`. Fifty additional 25-minute-limit
+scripted sessions: 239 hunts, longest 58.15 s, no recorded Helium hits outside
+a hunt; 22 wins / 17 losses / 11 horizon time-outs. These are bots with the
+limitations recorded in the report, not human feedback.
+
+Lean follow-up complete: physical near-plane clearance, shared eye positions
+and exposed-head detection; bounded input, no leaning through blankets/grabs.
+Node camera/encounter/hunt checks pass. Actual browser Q/R peeks near real tree
+geometry pass; no geometry regression. Final full-suite results are recorded
+in the report. All Codex reservations for this batch are released on publish.
+Next useful follow-up: remote teammate lean animation, then human/GPU
+navigation and atmosphere feedback on the new map, search and repair loop.

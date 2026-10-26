@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../../shared/config.js';
 import { clamp, lerp } from '../../shared/math.js';
-import { moveCharacter, supportHeight, waterDepthAt } from '../../shared/physics.js';
+import { moveCharacter, supportHeight, waterDepthAt, leanDistance } from '../../shared/physics.js';
 import { SURFACE } from '../../shared/world.js';
 
 const P = CONFIG.PLAYER;
@@ -28,7 +28,7 @@ export class PlayerController {
   spawn(x, z, yaw) {
     this.pos.set(x, supportHeight(this.world, x, z, 10), z);
     this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = -0.05;
-    this.stamina = P.STAMINA_MAX; this.crouch = 0; this.downed = 0; this.covered = false; this.hasCamoBlanket = false;
+    this.stamina = P.STAMINA_MAX; this.crouch = 0; this.downed = 0; this.covered = false; this.hasCamoBlanket = false; this.lean=0;this.inputLean=0;
   }
 
   update(dt, input, opts = {}) {
@@ -146,9 +146,12 @@ export class PlayerController {
     const shy = sh * (Math.sin(this.shakeT * 31 + 1) * 0.6 + Math.sin(this.shakeT * 17) * 0.4) * 0.03;
     const cam = this.camera;
     const right = (this._right || (this._right = new THREE.Vector3())).set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const wantLean = this.downed > 0.5 ? 0 : this.inputLean || 0;
+    const wantLean = this.downed > 0.5 || this.covered ? 0 : this.inputLean || 0;
     this.lean = lerp(this.lean || 0, wantLean, 1 - Math.exp(-dt * 14));
-    cam.position.set(this.pos.x, this.pos.y + eye + bobY - this.landDip, this.pos.z).addScaledVector(right, bobX + this.lean * 0.28);
+    if(this.downed>.5||this.covered||this.lookLock)this.lean=0;
+    const lean=leanDistance(this.world,{x:this.pos.x,y:this.pos.y,z:this.pos.z,yaw:this.yaw},this.lean,eye);
+    this.lean=lean/.28;
+    cam.position.set(this.pos.x, this.pos.y + eye + bobY - this.landDip, this.pos.z).addScaledVector(right, bobX + lean);
     const breathe = Math.sin(performance.now() * 0.0012) * 0.004 * s.headBob;
     const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35 + this.lean * 0.075 + (this.extraRoll || 0);
     cam.rotation.set(this.pitch + shy + breathe, this.yaw + shx, roll, 'YXZ');

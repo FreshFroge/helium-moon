@@ -121,6 +121,9 @@ test('server accepts bounded screen settings for individual co-op players',()=>{
   assert.deepEqual([p.viewFov,p.viewAspect,second.viewFov,second.viewAspect],[90,2.4,55,.75]);
   sim.input(p.id,{viewFov:999,viewAspect:999});assert.deepEqual([p.viewFov,p.viewAspect],[120,5]);
   sim.input(p.id,{viewFov:NaN,viewAspect:Infinity});assert.deepEqual([p.viewFov,p.viewAspect],[120,5]);
+  sim.input(p.id,{lean:999});assert.equal(p.lean,1,'lean input is bounded');
+  sim.input(p.id,{lean:NaN});assert.equal(p.lean,0,'invalid lean is discarded');
+  p.heldUntil=sim.time+1;sim.input(p.id,{lean:1});assert.equal(p.lean,0,'grabbed players cannot lean');
 });
 
 test('retreat: unwatched he goes low and fast; watched he backs away upright, facing you',()=>{

@@ -4,6 +4,24 @@ import { CONFIG } from './config.js';
 
 const tmp = [];
 
+// Horizontal eye displacement for Q/R. Sweep a small camera cylinder rather than
+// letting a cosmetic offset put the near plane through bark or a wall.
+export function leanDistance(world,p,amount,height){
+  if(!Number.isFinite(amount)||!amount||!world.queryColliders)return 0;
+  const sign=Math.sign(amount),request=Math.min(1,Math.abs(amount))*.28;
+  const rx=Math.cos(p.yaw||0)*sign,rz=-Math.sin(p.yaw||0)*sign;
+  const eye={x:p.x,y:p.y+height-.1,z:p.z};
+  const opts={slope:false,water:false,step:0,cameraSafe:true,boundary:true};
+  const clear=distance=>{
+    const q=moveCharacter(world,eye,rx*distance,rz*distance,.1,opts);
+    return Math.hypot(q.x-(p.x+rx*distance),q.z-(p.z+rz*distance))<.0001;
+  };
+  if(clear(request))return request*sign;
+  let lo=0,hi=request;
+  for(let i=0;i<6;i++){const mid=(lo+hi)*.5;if(clear(mid))lo=mid;else hi=mid;}
+  return lo*sign;
+}
+
 export function waterDepthAt(world, x, z) {
   const w = world.waterAt(x, z);
   if (w === null) return 0;

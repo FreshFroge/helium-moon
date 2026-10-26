@@ -7,7 +7,7 @@ import { CONFIG } from '../config.js';
 import { clamp, lerp, angleDiff, pointAtDistance } from '../math.js';
 import { moveCharacter, groundAt } from '../physics.js';
 import { inSpawnZone, spawnZoneCost, spawnStepBlocked } from './zones.js';
-import { eyeHeight, observedBy, onScreen, sightOf, noiseRadius, viewCost, playerActive, playerAlive, playerFwd } from './perception.js';
+import { eyeHeight, eyePosition, observedBy, onScreen, sightOf, noiseRadius, viewCost, playerActive, playerAlive, playerFwd } from './perception.js';
 
 const C = CONFIG.HV;
 export const HV_STATES = ['dormant', 'roam', 'investigate', 'stalk', 'watch', 'freeze', 'retreat', 'reveal', 'chase', 'search', 'still', 'collapse', 'lie'];
@@ -947,13 +947,14 @@ export class HeliumVoiceAI {
   // Collision keeps a player just outside a trunk, which can leave a grazing visual ray.
   // Treat that trunk as hard cover when it is physically between Helium and a crouched player.
   trunkShield(tp) {
-    const dx = this.x - tp.x, dz = this.z - tp.z, d = Math.hypot(dx, dz);
+    const eye=eyePosition(this.world,tp,this._trunkEye||(this._trunkEye={}));
+    const dx = this.x - eye.x, dz = this.z - eye.z, d = Math.hypot(dx, dz);
     if (d < 1 || !this.world.queryColliders) return false;
-    const refs = this.world.queryColliders(tp.x, tp.z, 1.5, this._shieldRefs || (this._shieldRefs = []));
+    const refs = this.world.queryColliders(eye.x, eye.z, 1.5, this._shieldRefs || (this._shieldRefs = []));
     for (const ref of refs) {
       if (ref >= 100000) continue;
       const c = this.world.circles[ref]; if (!c || c[2] < 0.1) continue;
-      const tx = c[0] - tp.x, tz = c[1] - tp.z;
+      const tx = c[0] - eye.x, tz = c[1] - eye.z;
       const along = (tx * dx + tz * dz) / d;
       if (along <= 0 || along > Math.min(1.6, d - 0.1)) continue;
       const side = Math.abs(tx * dz - tz * dx) / d;

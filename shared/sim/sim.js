@@ -92,9 +92,11 @@ export class GameSim {
     if (Number.isFinite(m.viewFov)) p.viewFov = clamp(m.viewFov, 40, 120);
     if (Number.isFinite(m.viewAspect)) p.viewAspect = clamp(m.viewAspect, 0.3, 5);
     p.crouch = !!m.crouch; p.sprint = !!m.sprint; p.flash = !!m.flash;
+    p.lean = !held && p.state==='alive' && Number.isFinite(m.lean) ? clamp(m.lean,-1,1) : 0;
     p.noise = Math.min(1, Math.max(0, +m.noise || 0));
     p.voice = Math.min(1, Math.max(0, +m.voice || 0));
     p.hidden = !!m.hidden; p.covered = !!m.covered && this.obj.items.some((it) => it.kind === 'blanket' && it.holder === p.id);
+    if(p.covered)p.lean=0;
     p.use = typeof m.use === 'string' ? m.use : null;
     p.revive = m.revive != null ? m.revive : null;
   }

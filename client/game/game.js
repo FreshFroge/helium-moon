@@ -698,7 +698,7 @@ export class Game {
     if (this.inputT <= 0 && this.net && !this.ended) {
       this.inputT = 1 / CONFIG.NET.INPUT_HZ;
       this.net.send({ t: 'in', x: +pl.pos.x.toFixed(2), y: +pl.pos.y.toFixed(2), z: +pl.pos.z.toFixed(2), yaw: +pl.yaw.toFixed(3), pitch: +pl.pitch.toFixed(3),
-        viewFov: this.camera.fov, viewAspect: this.camera.aspect,
+        viewFov: this.camera.fov, viewAspect: this.camera.aspect, lean:+pl.lean.toFixed(3),
         crouch: pl.crouching, sprint: pl.sprinting, flash: fl.on && fl.light.intensity > 1, noise: +(pl.noise + (this.useId && this._stationNoisy ? 0.6 : 0)).toFixed(2),
         voice: +this.voice.voiceLevel.toFixed(2), hidden: pl.hidden, covered: pl.covered, use: this.useId || null, revive: this.reviveId || null });
     }

@@ -81,6 +81,37 @@ async def play(port):
             assert result['maxBoundaryRatio'] <= 1.01, result
             assert result['geometries'] > 20, result
             assert result['inwardBark'], result
+            await page.evaluate('''()=>{
+                for(const actor of [game.sim.hv,game.sim.sf,game.sim.director,game.sim.mimic])actor.update=()=>{};
+                game.settings.headBob=0;game.settings.cameraShake=0;
+            }''')
+            for side,key in [(-1,'r'),(1,'q')]:
+                await page.evaluate('''async side=>{
+                    const {CONFIG}=await import('/shared/config.js');
+                    const w=game.world;
+                    const {moveCharacter,groundAt}=await import('/shared/physics.js');
+                    window.leanTree=null;
+                    for(const t of w.trees){
+                        if(!t.play||t.trunkR<.2||t.height<5)continue;
+                        const x=t.x+side*((t.collisionR||t.trunkR)+CONFIG.PLAYER.RADIUS+.01),z=t.z;
+                        const p={x,z,y:groundAt(w,x,z)},q=moveCharacter(w,p,0,0,CONFIG.PLAYER.RADIUS,{cameraSafe:true,boundary:true});
+                        if(Math.hypot(q.x-x,q.z-z)>.005||!w.isPlayable(x,z))continue;
+                        game.tp(x,z);game.look(0,0);game.advance(30,1/30,false);window.leanTree=t;break;
+                    }
+                    if(!leanTree)throw Error('no collision-clear leaning fixture');
+                }''',side)
+                await page.keyboard.down(key)
+                await page.evaluate('game.advance(45,1/30,false)')
+                lean=await page.evaluate('''async()=>{
+                    const {eyePosition}=await import('/shared/sim/perception.js');
+                    const p=game.sim.players.get(game.myId),eye=eyePosition(game.world,p),c=game.camera.position,t=leanTree;
+                    return {lean:game.player.lean,error:Math.hypot(c.x-eye.x,c.y-eye.y,c.z-eye.z),
+                        clearance:Math.hypot(c.x-t.x,c.z-t.z)-(t.collisionR||t.trunkR)};
+                }''')
+                await page.keyboard.up(key)
+                assert abs(lean['lean'])>.1,lean
+                assert lean['error']<.02 and lean['clearance']>=.095,lean
+                print('  ok  real Q/R input preserves camera clearance and authoritative eye position:',lean,flush=True)
             assert not errors, errors
             print('PASS closed tree tips and camera-safe bark scale:', result, flush=True)
         finally:

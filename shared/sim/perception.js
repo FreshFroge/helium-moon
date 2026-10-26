@@ -2,11 +2,18 @@
 // noise propagation, cover scoring.
 import { CONFIG } from '../config.js';
 import { clamp, angleDiff } from '../math.js';
+import { leanDistance } from '../physics.js';
 
 export const eyeHeight = (p) => p.state==='downed' ? .35 : (p.crouch ? CONFIG.PLAYER.CROUCH_HEIGHT : CONFIG.PLAYER.HEIGHT) - 0.1;
 export const playerAlive = (p) => !!p && (p.state === 'alive' || p.state === 'downed');
 export const playerActive = (p) => !!p && p.state === 'alive';
 export const playerFwd = (p) => [-Math.sin(p.yaw), -Math.cos(p.yaw)];
+const eyeScratch={};
+export function eyePosition(world,p,out={}){
+  const height=eyeHeight(p),distance=p.lean&&p.state!=='downed'&&!p.covered?leanDistance(world,p,p.lean,height):0;
+  out.x=p.x+Math.cos(p.yaw||0)*distance;out.y=p.y+height;out.z=p.z-Math.sin(p.yaw||0)*distance;
+  return out;
+}
 
 // Match the perspective camera, including pitch, vertical FOV and aspect ratio.
 // Sample the silhouette: a head/shoulder appearing at a screen edge still counts.
@@ -14,16 +21,18 @@ export const playerFwd = (p) => [-Math.sin(p.yaw), -Math.cos(p.yaw)];
 export function onScreen(world, p, x, y, z, h = 1.9, radius = 0.36) {
   const yaw = p.yaw || 0, pitch = p.pitch || 0;
   const sy = Math.sin(yaw), cy = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
-  const ey = p.y + eyeHeight(p);
+  const eye=eyePosition(world,p,eyeScratch),ex=eye.x,ey=eye.y,ez=eye.z;
   const tanY = Math.tan((p.viewFov || 75) * Math.PI / 360), tanX = tanY * (p.viewAspect || 16 / 9);
   for (const height of [h * 0.9, h * 0.5, h * 0.15]) for (const side of [0, -radius, radius]) {
     const tx = x + cy * side, tz = z - sy * side;
-    const dx = tx - p.x, dy = y + height - ey, dz = tz - p.z;
+    const dx = tx - ex, dy = y + height - ey, dz = tz - ez;
     const depth = -sy * cp * dx + sp * dy - cy * cp * dz;
     if (depth < 0.06 || Math.hypot(dx, dy, dz) > (p.flash ? Math.max(28, CONFIG.FLASHLIGHT.RANGE + 8) : 28)) continue;
-    const right = cy * dx - sy * dz, up = sy * sp * dx + cp * dy + cy * sp * dz;
+    const rawRight = cy * dx - sy * dz, rawUp = sy * sp * dx + cp * dy + cy * sp * dz;
+    const roll=(p.lean||0)*.075,cr=Math.cos(roll),sr=Math.sin(roll);
+    const right=cr*rawRight+sr*rawUp,up=-sr*rawRight+cr*rawUp;
     if (Math.abs(right) > depth * tanX || Math.abs(up) > depth * tanY) continue;
-    if (world.lineOfSight(p.x, ey, p.z, tx, y + height, tz, { brushK: 0.3 }) > 0.2) return true;
+    if (world.lineOfSight(ex, ey, ez, tx, y + height, tz, { brushK: 0.3 }) > 0.2) return true;
   }
   return false;
 }
@@ -39,7 +48,8 @@ export function openness(world, x, z) {
 
 // How well a player can see a creature standing at (x,y,z) with height h. Returns {vis, lit, cos, d}.
 export function observedBy(world, p, x, y, z, h) {
-  const dx = x - p.x, dz = z - p.z;
+  const eye=eyePosition(world,p,eyeScratch),ex=eye.x,ey=eye.y,ez=eye.z;
+  const dx = x - ex, dz = z - ez;
   const d = Math.hypot(dx, dz) || 0.001;
   const [fx, fz] = playerFwd(p);
   const cosA = (dx * fx + dz * fz) / d;
@@ -50,10 +60,9 @@ export function observedBy(world, p, x, y, z, h) {
   const lit = flashOn && cosA > 0.2 && d < CONFIG.FLASHLIGHT.RANGE * 0.95;
   const range = lit ? CONFIG.FLASHLIGHT.RANGE + 8 : 14 + 30 * openness(world, x, z);
   if (d > range) return out;
-  const ey = p.y + eyeHeight(p);
   // test head and torso; whichever is clearer counts
-  const v1 = world.lineOfSight(p.x, ey, p.z, x, y + h * 0.9, z, { brushK: 0.3 });
-  const v2 = v1 > 0.6 ? v1 : Math.max(v1, world.lineOfSight(p.x, ey, p.z, x, y + h * 0.55, z, { brushK: 0.3 }));
+  const v1 = world.lineOfSight(ex, ey, ez, x, y + h * 0.9, z, { brushK: 0.3 });
+  const v2 = v1 > 0.6 ? v1 : Math.max(v1, world.lineOfSight(ex, ey, ez, x, y + h * 0.55, z, { brushK: 0.3 }));
   const centre = clamp((cosA - 0.56) / 0.3, 0, 1);
   out.vis = v2 * Math.pow(1 - d / range, 0.4) * (0.45 + 0.55 * centre);
   out.lit = lit && v2 > 0.25;
@@ -74,7 +83,11 @@ export function sightOf(world, m, eh, lookYaw, p, cfg) {
     if (Math.abs(angleDiff(lookYaw, a)) > (cfg.SIGHT_FOV_DEG * Math.PI / 360)) return 0;
   }
   const targetHeight=p.state==='downed' ? eyeHeight(p) : (p.crouch ? .8 : 1.2);
-  const los = world.lineOfSight(m.x, m.y + eh, m.z, p.x, p.y + targetHeight, p.z, { brushK: 0.26 });
+  let los = world.lineOfSight(m.x, m.y + eh, m.z, p.x, p.y + targetHeight, p.z, { brushK: 0.26 });
+  if(p.lean&&!p.covered){
+    const eye=eyePosition(world,p,eyeScratch);
+    los=Math.max(los,world.lineOfSight(m.x,m.y+eh,m.z,eye.x,eye.y,eye.z,{brushK:.26}));
+  }
   return los * Math.pow(1 - d / range, 0.5);
 }
 
