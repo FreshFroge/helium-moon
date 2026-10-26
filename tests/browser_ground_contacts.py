@@ -60,6 +60,23 @@ async def play(port):
                         }
                     }
                 }
+                let skunkPawError=0,skunkContacts=0;
+                const skunk=game.sf,scale=skunk.root.scale.x;
+                for(const point of points)for(const turn of [0,Math.PI/2,Math.PI])for(const flags of [0,1,2,8]){
+                    const yaw=point.yaw+turn,speed=flags===1?2.3:flags===2?0:.6;
+                    for(let frame=0;frame<180;frame++){
+                        skunk.update(1/60,[point.x,point.y,point.z,yaw,yaw,speed,flags,0,1]);
+                        if(frame<120)continue;
+                        skunk.root.updateMatrixWorld(true);
+                        for(const [key,foot] of Object.entries(skunk.anim.feet)){
+                            if(!foot.contact)continue;
+                            const paw=skunk.anim.legs[key].e.getWorldPosition(new game.camera.position.constructor());
+                            skunkPawError=Math.max(skunkPawError,Math.abs(paw.y-.02*scale-groundAt(w,paw.x,paw.z)));
+                            skunkContacts++;
+                        }
+                    }
+                }
+                skunk.root.visible=false;
                 // Render a crawl on the bridge's clear surface for inspection.
                 const point=points.find(p=>p.bridge);v.update(1/30,[point.x,point.y,point.z,point.yaw,point.yaw,0,10.5,16,0,0,6]);
                 const viewX=point.x+Math.sin(point.yaw)*3.5+Math.cos(point.yaw)*.6;
@@ -69,12 +86,13 @@ async def play(port):
                 game.fade=game.fadeTarget=0;game.env.update(1/30,game.camera,0);
                 game._render(0);
                 document.querySelector('#intro').style.display='none';
-                return {slopes:slopes.length,bridge:points.some(p=>p.bridge),maxFoot,maxHand,contacts};
+                return {slopes:slopes.length,bridge:points.some(p=>p.bridge),maxFoot,maxHand,contacts,skunkPawError,skunkContacts};
             }''')
             assert result['slopes']==3,result
             assert result['contacts']>1000,result
             assert result['maxFoot']<.025 and result['maxHand']<.025,result
             assert result['bridge'],result
+            assert result['skunkContacts']>1000 and result['skunkPawError']<.02,result
             output=Path(os.environ.get('HM_ARTIFACT_DIR','/tmp/helium-moon-ground-contacts'))
             output.mkdir(parents=True,exist_ok=True)
             await page.screenshot(path=str(output/'grounded-crawl.png'),timeout=120000)

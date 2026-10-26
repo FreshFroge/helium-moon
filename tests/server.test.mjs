@@ -103,10 +103,12 @@ try {
   // movement: client-owned positions, teleports rejected
   A.send({ t: 'debug', cmd: 'freeze' });
   const me = A.snap.pl.find((p) => p[0] === A.id);
-  A.send({ t: 'in', x: me[1] + 1.5, y: me[2], z: me[3], yaw: 0.5, pitch: 0, crouch: true, sprint: false, flash: true, noise: 0.2, voice: 0, hidden: false });
+  A.send({ t: 'in', x: me[1] + 1.5, y: me[2], z: me[3], yaw: 0.5, pitch: 0, crouch: true, sprint: false, flash: true, noise: 0.2, voice: 0, hidden: false, lean: -.8 });
   await sleep(300);
   const me2 = A.snap.pl.find((p) => p[0] === A.id);
   ok(Math.abs(me2[1] - (me[1] + 1.5)) < 0.01 && (me2[6] & 1), 'input moves player and sets crouch flag');
+  ok(me2[11] === -.8 && B.snap.pl.find((p) => p[0] === A.id)[11] === -.8,
+    'the same authoritative lean reaches both real clients after existing player fields');
   A.send({ t: 'in', x: me2[1] + 80, y: me2[2], z: me2[3], yaw: 0.5, pitch: 0 });
   await sleep(300);
   ok(Math.abs(A.snap.pl.find((p) => p[0] === A.id)[1] - me2[1]) < 0.01, 'teleport (>12 m) rejected');

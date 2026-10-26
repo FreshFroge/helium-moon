@@ -118,7 +118,7 @@ export class Game {
     Object.defineProperty(this.voice.net, 'networked', { get: () => !!(this.net && this.net.networked) });
     this.voice.onChange = (st) => this.ui.voiceStatus(st);
     progress(0.9, 'Something is in the trees');
-    const [hv, sf] = await Promise.all([HeliumView.create(this.scene, world), SkunkView.create(this.scene)]);
+    const [hv, sf] = await Promise.all([HeliumView.create(this.scene, world), SkunkView.create(this.scene, world)]);
     this.hv = hv; this.sf = sf;
     this.wildlife = new WildlifeSystem(this.scene, world, this.audio);
     this.hvBuf = new SnapBuffer([3, 4], [7, 10, 11, 12, 13], 8); this.sfBuf = new SnapBuffer([3, 4], [6, 8], 8);   // >8 m between snapshots = relocation: snap, never slide
@@ -334,7 +334,7 @@ export class Game {
   async _ensureAvatar(id, name, idx) {
     if (this.avatars.has(id) || this.pending.has(id)) return;
     this.pending.add(id);
-    const a = await PlayerAvatar.create(this.scene, id, name, idx);
+    const a = await PlayerAvatar.create(this.scene, id, name, idx, this.world);
     this.pending.delete(id);
     if (this.mode !== 'playing' || !this.names || !this.names.has(id)) { a.dispose(this.scene); return; }
     this.avatars.set(id, a);

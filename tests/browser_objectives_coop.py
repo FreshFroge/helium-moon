@@ -2,6 +2,7 @@
 Run with HM_TEST=1 for the server's explicit freeze/position fixtures.
 """
 import asyncio
+import math
 import os
 import time
 from playwright.async_api import async_playwright
@@ -42,6 +43,30 @@ async def play(port):
                     for p in pages:await p.evaluate('game.advance(4,1/30,false)')
                     await asyncio.sleep(.04)
 
+            # Real Q/R input -> server snapshot -> the other client's actual
+            # hiker skeleton. Do not substitute a locally posed avatar here.
+            for page in pages:
+                await page.wait_for_function('game.avatars.size===1')
+            await pump(.5)
+            baseline=await b.evaluate('''() => {const v=[...game.avatars.values()][0];v.root.updateMatrixWorld(true);
+                const h=v.char.bones.head.getWorldPosition(v.pos.clone());
+                return {x:h.x,y:h.y,z:h.z};}''')
+            for key,sign in [('q',-1),('r',1)]:
+                await a.keyboard.down(key);await pump(1)
+                pose=await b.evaluate('''() => {const v=[...game.avatars.values()][0];v.root.updateMatrixWorld(true);
+                    const h=v.char.bones.head.getWorldPosition(v.pos.clone());
+                    return {x:h.x,y:h.y,z:h.z,yaw:v.yaw,lean:v.anim.sideLean,snapshot:game.plBufs.get(v.id).latest()[11]};}''')
+                lateral=(pose['x']-baseline['x'])*math.cos(pose['yaw'])-(pose['z']-baseline['z'])*math.sin(pose['yaw'])
+                assert pose['snapshot']*sign>.9 and pose['lean']*sign>.9,pose
+                assert .2<lateral*sign<.36,(pose,lateral)
+                await a.keyboard.up(key);await pump(1)
+            await a.keyboard.down('Control');await pump(1)
+            crouched=await b.evaluate('''() => {const v=[...game.avatars.values()][0];v.root.updateMatrixWorld(true);
+                return v.char.bones.head.getWorldPosition(v.pos.clone()).y-v.pos.y;}''')
+            assert .85<crouched<1.1,crouched
+            await a.keyboard.up('Control');await pump(.5)
+            print('  ok  real Q/R peeks and low crouch reach the other client as grounded hiker poses',flush=True)
+
             for page in pages:
                 await page.evaluate('''() => { window.coopApproach=async(id,station=false)=>{
                     const {moveCharacter,groundAt}=await import('/shared/physics.js');
@@ -66,12 +91,18 @@ async def play(port):
             for page in pages:assert await page.evaluate("coopApproach('gen',true)")
             await pump(.5)
             for page in pages:await page.keyboard.down('e')
-            await pump(3.5)
+            await pump(2.9)
             for page in pages:await page.keyboard.up('e')
-            await pump(8)
+            await pump(.5)
+            progress=await a.evaluate("game.objViews.stations.get('gen').prog")
+            checkpoint=math.floor(progress*3+.0005)/3
+            assert checkpoint in (1/3,2/3) and progress<1,progress
+            # The server runs in real time; allow an entire unfinished third
+            # to decay even if slow software rendering delays a key release.
+            await pump(18)
             saved=[await p.evaluate("game.objViews.stations.get('gen').prog")for p in pages]
-            assert all(abs(v-1/3)<.002 for v in saved),saved
-            print('  ok  both clients retain the first repair checkpoint after interruption:',saved,flush=True)
+            assert all(abs(v-checkpoint)<.002 for v in saved),(checkpoint,saved)
+            print('  ok  both clients retain their completed repair checkpoint after interruption:',saved,flush=True)
             for page in pages:await page.keyboard.down('e')
             await pump(5.8)
             for page in pages:await page.keyboard.up('e')

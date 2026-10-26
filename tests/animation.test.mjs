@@ -10,18 +10,18 @@ const mathURL = new URL('../shared/math.js', import.meta.url);
 const source = (await readFile(animatorURL, 'utf8'))
   .replace("from 'three'", `from '${threeURL.href}'`)
   .replace("from '../../shared/math.js'", `from '${mathURL.href}'`);
-const { HeliumAnimator } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { HeliumAnimator, SkunkAnimator } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const meta = JSON.parse(await readFile(new URL('../assets/models/helium.json', import.meta.url), 'utf8'));
 
-function character() {
+function character(skeleton = meta) {
   const root = new THREE.Group(), bones = {};
-  for (const def of meta.bones) {
+  for (const def of skeleton.bones) {
     const bone = bones[def.name] = new THREE.Bone();
     bone.name = def.name;
     bone.userData.head = new THREE.Vector3(...def.head);
     bone.userData.tail = new THREE.Vector3(...def.tail);
   }
-  for (const def of meta.bones) {
+  for (const def of skeleton.bones) {
     const bone = bones[def.name];
     if (def.parent) {
       bones[def.parent].add(bone);
@@ -126,5 +126,46 @@ for(const [sx,sz] of [[.3,.2],[-.3,-.2],[.3,-.2],[-.3,.2]]) {
   }
 }
 console.log('  ok  walk and reverse crawl plant on uphill, downhill and cross-slope terrain');
+
+const hiker = JSON.parse(await readFile(new URL('../assets/models/hiker.json', import.meta.url), 'utf8'));
+const teammate = new HeliumAnimator(character(hiker));
+for (const crouch of [0, 1]) {
+  for (const sideLean of [-1, 0, 1]) {
+    for (let i = 0; i < 180; i++) teammate.update(1/60, {speed:0, crouch, sideLean});
+    finitePose(teammate);
+    const head = teammate.rig.wp(teammate.b.head);
+    if (sideLean) assert.ok(head.x * sideLean < -.2 && head.x * sideLean > -.35,
+      `the actual hiker head peeks in the camera's direction without moving the feet: ${head.x}`);
+    else assert.ok(Math.abs(head.x) < .001, 'releasing lean returns the hiker to center');
+    if (crouch) assert.ok(head.y > .85 && head.y < 1.08, `remote crouch matches the low player eye position: ${head.y}`);
+    for (const side of ['L','R']) {
+      assert.ok(teammate.rig.wp(teammate.b['foot.'+side]).distanceTo(teammate.feet[side].target) < .012,
+        'lean/crouch keeps both ankles grounded');
+    }
+  }
+}
+console.log('  ok  actual hiker leans above planted feet and crouches to the player eye height');
+
+const skunkMeta = JSON.parse(await readFile(new URL('../assets/models/sf6.json', import.meta.url), 'utf8'));
+let pawError = 0, pawSupportError = 0, pawWorst;
+for (const [sx,sz] of [[0,0],[.3,.2],[-.3,-.2],[.3,-.2],[-.3,.2]]) {
+  for (const pose of [{speed:1},{speed:3.8,fast:true},{speed:0,rear:true,gas:true},{speed:.6,low:true}]) {
+    const skunk = new SkunkAnimator(character(skunkMeta)), ground = (x,z) => sx*x+sz*z;
+    for (let i=0;i<240;i++) {
+      skunk.update(1/60,{...pose,ground}); finitePose(skunk);
+      if(i<120)continue;
+      for(const [key,foot] of Object.entries(skunk.feet)) {
+        if(!foot.contact)continue;
+        const actual=skunk.rig.wp(skunk.legs[key].e);
+        pawError=Math.max(pawError,actual.distanceTo(foot.target));
+        const supportError=Math.abs(actual.y-ground(actual.x,actual.z)-.02);
+        if(supportError>pawSupportError){pawSupportError=supportError;pawWorst={sx,sz,pose,key,actual:actual.toArray(),target:foot.target.toArray()};}
+      }
+    }
+  }
+}
+console.log({pawError,pawSupportError,pawWorst});
+assert.ok(pawError < .012 && pawSupportError < .015,'skunk walk, run, crouch and reared hind paws follow the actual support plane');
+console.log('  ok  skunk paws ground on slopes and stay planted while rearing');
 
 console.log('\nall animation tests passed');

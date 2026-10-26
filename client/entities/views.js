@@ -115,7 +115,7 @@ export class HeliumView {
 
 // ------------------------------------------------------------------ Sulfur Hexafluoride
 export class SkunkView {
-  static async create(scene) { const v = new SkunkView(); await v._load(scene); return v; }
+  static async create(scene, world = null) { const v = new SkunkView(); v.world = world; await v._load(scene); return v; }
   async _load(scene) {
     this.char = await loadCharacter('sf6');
     this.root = this.char.root; this.root.visible = false;
@@ -123,6 +123,11 @@ export class SkunkView {
     scene.add(this.root);
     this.anim = new SkunkAnimator(this.char);
     this.pos = new THREE.Vector3(); this.flags = 16; this.state = 0; this.speed = 0;
+    this.ground = (x, z) => {
+      const c = Math.cos(this.root.rotation.y), s = Math.sin(this.root.rotation.y), scale = CONFIG.SF.MODEL_SCALE;
+      return (groundAt(this.world, this.pos.x + (c * x + s * z) * scale,
+        this.pos.z + (-s * x + c * z) * scale) - this.pos.y) / scale;
+    };
     const eyes = this.char.meshes.eyes;
     if (eyes) { eyes.material = eyes.material.clone(); this.eyeMat = eyes.material; }
   }
@@ -133,7 +138,7 @@ export class SkunkView {
     this.pos.set(x, y, z); this.flags = flags; this.state = st; this.speed = speed;
     this.root.visible = !(flags & 16);
     this.root.position.copy(this.pos); this.root.rotation.y = yaw;
-    if (this.root.visible) this.anim.update(dt, { speed: speed / CONFIG.SF.MODEL_SCALE, fast: !!(flags & 1), rear: !!(flags & 2), gas: !!(flags & 4), low: !!(flags & 8), lookYaw: angleDiff(yaw, lookYaw), jaw });
+    if (this.root.visible) this.anim.update(dt, { speed: speed / CONFIG.SF.MODEL_SCALE, fast: !!(flags & 1), rear: !!(flags & 2), gas: !!(flags & 4), low: !!(flags & 8), lookYaw: angleDiff(yaw, lookYaw), jaw, ground: this.world ? this.ground : null });
     // tapetum eyeshine: the eyes throw the flashlight back
     if (this.eyeMat) { const k = 0.45 + shine * 9; this.eyeMat.color.setRGB(k * 0.9, k * 0.85, k * 0.55); }
   }
@@ -151,7 +156,7 @@ function labelSprite(text, color) {
 }
 
 export class PlayerAvatar {
-  static async create(scene, id, name, idx) { const v = new PlayerAvatar(); await v._load(scene, id, name, idx); return v; }
+  static async create(scene, id, name, idx, world = null) { const v = new PlayerAvatar(); v.world = world; await v._load(scene, id, name, idx); return v; }
   async _load(scene, id, name, idx) {
     this.id = id; this.name = name; this.color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
     this.char = await loadCharacter('hiker', { tint: this.color });
@@ -161,6 +166,10 @@ export class PlayerAvatar {
     this.label.position.y = 2.05; this.root.add(this.label);
     this.pos = new THREE.Vector3(); this.prev = new THREE.Vector3(); this.speed = 0; this.yaw = 0; this.pitch = 0;
     this.flags = 0; this.state = 0; this.health = 2; this.stride = 0; this.lie = 0; this.first = true;
+    this.ground = (x, z) => {
+      const yaw = this.root.rotation.y, c = Math.cos(yaw), s = Math.sin(yaw);
+      return groundAt(this.world, this.pos.x + c * x + s * z, this.pos.z - s * x + c * z) - this.pos.y;
+    };
     // Cosmetic remote reaction only: it never changes the authoritative player
     // yaw, position or input. The game uses lightYaw solely for that avatar's
     // rendered flashlight.
@@ -172,7 +181,7 @@ export class PlayerAvatar {
     this.fearT = Math.max(this.fearT, hit ? 1.05 : 0.62);
     this.recoil = Math.max(this.recoil, hit ? 1 : 0.45);
   }
-  // s: [id,x,y,z,yaw,pitch,flags,health,stateIdx,reviveProg,bleedT]
+  // s: [id,x,y,z,yaw,pitch,flags,health,stateIdx,reviveProg,bleedT,lean?]
   update(dt, s, cameraPos) {
     const [, x, y, z, yaw, pitch, flags, health, st] = s;
     this.prev.copy(this.pos);
@@ -191,7 +200,8 @@ export class PlayerAvatar {
     this.root.position.set(x, y + this.lie * 0.18, z);
     this.root.rotation.set(-this.lie * 1.45, yaw + Math.PI, 0, 'YXZ');
     this.anim.update(dt, { speed: down ? 0 : this.speed, run: !!(flags & 4) && this.speed > 3, crouch: flags & 1 ? 1 : 0,
-      lookYaw: angleDiff(yaw, this.lightYaw), lookPitch: pitch * 0.8, reach: this.recoil * 0.25, snap: fear > 0.75, armSwing: 0.35 });
+      lookYaw: angleDiff(yaw, this.lightYaw), lookPitch: pitch * 0.8, reach: this.recoil * 0.25, snap: fear > 0.75, armSwing: 0.35,
+      sideLean: down ? 0 : (s[11] || 0), ground: this.world && !down ? this.ground : null });
     const d = cameraPos ? cameraPos.distanceTo(this.pos) : 0;
     this.label.material.opacity = clamp(1 - (d - 6) / 14, 0, 0.85) * (st === 2 ? 0.4 : 1);
     this.label.visible = this.label.material.opacity > 0.02;

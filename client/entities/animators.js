@@ -80,7 +80,7 @@ export class HeliumAnimator {
     this.headYaw = 0; this.headPitch = 0; this.tilt = 0; this.jaw = 0;
     this.speed = 0; this.accel = 0; this.turn = 0; this.lastYaw = null; this.torsoYaw = 0;
     this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0, stalk: 0, crawl: 0, windup: 0, strike: 0, hang: 0, dead: 0, peek: 0, grab: 0, limp: 0, rigid: 0 };
-    this.wasFrozen = false; this.frozenMoving = 0; this.peekSide = 1; this.grabKind = 0; this.grabPhase = 0;
+    this.wasFrozen = false; this.frozenMoving = 0; this.peekSide = 1; this.grabKind = 0; this.grabPhase = 0; this.sideLean = 0;
     this.hands = {};
   }
 
@@ -135,6 +135,8 @@ export class HeliumAnimator {
     this.t += dt;
     const sp = Math.max(0, p.speed || 0), creature = p.unnatural ? 1 : 0;
     const k = 1 - Math.exp(-dt * 6);
+    this.sideLean = lerp(this.sideLean, !creature && Number.isFinite(p.sideLean) ? clamp(p.sideLean, -1, 1) : 0,
+      1 - Math.exp(-dt * 12));
     const frozen = !!(creature && p.frozen);
     if (frozen && !this.wasFrozen) {
       // caught mid-stride; standing, he is caught with one foot off the ground
@@ -190,17 +192,19 @@ export class HeliumAnimator {
       + 0.2 * B.grab * (this.grabKind === 6 ? 1.4 : 1) + 0.12 * B.hang;
     const bob = Math.abs(Math.sin(cycle)) * (0.025 * B.walk + 0.06 * B.run) * moving;
     const breathe = free * Math.sin(this.t * 1.7) * 0.012;
-    b.root.position.x = b.root.userData.restPos.x + weight + Math.sin(cycle) * 0.012 * B.walk * creature * free;
-    b.root.position.y = b.root.userData.restPos.y - 0.04 * B.walk - 0.15 * B.run - 0.22 * B.crouch + bob + 0.055 * B.hang - 0.3 * B.limp;
+    // Teammates bend above planted feet when peeking. Their rig faces +Z,
+    // opposite the camera, so a right camera lean moves toward local -X.
+    b.root.position.x = b.root.userData.restPos.x + weight + Math.sin(cycle) * 0.012 * B.walk * creature * free - this.sideLean * 0.08;
+    b.root.position.y = b.root.userData.restPos.y - 0.04 * B.walk - 0.15 * B.run - (creature ? 0.22 : 0.60) * B.crouch + bob + 0.055 * B.hang - 0.3 * B.limp;
     // leaning out from behind a trunk
     b.root.position.x += this.peekSide * 0.16 * B.peek * (p.peek === 2 ? 0.6 : 1);
-    if (creature && p.ground) {
+    if (p.ground) {
       // Lower the pelvis toward the downhill support rather than stretching
       // the downhill leg or leaving its foot suspended above the terrain.
       const low = Math.min(this._ground(p, 0.2, 0), this._ground(p, -0.2, 0), this._ground(p, 0, -0.4));
       b.root.position.y += clamp(low, -0.25, 0.12);
     }
-    b.root.quaternion.setFromEuler(_e.set(0, 0, bank + weight * 0.55, 'XYZ'));
+    b.root.quaternion.setFromEuler(_e.set(0, 0, bank + weight * 0.55 + this.sideLean * 0.045, 'XYZ'));
     // The torso follows a glance later and less far than the head. The residual
     // look angle stays in the neck, so turning the chest cannot double the gaze.
     this.torsoYaw = lerp(this.torsoYaw, clamp((p.lookYaw || 0) * 0.22, -0.3, 0.3) * creature,
@@ -210,9 +214,9 @@ export class HeliumAnimator {
     for (const n of ['spine05', 'spine04', 'spine03', 'spine02']) {
       b[n].quaternion.setFromEuler(_e.set(lean / 4 + breathe * 0.3,
         this.torsoYaw / 5 + gaitYaw * (1 - B.dead),
-        -bank * 0.18 + peekRoll + 0.05 * B.limp * Math.sin(n.length), 'XYZ'));
+        -bank * 0.18 + peekRoll + 0.05 * B.limp * Math.sin(n.length) + this.sideLean * 0.065, 'XYZ'));
     }
-    b.spine01.quaternion.setFromEuler(_e.set(breathe, this.torsoYaw / 5, -weight * 0.3, 'XYZ'));
+    b.spine01.quaternion.setFromEuler(_e.set(breathe, this.torsoYaw / 5, -weight * 0.3 + this.sideLean * 0.02, 'XYZ'));
     // the owl head: his neck turns far past a person's (Puppet)
     const neck = creature ? 2.75 : 1.95;
     this.headYaw = lerp(this.headYaw, clamp((p.lookYaw || 0) - this.torsoYaw - gaitYaw * 4 * creature, -neck, neck),
@@ -385,10 +389,12 @@ export class SkunkAnimator {
       const a = b[`${f}l1.${s}`], m = b[`${f}l2.${s}`], e = b[`${f}l3.${s}`];
       this.legs[f + s] = { a, m, e, l1: a.userData.head.distanceTo(m.userData.head), l2: m.userData.head.distanceTo(e.userData.head), rest: e.userData.head.clone() };
     }
-    this.headYaw = 0; this.jaw = 0;
+    this.headYaw = 0; this.jaw = 0; this.feet = {};
   }
 
-  // p: {speed, fast, rear, gas, low, lookYaw, jaw}
+  _ground(p, x, z) { const y = p.ground ? p.ground(x, z) : 0; return Number.isFinite(y) ? y : 0; }
+
+  // p: {speed, fast, rear, gas, low, lookYaw, jaw, ground(localX,localZ)}
   update(dt, p) {
     const rig = this.rig, b = this.b, B = this.blend;
     this.t += dt;
@@ -402,8 +408,14 @@ export class SkunkAnimator {
     const stride = lerp(0.32, 0.75, B.fast);
     if (sp > 0.02) this.phase = (this.phase + dt * sp / (stride * 2)) % 1;
     rig.reset();
-    b.root.position.y = b.root.userData.restPos.y - 0.12 * B.low + Math.sin(this.phase * Math.PI * 4) * 0.02 * B.move + 0.35 * B.rear;
-    b.root.quaternion.setFromEuler(_e.set(-1.05 * B.rear, 0, Math.sin(this.phase * Math.PI * 2) * 0.05 * B.move, 'XYZ'));
+    const support = Math.min(this._ground(p, -.2, -.2), this._ground(p, .2, -.2), this._ground(p, 0, .6));
+    // Rear around the hindquarters instead of lifting the complete rig out of
+    // leg reach. Terrain support is sampled in this model's scaled local space.
+    b.root.position.y = b.root.userData.restPos.y - 0.12 * B.low + Math.sin(this.phase * Math.PI * 4) * 0.02 * B.move + 0.02 * B.rear + clamp(support, -.25, .12);
+    const pitch = Math.atan2(this._ground(p, 0, .5) - this._ground(p, 0, -.2), .7);
+    const bank = Math.atan2(this._ground(p, .2, 0) - this._ground(p, -.2, 0), .4);
+    b.root.quaternion.setFromEuler(_e.set(-1.05 * B.rear - clamp(pitch, -.5, .5), 0,
+      Math.sin(this.phase * Math.PI * 2) * 0.05 * B.move + clamp(bank, -.5, .5), 'XYZ'));
     const und = Math.sin(this.phase * Math.PI * 2 + 1.2) * 0.08 * B.move;
     b.spine1.quaternion.setFromEuler(_e.set(0.05 * B.low, und, 0, 'XYZ'));
     b.spine2.quaternion.setFromEuler(_e.set(0.08 * B.low - 0.15 * B.gas, und, 0, 'XYZ'));
@@ -423,17 +435,33 @@ export class SkunkAnimator {
       const duty = lerp(0.6, 0.45, B.fast);
       let fz, fy;
       if (ph < duty) { const t = ph / duty; fz = lerp(stride / 2, -stride / 2, t); fy = 0; }
-      else { const t = (ph - duty) / (1 - duty); fz = lerp(-stride / 2, stride / 2, t); fy = Math.sin(Math.PI * t) * (0.06 + 0.08 * B.fast); }
+      else { const t = (ph - duty) / (1 - duty), ease = t * t * (3 - 2 * t); fz = lerp(-stride / 2, stride / 2, ease); fy = Math.sin(Math.PI * t) * (0.06 + 0.08 * B.fast); }
       fz *= B.move; fy *= B.move;
       const hip = rig.wp(L.a);
       const isFront = key[0] === 'f';
-      const target = new THREE.Vector3(L.rest.x * 1.05, 0.02 + fy, L.rest.z + fz);
+      const target = new THREE.Vector3(L.rest.x * 1.05, 0.02 + fy, L.rest.z + fz * (1 - .9 * B.rear));
+      const airborne = isFront && B.rear > .05;
+      if (!airborne) {
+        // Limit overlong steps horizontally, preserving the actual paw support
+        // height. The previous gait aimed at a flat plane even on riverbanks.
+        const length = L.l1 + L.l2 - .002;
+        for (let i = 0; i < 5; i++) {
+          target.y = this._ground(p, target.x, target.z) + .02 + fy;
+          const horizontal = Math.hypot(target.x - hip.x, target.z - hip.z);
+          const reach = Math.sqrt(Math.max(0, length * length - (target.y - hip.y) ** 2));
+          if (horizontal <= reach || horizontal < .000001) break;
+          target.x = hip.x + (target.x - hip.x) * reach / horizontal;
+          target.z = hip.z + (target.z - hip.z) * reach / horizontal;
+        }
+        target.y = clamp(this._ground(p, target.x, target.z) + .02 + fy, hip.y - length, hip.y + length);
+      }
       if (isFront && B.rear > 0.05) target.lerp(new THREE.Vector3(L.rest.x * 0.8, hip.y - 0.12, hip.z + 0.18), B.rear);
-      if (!isFront && B.rear > 0.05) target.z = lerp(target.z, hip.z + 0.05, B.rear);
       const knee = rig.ik2(hip, L.l1, L.l2, target, new THREE.Vector3(0, 0, isFront ? -1 : 1));
       rig.aim(L.a, new THREE.Vector3().subVectors(knee, hip));
       rig.aim(L.m, new THREE.Vector3().subVectors(target, knee));
-      rig.aim(L.e, new THREE.Vector3(0, -0.2, 1));
+      const dz = (this._ground(p, target.x, target.z + .1) - this._ground(p, target.x, target.z - .1)) / .2;
+      rig.aim(L.e, new THREE.Vector3(0, -.2 + clamp(dz, -.65, .65), 1));
+      this.feet[key] = { target, contact: !airborne && (ph < duty || B.move < .03) };
     }
   }
 }
