@@ -16,12 +16,13 @@ export class Director {
     // first deliberate reveal is scheduled 20-45 s after the dread period actually ends (see update)
     this.nextReveal = null;
     this.revealPendingUntil = 0;
-    this.revealKinds = ['watcher', 'crossing'];
+    this.revealKinds = ['watcher', 'crossing', 'shadow'];
     this.recentKinds = [];
     this.glimpsePressure = 0;
     this.huntDueAt = 0;
     this.chaseGapMul = 1;
     this.chasing = false;
+    this.lastChaseEnd = -999; this.nextChaseAt = 0;
     this.focus = null;
   }
 
@@ -63,9 +64,10 @@ export class Director {
     const t = this.sim.time;
     // never open a hunt on someone downed, dead or gone (PLAYTESTS_50 P0)
     if (!playerActive(p) || p.state !== 'alive') return false;
+    if (t < this.nextChaseAt || this.sim.hv?.withdrawal) return false;
     if (this.phase === 'relax' || this.sim.state === 'intro' || this.inDread()) return false;
     const baseGap = this._esc(this.D.CHASE_COOLDOWN) * this.chaseGapMul;
-    const chaseGap = this.extraction ? Math.min(30, baseGap) : baseGap;
+    const chaseGap = baseGap;
     if (t - this.lastChase < chaseGap || t - this.lastAttack < this._esc(this.D.ATTACK_COOLDOWN)) return false;
     return true;
   }
@@ -100,8 +102,15 @@ export class Director {
     this.sim.emit({ type: 'chase', pid: p.id, on: true });
     this.sim.mimic?.queueHuntDecoy(p.id);
   }
-  onChaseEnd(caught) { this.chasing = false; this.sim.emit({ type: 'chase', on: false }); this.enter('relax'); }
-  onAttack(p) { this.lastAttack = this.sim.time; this.intensity += 1; this.chasing = false; this.sim.emit({ type: 'chase', on: false }); this.enter('relax'); }
+  onChaseEnd(caught) {
+    this.chasing = false; this.lastChaseEnd = this.sim.time;
+    this.nextChaseAt = this.sim.time + this.D.POST_CHASE_COOLDOWN;
+    this.huntDueAt = 0;
+    const hv=this.sim.hv;
+    hv?.beginWithdrawal?.(this.sim.players.get(hv.target));
+    this.sim.emit({ type: 'chase', on: false }); this.enter('relax');
+  }
+  onAttack(p) { this.lastAttack = this.sim.time; this.intensity += 1; this.onChaseEnd(true); }
   onReveal(kind) {
     if (kind !== 'retreat') {
       this.lastReveal = this.sim.time;
@@ -177,7 +186,7 @@ export class Director {
           && !this.chasing && this.phase !== 'relax' && !this.inDread()) {
         const p = sim.hv.focusPlayer?.() || this.focusPlayer();
         if (p) {
-          let kinds = this.revealKinds.filter((k) => k !== this.recentKinds[this.recentKinds.length - 1]);
+          let kinds = this.revealKinds.filter((k) => !this.recentKinds.slice(-2).includes(k));
           if (!kinds.length) kinds = this.revealKinds;
           // A skunk appearance is occasional variety. When the night owes the
           // players presence, Helium Voice resolves it himself.

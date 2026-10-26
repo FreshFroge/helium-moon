@@ -60,14 +60,15 @@ function hidingFixture(sep=20){
   hv.lastSeenChase={x:decoy.x,z:decoy.z,t:sim.time-3};
   return {sim,p,hv};
 }
-test('a hidden player survives the full search, then he loses them and goes limp',()=>{
+test('a hidden player survives the full search, then he loses them and physically withdraws',()=>{
   const {sim,p,hv}=hidingFixture();
   const blocked=Object.create(world);blocked.lineOfSight=()=>0;hv.world=blocked;
   let lost=null,events=[];
-  for(let t=0;t<40&&lost==null;t+=.05){p.moveSpeed=0;p.noise=0;sim.step(.05);events.push(...sim.drainEvents());if(hv.state==='collapse')lost=t;}
+  for(let t=0;t<40&&lost==null;t+=.05){p.moveSpeed=0;p.noise=0;sim.step(.05);events.push(...sim.drainEvents());if(hv.state==='retreat'&&hv.withdrawal)lost=t;}
   assert.ok(lost!=null,`he lost them (state ${hv.state}, hide ${hv.hide?.t?.toFixed(2)})`);
   assert.ok(lost>=35-.06,`he searches to the deadline (${lost?.toFixed(2)} s)`);
   assert.ok(events.some(e=>e.type==='hv_lost'&&e.pid===p.id));
+  assert.ok(!events.some(e=>e.type==='hv_collapse'||e.type==='hv_relocate'),'the hunt ends with physical withdrawal, not a collapse teleport');
   assert.equal(sim.director.chasing,false);assert.equal(p.health,MAXH);
   assert.ok(p.hideGraceUntil>sim.time,'a breather before the next hunt');
 });
@@ -126,7 +127,7 @@ test('server accepts bounded screen settings for individual co-op players',()=>{
   p.heldUntil=sim.time+1;sim.input(p.id,{lean:1});assert.equal(p.lean,0,'grabbed players cannot lean');
 });
 
-test('retreat: unwatched he goes low and fast; watched he backs away upright, facing you',()=>{
+test('a post-chase quick retreat stays low and fast even when the player watches',()=>{
   const {sim,p,hv}=encounter();
   hv.retreatFrom(p,false,true);
   const end=pointAtDistance(world.trail,world.trailCum,470);
@@ -143,14 +144,21 @@ test('retreat: unwatched he goes low and fast; watched he backs away upright, fa
   // now the player turns and watches him go
   p.yaw=Math.atan2(-(hv.x-p.x),-(hv.z-p.z));
   hv.path=world.findPath(hv.x,hv.z,end.x,end.z);hv.pathI=1;
-  let slow=0,backward=0;
+  let watched=0,fastWatched=0,forwardWatched=0;
   for(let i=0;i<30;i++){
+    p.yaw=Math.atan2(-(hv.x-p.x),-(hv.z-p.z));
     const [x,z]=[hv.x,hv.z];sim.step(.05);
     if(hv.state!=='retreat')break;
     const dx=hv.x-x,dz=hv.z-z,d=Math.hypot(dx,dz);
-    if(d>.02){slow++;if(i>=3)assert.ok(d<=CONFIG.HV.SLOW_RETREAT*.05*1.5+.01,'watched, he backs off at walking pace');
-      if((dx*Math.sin(hv.yaw)+dz*Math.cos(hv.yaw))/d<-.5)backward++;}
+    assert.ok(d<=CONFIG.HV.RETREAT*.05*1.5+.01,'watched escape remains physical');
+    if(hv.observers.length){
+      watched++;assert.ok(hv.snapshot()[7]&16,'the watched escape keeps its low crawl');
+      assert.equal(hv.snapshot()[7]&4096,0,'watching does not restore slow upright backing');
+      if(d>.3)fastWatched++;
+      if(d>.02&&(dx*Math.sin(hv.yaw)+dz*Math.cos(hv.yaw))/d>.5)forwardWatched++;
+    }
   }
-  assert.ok(slow>=5 && backward>=slow*.6,`slow=${slow}, backward=${backward}`);
+  assert.ok(watched>=3&&fastWatched>=watched*.6&&forwardWatched>=watched*.6,
+    `watched=${watched}, fast=${fastWatched}, forward=${forwardWatched}`);
   assert.equal(p.health,MAXH);
 });

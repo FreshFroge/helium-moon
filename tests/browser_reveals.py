@@ -59,7 +59,7 @@ async def play(port):
                 await page.screenshot(path=str(output/f'{kind}-glimpse.png'),timeout=120000)
                 end=await page.evaluate('''()=>{
                     const hv=game.sim.hv,c=window.revealCheck;
-                    // Puppet: watched he freezes and holds (HV.FREEZE) before backing away
+                    // Owner: a visible scare lasts only 1–2 seconds, then flees.
                     for(let i=0;i<300;i++){
                       const x=hv.x,z=hv.z;game.advance(1,1/30,false);
                       c.maxStep=Math.max(c.maxStep,Math.hypot(hv.x-x,hv.z-z));
@@ -67,8 +67,46 @@ async def play(port):
                     }
                     return {...c,health:game.health};
                 }''')
-                assert end['reports']==[kind] and end['escapeAt'] is not None and .4<=end['escapeAt']<=9 and end['maxStep']<.8 and end['health']==3,end
+                assert end['reports']==[kind] and end['escapeAt'] is not None and 1<=end['escapeAt']<=2.1 and end['maxStep']<.8 and end['health']==3,end
                 print(f'PASS actual {kind} glimpse/escape:',mid,end,flush=True)
+            shadow=await page.evaluate('''async()=>{
+                game.restart();
+                const {pointAtDistance}=await import('/shared/math.js');
+                const {onScreen}=await import('/shared/sim/perception.js');
+                const sim=game.sim,hv=sim.hv,p=sim.players.get(game.myId),w=game.world;
+                sim.state='play';sim.time=400;sim.director.update=()=>{};
+                sim.director.nextChaseAt=640;
+                sim.sf.update=sim.mimic.update=sim.wildlife.update=()=>{};
+                const update=hv.update.bind(hv);hv.update=()=>{};
+                game.flashlight.on=true;let found=false;
+                for(const along of [500,600,400,700,300]){
+                    const a=pointAtDistance(w.trail,w.trailCum,along),b=pointAtDistance(w.trail,w.trailCum,along+28);
+                    game.tp(b.x,b.z,a.x,a.z,0);game.advance(15,1/30,false);hv.place(a.x,a.z);
+                    if(hv.dist(p)>20&&onScreen(w,p,hv.x,hv.y,hv.z)){found=true;break;}
+                }
+                if(!found)throw Error('No real shadow discovery sightline');
+                hv.update=update;hv.target=p.id;hv.setState('reveal');hv.scareVisibleUntil=null;
+                hv.reveal={kind:'shadow',pid:p.id,phase:'follow',t:0,followFor:25};
+                // Hold the shadow's destination to isolate the real turn/LOS
+                // discovery from path placement; navigation is checked separately.
+                const observationSpot=hv.observationSpot;
+                hv.observationSpot=()=>[hv.x,hv.z];
+                const face=()=>Math.atan2(-(hv.x-p.x),-(hv.z-p.z));
+                game.look(face()+Math.PI,0);game.advance(15,1/30,false);
+                const unseen=hv.state==='reveal'&&!onScreen(w,p,hv.x,hv.y,hv.z);
+                hv.observationSpot=observationSpot;
+                game.look(face(),0);const start=sim.time;
+                let escapeAt=null,maxStep=0;
+                for(let i=0;i<45;i++){
+                    const x=hv.x,z=hv.z;game.advance(1,1/30,false);
+                    maxStep=Math.max(maxStep,Math.hypot(hv.x-x,hv.z-z));
+                    if(hv.state==='retreat'&&escapeAt===null)escapeAt=sim.time-start;
+                }
+                return {unseen,escapeAt,maxStep,chasing:sim.director.chasing,health:p.health};
+            }''')
+            assert shadow['unseen'] and shadow['escapeAt'] is not None and shadow['escapeAt']<=.5,shadow
+            assert shadow['maxStep']<.8 and not shadow['chasing'] and shadow['health']==3,shadow
+            print('PASS actual behind-view shadow flees on turn/discovery:',shadow,flush=True)
             assert not errors,errors
         finally:
             await browser.close()

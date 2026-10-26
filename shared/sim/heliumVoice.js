@@ -49,9 +49,10 @@ export class HeliumVoiceAI {
     const p = pointAtDistance(w.trail, w.trailCum, 300);
     const i = w.nearestNav(p.x + 20, p.z, 30); const [x, z] = w.cellPos(i); this.place(x, z);
   }
-  place(x, z) { if (!this.outsideSpawn(x,z)) return false; this.x = x; this.z = z; this.y = groundAt(this.world, x, z); this.path = null; this.finalGoal = null; }
+  place(x, z) { if (this.withdrawal || !this.outsideSpawn(x,z)) return false; this.x = x; this.z = z; this.y = groundAt(this.world, x, z); this.path = null; this.finalGoal = null; }
 
   setState(s, info) {
+    if(s==='chase' && (this.withdrawal || this.sim.time<(this.sim.director?.nextChaseAt||0)))return false;
     this.state = s; this.stateT = 0; this.path = null; this.goal = null; this.finalGoal = null;
     this.avoidHeading = null; this.avoidSign = 0; this.avoidT = 0; this.routeProgress = null;
     if (s !== 'retreat') this.fleeAfterGrab = false;
@@ -139,7 +140,7 @@ export class HeliumVoiceAI {
 
   onSpotted(p) {
     const sim = this.sim;
-    if (this.fleeAfterGrab || this.state === 'chase' || this.state === 'reveal' || this.state === 'lie' || this.state === 'collapse') return;
+    if (this.withdrawal || this.fastRetreat || this.fleeAfterGrab || this.state === 'chase' || this.state === 'reveal' || this.state === 'lie' || this.state === 'collapse') return;
     this.target = p.id;
     if (this.concealedAt(this.x, this.z)) this.setState('still', { stillFor: this.rng.range(2, 4.5) });
     else { this.setState('stalk'); this.replanT = 0; }
@@ -450,6 +451,9 @@ export class HeliumVoiceAI {
     this.stateT += dt;
     if (this.state === 'dormant') { this.stop(dt); return; }
     this.perceive(dt);
+    // Withdrawal survives cover, loss of the target and any incidental state
+    // request. Only real physical travel can complete it.
+    if(this.withdrawal && this.state!=='retreat')this.setState('retreat',{fastRetreat:true});
     const minimum = this.openingDistance();
     if (minimum > 0 && this.state !== 'retreat') {
       const near = sim.nearestPlayer(this.x, this.z);
@@ -483,11 +487,12 @@ export class HeliumVoiceAI {
     // around the last evidence rather than collapsing six seconds into its opening.
     if (this.state === 'chase' && !this.grab && tp) this.updateHide(dt, tp);
     if (watched && !['chase', 'retreat', 'collapse', 'lie'].includes(this.state)) {
-      // Watched outside a hunt: he is "worn". He freezes mid-pose and holds, head locked on
-      // whoever is looking; after FREEZE s he backs away upright, facing them. Look away and
-      // he moves (operated); a fresh look after FREEZE_RESET s starts a new freeze.
+      // Watched outside a hunt: hold the pose briefly, head locked on the
+      // observer, then flee. The shared scare deadline caps every new freeze.
       const observer = this.litBy || this.observers[0];
-      // Deliberate appearances need time to register before he may leave.
+      // A single short exposure budget applies across watch/freeze/reveal.
+      // Looking away briefly or changing poses cannot renew the same scare.
+      if(this.scareVisibleUntil==null)this.scareVisibleUntil=sim.time+this.rng.range(...C.SCARE_VISIBLE);
       const deliberate = this.state === 'reveal' && this.reveal;
       if (deliberate) {
         this.reveal.exposureT = (this.reveal.exposureT || 0) + dt;
@@ -495,24 +500,22 @@ export class HeliumVoiceAI {
           this.reveal.counted = true; dir.onReveal(this.reveal.kind); this.presenceReportT = sim.time;
         }
       }
-      const lingering = sim.time < (this.lingerUntil ?? -1);
-      if (!lingering) {
+      if(sim.time>=this.scareVisibleUntil || (deliberate?.kind==='shadow' && deliberate.exposureT>=.2)){
+        this.retreatFrom(observer.p,!!this.litBy,true);
+      } else {
         const od = observer.ob?.d ?? this.dist(observer.p);
         if (!this.freeze || sim.time - this.freeze.seen > C.FREEZE_RESET) {
           const r = od < C.STARE_MIN_DIST ? C.FREEZE_CLOSE : this.litBy ? C.FREEZE_LIT : C.FREEZE;
           // peeking from his cover at the wrong height (1: leaning out, 2: low, head sideways)
           const cover = this.world.sampleGrid ? this.world.sampleGrid(this.world.gCover, this.x, this.z) : 0;
           const peek = od > 12 && cover > 0.3 ? 1 + (this.rng() < 0.5 ? 1 : 0) : 0;
-          this.freeze = { start: sim.time, end: sim.time + this.rng.range(r[0], r[1]) * (deliberate ? 0.8 : 1), pid: observer.p.id, peek, seen: sim.time };
+          this.freeze = { start: sim.time, end: Math.min(this.scareVisibleUntil,sim.time + this.rng.range(r[0], r[1])), pid: observer.p.id, peek, seen: sim.time };
         }
         this.freeze.seen = sim.time;
         if (sim.time < this.freeze.end) {
           this.holdStare = observer.p; anim.peek = this.freeze.peek;
-          if (deliberate) this.reveal.exposureT = Math.min(this.reveal.exposureT, .5);
-        } else if (!deliberate || this.reveal.exposureT >= .9) {
-          // held as long as he will: backs away into the dark, upright and facing them
-          const keep = this.closingOn; this.retreatFrom(observer.p, !!this.litBy, true);
-          if (keep) { this.closingOn = keep; keep.t = sim.time; }
+        } else {
+          this.retreatFrom(observer.p, !!this.litBy, true);
         }
       }
     }
@@ -643,6 +646,7 @@ export class HeliumVoiceAI {
         break;
       }
       case 'retreat': {
+        if(this.withdrawal){this.updateWithdrawal(dt);break;}
         // Keep escaping until genuinely occluded; an exposed route endpoint
         // must never become a prolonged stationary hiding pose.
         if (!this.path && tp && (minimum || sim.time >= (this.retreatPlanAt || 0))) {
@@ -653,11 +657,12 @@ export class HeliumVoiceAI {
         // goes low and fast on all fours (operated)
         // A completed grab always gets a fast escape, even while the released
         // player is looking at him. Ordinary watched retreats still back away.
-        const backing = watched && !this.fleeAfterGrab;
+        const backing = watched && !this.fleeAfterGrab && !this.fastRetreat;
         this.backwards = backing;
         if (backing) { anim.back = 1; lookP = this.observers[0].p; } else anim.low = 1;
         const done = this.followPath(dt, backing ? C.SLOW_RETREAT : C.RETREAT);
         if (tp && this.stateT > 0.45 && this.concealedAt(this.x, this.z)) {
+          this.scareVisibleUntil=null;this.fastRetreat=false;
           this.lastRetreatT = sim.time; this.setState('still', { stillFor: this.rng.range(2, 6) }); break;
         }
         if (done && this.fleeAfterGrab && this.stateT < 14) {
@@ -665,6 +670,7 @@ export class HeliumVoiceAI {
           this.path = null; break; // retain the replan time; do not postpone it every tick
         }
         if (done || this.stateT > 14) {
+          this.scareVisibleUntil=null;this.fastRetreat=false;
           this.lastRetreatT = sim.time;
           if (this.fleeAfterGrab) { this.falseRetreat = false; this.setState('roam'); break; }
           if (tp && (this.awareness.get(tp.id) || 0) > 0.5) {
@@ -771,16 +777,20 @@ export class HeliumVoiceAI {
         // in the grass beside the trail, flat; unfolds when they come close
         this.stop(dt); anim.prone = 1;
         const lp = sim.players.get(this.lieFor);
+        if(watched || this.riseAt!=null){
+          if(this.scareVisibleUntil==null)this.scareVisibleUntil=sim.time+this.rng.range(...C.SCARE_VISIBLE);
+          if(sim.time>=this.scareVisibleUntil){this.riseAt=null;this.retreatFrom(lp,false,true);break;}
+        }
         if (this.riseAt != null) {
           anim.rise = 1; anim.prone = 0; if (lp) lookP = lp;
           if (sim.time - this.riseAt >= C.RISE_TIME) {
             this.riseAt = null;
             if (lp && playerActive(lp) && !dir.inDread?.() && dir.allowChase(lp)) { this.target = lp.id; this.startChase(lp); }
-            else this.retreatFrom(lp, false);
+            else this.retreatFrom(lp, false,true);
           }
           break;
         }
-        if (!lp || !playerActive(lp) || !this.outsideSpawn(lp.x, lp.z)) { this.setState(watched ? 'still' : 'roam', { stillFor: 3 }); break; }
+        if (!lp || !playerActive(lp) || !this.outsideSpawn(lp.x, lp.z)) { this.retreatFrom(lp,false,true); break; }
         const d = this.dist(lp);
         this.lieMin = Math.min(this.lieMin ?? 1e9, d);
         const lit = this.litBy && this.litBy.ob.d < 9;
@@ -854,7 +864,8 @@ export class HeliumVoiceAI {
     p ||= this.sim.players.get(this.target) || { x: this.x + 1, y: this.y, z: this.z };
     const minimum = Math.max(lit ? 14 : 10, this.openingDistance() - this.dist(p) + 10);
     const away = this.coverAway(p, minimum, Math.max(minimum + 20, lit ? 34 : 26));
-    this.setState('retreat', { fleeAfterGrab: afterGrab });
+    this.closingOn=null;this.freeze=null;this.holdStare=null;
+    this.setState('retreat', { fleeAfterGrab: afterGrab, fastRetreat:quick||afterGrab||!!this.withdrawal });
     if (afterGrab) {
       this.falseRetreat = false;
       this.anim.grab = 0; this.anim.run = 0; this.anim.reach = 0; this.anim.back = 0; this.anim.still = 0; this.anim.low = 1;
@@ -869,12 +880,69 @@ export class HeliumVoiceAI {
     }
   }
 
+  beginWithdrawal(p) {
+    if(this.withdrawal)return;
+    this.withdrawal={x:this.x,z:this.z,pid:p?.id??this.target,startedAt:this.sim.time,goal:null,planAt:0};
+    this.closingOn=null;this.reveal=null;this.freeze=null;this.holdStare=null;
+    this.lingerUntil=null;this.falseRetreat=false;
+  }
+
+  planWithdrawal() {
+    const r=this.withdrawal,w=this.world,sim=this.sim;
+    const target=sim.players.get(r.pid),away=Math.atan2(this.x-(target?.x??r.x),this.z-(target?.z??r.z));
+    const candidates=[];
+    for(const radius of [C.WITHDRAW_DISTANCE+24,C.WITHDRAW_DISTANCE+65])for(let k=0;k<24;k++){
+      const a=away+k*Math.PI/12;
+      let x=r.x+Math.sin(a)*radius,z=r.z+Math.cos(a)*radius;
+      if(!w.navWalkable(x,z) && w.nearestNav){
+        const i=w.nearestNav(x,z,18);if(i<0)continue;[x,z]=w.cellPos(i);
+      }
+      if(!w.navWalkable(x,z)||!this.openingClear(x,z))continue;
+      const originDistance=Math.hypot(x-r.x,z-r.z),targetDistance=target?Math.hypot(x-target.x,z-target.z):originDistance;
+      if(Math.min(originDistance,targetDistance)<C.WITHDRAW_DISTANCE+5)continue;
+      // Other teammates influence the exit without imposing an impossible
+      // 200m exclusion circle around every spread-out co-op player.
+      let penalty=0;
+      for(const p of sim.playerList)if(playerActive(p)){
+        const d=Math.hypot(x-p.x,z-p.z);penalty+=Math.max(0,35-d)*3;
+      }
+      const travel=Math.hypot(x-this.x,z-this.z);
+      candidates.push({x,z,score:travel+penalty+Math.abs(angleDiff(away,a))*10});
+    }
+    candidates.sort((a,b)=>a.score-b.score);
+    for(const c of candidates.slice(0,10))if(this.planTo(c.x,c.z,'cover')){r.goal=[c.x,c.z];return true;}
+    return false;
+  }
+
+  updateWithdrawal(dt) {
+    const r=this.withdrawal,sim=this.sim,target=sim.players.get(r.pid);
+    const distance=Math.hypot(this.x-r.x,this.z-r.z),targetDistance=target?this.dist(target):distance;
+    if(Math.min(distance,targetDistance)>=C.WITHDRAW_DISTANCE){
+      this.lastWithdrawal={...r,completedAt:sim.time,distance,targetDistance};this.withdrawal=null;
+      this.fleeAfterGrab=false;this.fastRetreat=false;this.scareVisibleUntil=null;
+      this.setState('roam');this.roamPlanAt=sim.time+.5;this.lastRetreatT=sim.time;return;
+    }
+    if(r.goal && target && Math.hypot(r.goal[0]-target.x,r.goal[1]-target.z)<C.WITHDRAW_DISTANCE+3){
+      this.path=null;r.goal=null;
+    }
+    if(!this.path && sim.time>=r.planAt){
+      r.planAt=sim.time+.8;
+      if(r.goal && this.planTo(...r.goal,'cover')){}else this.planWithdrawal();
+    }
+    // Flee the sightline at full speed, then walk out physically. Cover is a
+    // pace change, never completion of the 200m withdrawal.
+    const escaping=!!this.observers?.length || !this.concealedAt(this.x,this.z);
+    this.backwards=false;this.anim.back=0;this.anim.low=escaping?1:0;
+    if(this.followPath(dt,escaping?C.RETREAT:C.WITHDRAW_SPEED))this.path=null;
+  }
+
   startChase(p) {
-    if (this.fleeAfterGrab) return false; // finish escaping before another hunt
+    if (this.withdrawal || this.fleeAfterGrab || this.fastRetreat) return false;
     if (!p || !playerActive(p) || p.state !== 'alive') return false;          // never on a downed/dead player (PLAYTESTS_50 P0)
     if (!this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
     if (this.sim.time < (p.hideGraceUntil ?? -1) && !this.sim.dev) return false;  // just hid from him: a breather
     if (this.state === 'chase') return this.target === p.id; // never reset an active encounter
+    if(this.sim.time<(this.sim.director.nextChaseAt||0))return false;
     // Hunts start close (owner, Oct 25): farther out, mark the player and close in
     // unseen first (stalk handles the approach and commits inside the range).
     if (this.dist(p) > C.HUNT_START_RANGE) {
@@ -1108,10 +1176,11 @@ export class HeliumVoiceAI {
     return false;
   }
 
-  // ---- hiding ends a hunt: he falls limp, then disappears out of sight
+  // ---- collapse is a non-hunt scare; ended hunts must withdraw physically
   collapseFrom(p) {
     const sim = this.sim, dir = sim.director;
     if (this.state === 'chase' && dir.chasing) dir.onChaseEnd(false);
+    if(this.withdrawal){this.retreatFrom(p,false,true);return;}
     this.grab = null; this.closingOn = null; this.lingerUntil = null;
     this.setState('collapse', { collapsePid: p?.id ?? null, unseenT: 0 });
     this.lastRetreatT = sim.time;
@@ -1121,6 +1190,7 @@ export class HeliumVoiceAI {
 
   // gone while nobody was looking: reappears far off, concealed, never where anyone can see
   vanish(p) {
+    if(this.withdrawal)return false;
     const sim = this.sim;
     p ||= sim.nearestPlayer(this.x, this.z)?.p;
     if (!p) return false;
@@ -1160,7 +1230,7 @@ export class HeliumVoiceAI {
   tryLie(tp) {
     const sim = this.sim, w = this.world, rng = this.rng;
     // only for someone actually walking the trail (they have to come to him)
-    if (sim.director.inDread?.() || this.observers?.length || !w.trail || !tp.moveDir || (tp.moveSpeed || 0) < 0.8) return false;
+    if (this.withdrawal || sim.director.inDread?.() || this.observers?.length || !w.trail || !tp.moveDir || (tp.moveSpeed || 0) < 0.8) return false;
     if (sim.time - (this.lieT ?? -1e9) < C.LIE_COOLDOWN || sim.time < (this.lieTryAt ?? 0)) return false;
     this.lieTryAt = sim.time + 2;
     const info = w.trailInfo(tp.x, tp.z), here = pointAtDistance(w.trail, w.trailCum, info.along);
@@ -1232,7 +1302,7 @@ export class HeliumVoiceAI {
   // across the jump (SnapBuffer jump threshold) instead of drawing a slide.
   tryRelocate(tp, reason) {
     const sim = this.sim, dir = sim.director;
-    if (!tp || !playerActive(tp) || sim.state === 'intro' || dir.inDread?.()) return false;
+    if (this.withdrawal || !tp || !playerActive(tp) || sim.state === 'intro' || dir.inDread?.()) return false;
     if (this.observers?.length) return false;
     const esc = dir.escalation?.() || 0;
     if (sim.time - (this.relocateT ?? -1e9) < lerp(C.RELOCATE_COOLDOWN[0], C.RELOCATE_COOLDOWN[1], esc)) return false;
@@ -1284,18 +1354,22 @@ export class HeliumVoiceAI {
         const vis = w.lineOfSight(p.x, p.y + eyeHeight(p), p.z, cx, groundAt(w, cx, cz) + 1.6, cz, { brushK: 0.2 });
         if (vis < 0.4) continue;
         plan = rng() < 0.5 ? { kind, pid: p.id, spot: A, end: B, phase: 'approach' } : { kind, pid: p.id, spot: B, end: A, phase: 'approach' };
+      } else if(kind==='shadow') {
+        const spot=this.observationSpot({...p,moveDir:null},'behind',...C.SHADOW_DIST);
+        if(spot)plan={kind,pid:p.id,spot,phase:'approach',followFor:rng.range(...C.SHADOW_FOLLOW)};
       }
     }
     return plan ? {...plan,origin:[p.x,p.z],lastPlanAt:this.sim.time} : null;
   }
 
   requestReveal(kind, p) {
+    if(this.withdrawal)return false;
     if (!this.outsideSpawn(p.x,p.z) || this.openingDistance()) return false;
     if (!['roam', 'stalk', 'watch', 'search'].includes(this.state)) return false;
     if (this.dist(p) > 150) return false;
     const plan=this.revealPlan(kind,p);
     if (!plan) return false;
-    this.reveal = plan; this.target = p.id;
+    this.reveal = plan; this.target = p.id;this.scareVisibleUntil=null;
     this.setState('reveal');
     if (!this.planTo(plan.spot[0], plan.spot[1], 'cover')) { this.reveal = null; this.setState('roam'); return false; }
     return true;
@@ -1321,13 +1395,13 @@ export class HeliumVoiceAI {
       if (this.stateT > 40 || (done && Math.hypot(r.spot[0] - this.x, r.spot[1] - this.z) > 3)) {
         this.retreatFrom(p, false, true); this.reveal = null; return;
       }
-      if (done) { r.phase = r.kind === 'watcher' ? 'show' : 'cross'; r.t = 0; if (r.kind === 'crossing') this.planTo(r.end[0], r.end[1], 'direct'); }
+      if (done) { r.phase = r.kind === 'shadow'?'follow':r.kind === 'watcher' ? 'show' : 'cross'; r.t = 0; if (r.kind === 'crossing') this.planTo(r.end[0], r.end[1], 'direct'); }
     } else if (r.phase === 'show') {
       // stand motionless between the trees, facing them, until seen (or bored)
       r.t += dt; this.stop(dt); this.anim.still = 1;
       this.yaw += angleDiff(this.yaw,Math.atan2(p.x-this.x,p.z-this.z))*Math.min(1,dt*3);
       if (this.observers.some((o) => o.p.id === p.id)) r.seenT = (r.seenT || 0) + dt;
-      if ((r.seenT || 0) > this.rng.range(1.2, 2.6) || (this.litBy && (r.exposureT || 0) >= .9) || r.t > 30) {
+      if (sim.time>=(this.scareVisibleUntil??Infinity) || (this.litBy && (r.exposureT || 0) >= 2) || r.t > 30) {
         this.retreatFrom(p, false, true); this.reveal = null;
       }
     } else if (r.phase === 'slip') {
@@ -1336,6 +1410,20 @@ export class HeliumVoiceAI {
       r.t = (r.t || 0) + dt;
       const done = this.followPath(dt, C2.WALK * 1.25);
       if (done || r.t > 25) { this.retreatFrom(p, false, true); this.reveal = null; }
+    } else if(r.phase==='follow') {
+      r.t=(r.t||0)+dt;
+      if(r.t>(r.followFor||C.SHADOW_FOLLOW[1]) || this.dist(p)<C.SHADOW_DIST[0]-3){
+        this.retreatFrom(p,false,true);this.reveal=null;return;
+      }
+      // Follow behind the player's current VIEW, not a stale movement vector.
+      // A turn reveals him briefly and immediately triggers his fast escape.
+      r.replan=(r.replan||0)-dt;
+      if(r.replan<=0){
+        const spot=this.observationSpot({...p,moveDir:null},'behind',...C.SHADOW_DIST);
+        if(spot)this.planTo(...spot,'cover');
+        r.replan=2;
+      }
+      this.followPath(dt,C.STALK);
     }
   }
 

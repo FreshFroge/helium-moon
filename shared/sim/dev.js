@@ -31,6 +31,7 @@ export function devHunt(sim, pid) {
   if (!p || p.state !== 'alive' || !ready(sim)) return 'not playing';
   if (inSpawnZone(sim.world, p.x, p.z, CONFIG.ZONES?.SPAWN_MARGIN ?? 12)) return 'you are in the safe spawn area - walk out onto the trail first';
   const hv = sim.hv, dir = sim.director;
+  if (hv.withdrawal || sim.time < (dir.nextChaseAt || 0)) return 'Helium is withdrawing or recovering from the last hunt';
   const [x, z] = behind(sim, p);
   hv.place(x, z);
   hv.yaw = hv.lookYaw = Math.atan2(p.x - hv.x, p.z - hv.z);
@@ -57,6 +58,7 @@ export function devRelocate(sim, pid) {
   const p = sim.players.get(pid);
   if (!p || p.state !== 'alive' || !ready(sim)) return false;
   const hv = sim.hv, keep = hv.relocateT;
+  if (hv.withdrawal) return false;
   hv.relocateT = -1e9;
   const ok = hv.tryRelocate(p, 'dev');
   if (!ok) hv.relocateT = keep;

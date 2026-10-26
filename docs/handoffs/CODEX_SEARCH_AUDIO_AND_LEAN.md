@@ -43,7 +43,12 @@ but both new peeks reveal LOS 0.6575; capsule movement and authority eye error
 are zero. Release and dual Q/R centre correctly. Screenshots were inspected
 at `/tmp/helium-lean/`. This is a controlled fixture, not human playtest evidence.
 
-`tests/browser_search_audio.py` is added; real/offline audio verification is
-still running at this checkpoint and will be recorded before task completion.
+`CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium python3 tests/browser_search_audio.py`
+passes: a hidden-source event for another player reaches the actual HRTF graph,
+the playing source mutes after the listener leaves range, sources at 18 metres
+are not started, and offline stereo renders confirm direction, distance fade
+and reduced high-frequency energy through cover. One initial run was interrupted
+after its evaluation stalled; the bounded rerun completed. These are graph/PCM
+measurements, not a human listening test.
 Lean reservations are released. AI/config ownership continues under
 `CODEX_POST_CHASE_PACING.md` for the owner's newest pacing addition.

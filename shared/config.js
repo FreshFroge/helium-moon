@@ -68,6 +68,8 @@ export const CONFIG = {
     STEP_OVER: 0.75,               // obstacle height he steps over: every fallen log (max 0.67 m) - 0.6 left 17% of logs as walls nav couldn't see
     CREEP_DISTANCE: 2.4, CREEP_SPEED: 0.38, CREEP_STOP: 1.8,
     RETREAT: 10.5,                 // fast, physical reverse bear crawl to cover
+    WITHDRAW_DISTANCE: 200, WITHDRAW_SPEED: 2.3, // after each hunt: physically leave before returning
+    SCARE_VISIBLE: [1, 2], SHADOW_FOLLOW: [18, 32], SHADOW_DIST: [12, 22],
     SIGHT_FLASHLIGHT: 95, SIGHT_DARK: 24, SIGHT_FOV_DEG: 150,
     HEAR_SPRINT: 42, HEAR_WALK: 16, HEAR_CROUCH: 5, HEAR_INTERACT: 55, HEAR_VOICE: 38,
     ATTACK_RANGE: 1.7, ATTACK_COOLDOWN: 2.4, LOSE_TIME: 6.5, SEARCH_TIME: 24,
@@ -181,9 +183,10 @@ export const CONFIG = {
     DREAD_MIN_DIST: 55,       // m he is asked to stay beyond during the dread period (inside the outer cold ring)
     ESCALATE_TIME: 840,       // s after the dread period to reach full escalation (~18 min into the session)
     ESCALATE_AGGRESSION: 0.35,// added to base aggression at full escalation
-    // owner, Oct 25 midday: "far more active, like 2-3x" -> cooldowns/phase lengths roughly halved
-    CHASE_COOLDOWN: [16, 8],  // s between chases: start -> full escalation
-    CHASE_COOLDOWN_JITTER: [0.65, 1.18], // bounded clusters/lulls keep hunt timing uncertain
+    // Owner Oct 26: four minutes after a hunt ENDS, including extraction and close contact.
+    POST_CHASE_COOLDOWN: 240,
+    CHASE_COOLDOWN: [240, 240],
+    CHASE_COOLDOWN_JITTER: [1, 1],
     ATTACK_COOLDOWN: [14, 7],
     RELAX_LEN: [[16, 28], [8, 14]],   // relax phase length range: start -> full escalation
     BUILD_LEN: [[45, 80], [22, 40]],

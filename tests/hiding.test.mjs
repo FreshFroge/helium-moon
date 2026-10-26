@@ -141,10 +141,15 @@ test('an intentional appearance registers briefly before physically retreating',
 test('a flashlight cannot cancel the first frame of a planned watcher glimpse',()=>{
   const {hv,sim,player}=fixture();hv.x=30;
   hv.reveal={pid:player.id,kind:'watcher',phase:'show',t:0,exposureT:.1};
+  // Owner Oct 26: the shared one-to-two-second sighting budget replaces the
+  // older flashlight shortcut that ended a glimpse after only .9 seconds.
+  hv.scareVisibleUntil=sim.time+1.5;
   hv.observers=[{p:player}];hv.litBy={p:player};
   sim.director.onReveal=()=>{};
   let retreats=0;hv.retreatFrom=()=>{retreats++;};
   hv.updateReveal(.05);assert.equal(retreats,0);
-  hv.reveal.exposureT=.95;
+  hv.reveal.exposureT=.95;sim.time+=1;
+  hv.updateReveal(.05);assert.equal(retreats,0,'the flashlight does not truncate the visible budget');
+  sim.time=hv.scareVisibleUntil;
   hv.updateReveal(.05);assert.equal(retreats,1);
 });

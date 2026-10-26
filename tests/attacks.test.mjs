@@ -97,7 +97,7 @@ test('a dodged grab does not count as a catch or terminate the ongoing hunt',()=
   assert.ok(sim.drainEvents().some(e=>e.type==='hv_attack'&&e.phase==='miss'));
 });
 
-test('a post-grab escape keeps planning when the first endpoint is still exposed',()=>{
+test('a post-grab escape continues its long withdrawal when the first endpoint is still exposed',()=>{
   const {sim,p,actor}=encounter('hv',1.2);let plans=0;
   actor.concealedAt=()=>false;
   actor.coverAway=()=>{
@@ -110,16 +110,17 @@ test('a post-grab escape keeps planning when the first endpoint is still exposed
   while(p.health===MAXH)sim.step(.05);
   const from={x:actor.x,z:actor.z};
   for(let i=0;i<80;i++){p.yaw=Math.atan2(-(actor.x-p.x),-(actor.z-p.z));sim.step(.05);}
-  assert.ok(plans>=3,`a visible escape needs another goal, not a postponed retry (${plans} plans)`);
+  assert.ok(plans>=1&&actor.withdrawal?.goal,'a short escape continues toward its distant withdrawal goal');
   assert.ok(Math.hypot(actor.x-from.x,actor.z-from.z)>18,'he keeps moving away through successive escape legs');
   assert.equal(actor.state,'retreat');assert.equal(sim.director.chasing,false);
 });
 
-test('a close flashlight encounter remains dangerous during the director cooldown',()=>{
+test('a first close flashlight encounter remains dangerous during ordinary director relaxation',()=>{
   const {sim,p}=encounter('hv',3);
+  assert.equal(sim.director.nextChaseAt,0,'no completed hunt has started the hard recovery gate');
   sim.director.enter('relax');sim.director.lastChase=sim.time;
   for(let t=0;t<45 && p.health===MAXH;t+=.05)sim.step(.05);
-  assert.ok(p.health<MAXH,'standing within arm reach cannot exploit a flashlight/cooldown immunity');
+  assert.ok(p.health<MAXH,'a first encounter cannot exploit ordinary director relaxation');
 });
 
 for(const flash of [true,false]) test(`first sighting reaches a real attack without preassigned awareness (flashlight ${flash})`,()=>{
