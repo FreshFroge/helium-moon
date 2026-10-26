@@ -131,3 +131,24 @@ published. #32 still needs broader attack/transition/first-person/environmental
 animation review, and #33 can grow beyond this first objective expansion. Human
 playtesting should assess the far-bank trip, compass clue clarity, hunt pressure
 and visual quality before treating these areas as finished.
+
+## Published revisions and recurring operation
+
+`aac74b3` publishes the handwheel/aerial objective expansion and its checks.
+The second actual scheduled batch ran at 07:09:57–07:13:25 UTC on that clean,
+unchanging commit: full Node suite, 12 hunt sessions and expanded two-client
+suite all pass. This confirms recurrence beyond the initial launch.
+
+Scheduler follow-up: its status previously retained the last completed batch's
+`checkout_after`/`stable_revision` while a new batch ran. A failing-before
+two-batch regression reproduces this. The fix clears those fields until the
+current batch ends; all four runner lifecycle checks now pass. Each runner
+process also archives logs in a distinct run directory to preserve prior runs
+when restarting. The old runner is stopped between batches and restarted with
+this fix, the same 30-minute interval and the same 13:00 UTC deadline. It still
+performs tests only and requires the cloud environment to stay running.
+
+A second Codex connectivity probe, with daemon sharing disabled and state/log
+directories redirected to writable `/tmp` paths, still fails during app-server
+initialization with the same read-only-filesystem error. No AI coding schedule
+or automatic activation of another agent has been configured.

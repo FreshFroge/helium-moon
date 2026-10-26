@@ -26,7 +26,7 @@ class RunnerChecks(unittest.TestCase):
             self.assertEqual(state['results'][0]['status'], 'timed-out')
             self.assertLess(state['results'][0]['seconds'], 3)
             self.assertIsNotNone(state['results'][0]['exit_code'])
-            self.assertIn('started', (folder / 'batch-01-slow.log').read_text())
+            self.assertIn('started', Path(state['results'][0]['log']).read_text())
 
     def test_stop_prevents_following_jobs(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -39,7 +39,7 @@ class RunnerChecks(unittest.TestCase):
                 runner.run(args, folder)
             state = json.loads((folder / 'status.json').read_text())
             self.assertEqual(state['phase'], 'stopped')
-            self.assertFalse((folder / 'batch-01-must-not-run.log').exists())
+            self.assertFalse(list(folder.rglob('*must-not-run.log')))
 
     def test_duplicate_runner_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -51,6 +51,33 @@ class RunnerChecks(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'already active'):
                     runner.run(args, folder / 'second')
             self.assertFalse((folder / 'second').exists())
+
+    def test_an_active_batch_does_not_reuse_previous_revision_results(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary)
+            args=argparse.Namespace(until=(runner.utc()+timedelta(seconds=15)).isoformat(),interval_minutes=10)
+            command='''import json,os
+from pathlib import Path
+p=Path(os.environ['OBS_DIR']);s=json.loads((p/'status.json').read_text())
+(p/('observed-'+str(s['batch'])+'.json')).write_text(json.dumps(s))
+if s['batch']==2:(p/'STOP').touch()
+'''
+            jobs=[('observe',['python3','-c',command],{'OBS_DIR':str(folder)},30)]
+            real_job=runner.run_job
+            real_clock=runner.time.monotonic
+            offset=[0]
+            def job_then_skip_idle(*a,**kw):
+                result=real_job(*a,**kw)
+                offset[0]+=601  # Only skip idle time after the real child exits.
+                return result
+            with patch.object(runner,'JOBS',jobs),patch.object(runner,'LOCK',folder/'lock'), \
+                 patch.object(runner,'run_job',job_then_skip_idle), \
+                 patch.object(runner.time,'monotonic',lambda:real_clock()+offset[0]):
+                runner.run(args,folder)
+            for batch in [1,2]:
+                observed=json.loads((folder/f'observed-{batch}.json').read_text())
+                self.assertIsNone(observed.get('stable_revision'),'a running batch has no verification result yet')
+                self.assertIsNone(observed.get('checkout_after'),'a previous commit cannot appear as the current batch ending')
 
 
 if __name__ == '__main__':

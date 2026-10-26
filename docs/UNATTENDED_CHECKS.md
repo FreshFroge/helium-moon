@@ -29,6 +29,9 @@ requirements. `/usr/bin/chromium` is detected automatically; otherwise set
 `CHROMIUM_EXECUTABLE_PATH`. Logs, current status and `batches.jsonl` are written
 outside the checkout, to the directory printed by `status` in each log path.
 Use `--state-dir /tmp/a-specific-run` consistently to choose a different folder.
+Each process keeps its logs in a distinct `runs/` subfolder, so restarting the
+schedule preserves earlier evidence. A running batch reports
+`stable_revision: null`; a verification result appears only after it finishes.
 
 The runner enforces one process per checkout, a ten-minute minimum interval,
 individual job timeouts and the final deadline. Missed intervals are not queued.

@@ -87,7 +87,7 @@ def run_job(folder, state, name, command, extra, seconds, end):
     remaining = (end - utc()).total_seconds()
     if remaining <= 0 or (folder / 'STOP').exists():
         return {'name': name, 'status': 'skipped'}
-    logfile = folder / f"batch-{state['batch']:02d}-{name}.log"
+    logfile = Path(state['run_dir']) / f"batch-{state['batch']:02d}-{name}.log"
     env = dict(os.environ, **extra)
     if Path('/usr/bin/chromium').exists():
         env.setdefault('CHROMIUM_EXECUTABLE_PATH', '/usr/bin/chromium')
@@ -136,15 +136,18 @@ def run(args, folder):
         lock.write(json.dumps({'pid': os.getpid(), 'state_dir': str(folder)}))
         lock.flush()
         folder.mkdir(parents=True, exist_ok=True)
+        run_folder=folder/'runs'/(utc().strftime('%Y%m%dT%H%M%SZ')+'-'+str(os.getpid()))
+        run_folder.mkdir(parents=True)
         (folder / 'STOP').unlink(missing_ok=True)
-        state = {'pid': os.getpid(), 'root': str(ROOT), 'state_dir': str(folder), 'started_at': stamp(),
+        state = {'pid': os.getpid(), 'root': str(ROOT), 'state_dir': str(folder), 'run_dir':str(run_folder), 'started_at': stamp(),
                  'until': end.isoformat(), 'interval_minutes': args.interval_minutes,
                  'batch': 0, 'phase': 'starting', 'kind': 'tests-only'}
         save(folder, state)
         try:
             while utc() < end and not (folder / 'STOP').exists():
                 scheduled = time.monotonic()
-                state.update(batch=state['batch'] + 1, checkout_before=checkout(), results=[])
+                state.update(batch=state['batch'] + 1, checkout_before=checkout(), results=[],
+                             checkout_after=None,stable_revision=None,job=None,log=None)
                 for name, command, env, timeout in JOBS:
                     state['results'].append(run_job(folder, state, name, command, env, timeout, end))
                     save(folder, state)
