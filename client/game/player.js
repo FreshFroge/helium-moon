@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../../shared/config.js';
 import { clamp, lerp } from '../../shared/math.js';
-import { moveCharacter, supportHeight, waterDepthAt, leanDistance } from '../../shared/physics.js';
+import { moveCharacter, supportHeight, waterDepthAt, leanDistance, LEAN_REACH, LEAN_ROLL } from '../../shared/physics.js';
 import { SURFACE } from '../../shared/world.js';
 
 const P = CONFIG.PLAYER;
@@ -22,13 +22,13 @@ export class PlayerController {
     this.onFootstep = null; this.onLand = null;
     this.speed = 0; this.noise = 0;
     this.injured = 0; this.slow = 1; this.downed = 0; this.hidden = false; this.covered = false; this.hasCamoBlanket = false; this.lean = 0;
-    this.lookLock = null;
+    this.lookLock = null; this.leanIntent = 0;
   }
 
   spawn(x, z, yaw) {
     this.pos.set(x, supportHeight(this.world, x, z, 10), z);
     this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = -0.05;
-    this.stamina = P.STAMINA_MAX; this.crouch = 0; this.downed = 0; this.covered = false; this.hasCamoBlanket = false; this.lean=0;this.inputLean=0;
+    this.stamina = P.STAMINA_MAX; this.crouch = 0; this.downed = 0; this.covered = false; this.hasCamoBlanket = false; this.lean=0;this.inputLean=0;this.leanIntent=0;
   }
 
   update(dt, input, opts = {}) {
@@ -147,13 +147,15 @@ export class PlayerController {
     const cam = this.camera;
     const right = (this._right || (this._right = new THREE.Vector3())).set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const wantLean = this.downed > 0.5 || this.covered ? 0 : this.inputLean || 0;
-    this.lean = lerp(this.lean || 0, wantLean, 1 - Math.exp(-dt * 14));
-    if(this.downed>.5||this.covered||this.lookLock)this.lean=0;
-    const lean=leanDistance(this.world,{x:this.pos.x,y:this.pos.y,z:this.pos.z,yaw:this.yaw},this.lean,eye);
-    this.lean=lean/.28;
+    // Keep the smooth requested pose separate from the collision-limited eye.
+    // Holding a lean against bark should reach full extension as cover clears.
+    this.leanIntent = lerp(this.leanIntent || 0, wantLean, 1 - Math.exp(-dt * 14));
+    if(this.downed>.5||this.covered||this.lookLock)this.leanIntent=0;
+    const lean=leanDistance(this.world,{x:this.pos.x,y:this.pos.y,z:this.pos.z,yaw:this.yaw},this.leanIntent,eye);
+    this.lean=lean/LEAN_REACH;
     cam.position.set(this.pos.x, this.pos.y + eye + bobY - this.landDip, this.pos.z).addScaledVector(right, bobX + lean);
     const breathe = Math.sin(performance.now() * 0.0012) * 0.004 * s.headBob;
-    const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35 + this.lean * 0.075 + (this.extraRoll || 0);
+    const roll = -(this.vel.x * Math.cos(this.yaw) - this.vel.z * Math.sin(this.yaw)) * 0.004 * s.headBob + shx * 0.5 + this.downed * 0.35 + this.lean * LEAN_ROLL + (this.extraRoll || 0);
     cam.rotation.set(this.pitch + shy + breathe, this.yaw + shx, roll, 'YXZ');
     cam.updateMatrixWorld();
   }

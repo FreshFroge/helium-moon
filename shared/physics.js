@@ -4,17 +4,27 @@ import { CONFIG } from './config.js';
 
 const tmp = [];
 
+// One shoulder-width peek, shared by the camera and authoritative perception.
+export const LEAN_REACH = 0.42;
+export const LEAN_ROLL = -0.12;
+
 // Horizontal eye displacement for Q/R. Sweep a small camera cylinder rather than
 // letting a cosmetic offset put the near plane through bark or a wall.
 export function leanDistance(world,p,amount,height){
   if(!Number.isFinite(amount)||!amount||!world.queryColliders)return 0;
-  const sign=Math.sign(amount),request=Math.min(1,Math.abs(amount))*.28;
+  const sign=Math.sign(amount),request=Math.min(1,Math.abs(amount))*LEAN_REACH;
   const rx=Math.cos(p.yaw||0)*sign,rz=-Math.sin(p.yaw||0)*sign;
   const eye={x:p.x,y:p.y+height-.1,z:p.z};
   const opts={slope:false,water:false,step:0,cameraSafe:true,boundary:true};
   const clear=distance=>{
-    const q=moveCharacter(world,eye,rx*distance,rz*distance,.1,opts);
-    return Math.hypot(q.x-(p.x+rx*distance),q.z-(p.z+rz*distance))<.0001;
+    // Test the swept camera, not just its destination: a thin fence must not
+    // disappear between the centered eye and a fully extended peek.
+    const steps=Math.max(1,Math.ceil(distance/.04));
+    for(let i=1;i<=steps;i++){
+      const d=distance*i/steps,q=moveCharacter(world,eye,rx*d,rz*d,.1,opts);
+      if(Math.hypot(q.x-(p.x+rx*d),q.z-(p.z+rz*d))>=.0001)return false;
+    }
+    return true;
   };
   if(clear(request))return request*sign;
   let lo=0,hi=request;

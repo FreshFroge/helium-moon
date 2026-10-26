@@ -393,6 +393,9 @@ export class Game {
       case 'wildlife': if (this.wildlife && this._near(pos, 90)) this.wildlife.spawn(e, this.player.pos); break;
       case 'hv_vocal': if (this._near(pos, CONFIG.HV.FOOTSTEP_MAX_DISTANCE) && this._canSee(pos)) { A.hvVocal(e.k, e.s, pos); this.voice.suppress(2); } break;
       case 'hv_line': break;
+      // Real moving joints during a search: audible through cover, at their
+      // physical location. No visibility gate: a hidden player needs this cue.
+      case 'hv_search_move': if (this._near(pos, CONFIG.HV.SEARCH_CRACK_MAX_DISTANCE)) A.hvSearchMove(e.s, pos); break;
       // the grab is silent apart from body contact and nearby environmental sound
       case 'hv_attack': {
         const at = { x: e.x, y: this.world.heightAt(e.x, e.z) + 1.7, z: e.z }, k = e.seq || 0;

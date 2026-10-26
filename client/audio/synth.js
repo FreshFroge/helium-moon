@@ -196,6 +196,22 @@ export function jointPop(seed) {
   return normalize(out, 0.85);
 }
 
+// A loaded joint creaks, then releases with a dry crack. Lower body resonance
+// carries through the hunt hum without bringing back a voice or scream.
+export function searchJointCrack(seed) {
+  const r = rngFor(seed), out = new Float32Array(N(.65));
+  const creak = filter(noise(N(.4), r), 'bp', r.range(650, 1050), 2.8, SR);
+  const fundamental = r.range(145, 195);
+  for (let i = 0; i < creak.length; i++) {
+    const t = i / SR, envelope = Math.sin(Math.PI * t / .4) ** 2;
+    const pulse = .45 + .55 * Math.sin(TAU * (24 * t + 32 * t * t)) ** 2;
+    out[i] = envelope * pulse * (creak[i] * .3 + Math.sin(TAU * fundamental * t) * .045);
+  }
+  const crack = jointPop(seed + 19), offset = N(r.range(.17, .24));
+  for (let i = 0; i < crack.length && i + offset < out.length; i++) out[i + offset] += crack[i] * .6;
+  return fade(normalize(out, .78), SR, .008, .04);
+}
+
 // hands and feet scuttling through leaf litter: a quick, uneven four-beat patter
 export function crawlPatter(seed) {
   const r = rngFor(seed), out = new Float32Array(N(0.42));

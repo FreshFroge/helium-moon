@@ -75,6 +75,9 @@ export const CONFIG = {
     SIGNATURE_PROB: 0.4, SIGNATURE_FIRST_PROB: 0.75, SIGNATURE_COOLDOWN: 95, // uploaded .ogg on first sighting
     FOOTSTEP_FADE_START: 1.8, FOOTSTEP_MAX_DISTANCE: 2.4, // roughly 6-8 feet
     FOOTSTEP_STALK_GAIN: 0.45, FOOTSTEP_CHASE_GAIN: 0.8,
+    // Movement-only joint cracks during searching, separate from close footsteps.
+    SEARCH_CRACK_FADE_START: 4, SEARCH_CRACK_MAX_DISTANCE: 18, SEARCH_CRACK_GAIN: 0.65,
+    SEARCH_CRACK_TRAVEL: [1.2, 2.1], SEARCH_CRACK_INTERVAL: [1.4, 2.3],
     // Owner Oct 26: a bounded hunt opens with a concealed stalk, then a search of
     // the last sight/sound. Actual discovery can become a damaging rush. Without a
     // catch, the hunt ends after both phases; no exact-position tracking through cover.

@@ -4,7 +4,7 @@
 // slips away from flashlight beams, flanks and repositions ahead, occasionally
 // reveals itself on purpose, and only sometimes commits to a chase.
 import { CONFIG } from '../config.js';
-import { clamp, lerp, angleDiff, pointAtDistance } from '../math.js';
+import { clamp, lerp, angleDiff, pointAtDistance, makeRng } from '../math.js';
 import { moveCharacter, groundAt } from '../physics.js';
 import { inSpawnZone, spawnZoneCost, spawnStepBlocked } from './zones.js';
 import { eyeHeight, eyePosition, observedBy, onScreen, sightOf, noiseRadius, viewCost, playerActive, playerAlive, playerFwd } from './perception.js';
@@ -32,6 +32,9 @@ export class HeliumVoiceAI {
     this.searchPts = []; this.stimulus = null; this.lastRetreatT = -999; this.falseRetreat = false;
     this.snapT = 0;
     this.closeCommitted = false;
+    // Sound variation must not consume the director/navigation random stream.
+    this.searchSoundRng = makeRng((sim.seed || 0) ^ 0x63726163);
+    this.resetSearchSound();
   }
 
   spawn() {
@@ -441,6 +444,7 @@ export class HeliumVoiceAI {
   // ---------------------------------------------------------------- main update
   update(dt) {
     const sim = this.sim, dir = sim.director;
+    const moveFromX = this.x, moveFromZ = this.z, wasSearching = this.isSearching();
     this.motionSpeed=0;
     const escalation = dir.escalation?.() || 0;
     this.stateT += dt;
@@ -803,7 +807,35 @@ export class HeliumVoiceAI {
     else if (this.state !== 'search') { this.lookYaw += angleDiff(this.lookYaw, this.yaw + Math.sin(sim.time * 0.3) * 0.5) * Math.min(1, dt * 2); this.lookPitch = lerp(this.lookPitch, -0.05, dt); }
     anim.tilt = anim.frozen || this.state === 'watch' || (this.state === 'reveal' && this.reveal?.phase === 'show') ? 0.35 * Math.sin(sim.time * 0.13 + 0.7) + (anim.peek === 2 ? 1.1 : 0) : 0;
     anim.jaw = this.grab ? (this.grab.kind === 'final' ? 1 : 0.35) : sim.time - this.vocalT < 1.4 ? 0.6 + 0.4 * Math.sin(sim.time * 17) : 0;
+    this.searchMovementSound(dt, moveFromX, moveFromZ, wasSearching);
     this.vocals(dt);
+  }
+
+  isSearching() {
+    return this.state === 'search' || (this.state === 'chase' && this.huntPhase === 'search');
+  }
+
+  resetSearchSound() {
+    this.searchSoundTravel = 0;
+    this.searchSoundDistance = this.searchSoundRng.range(...C.SEARCH_CRACK_TRAVEL);
+    this.searchSoundAt = Math.max(this.searchSoundAt || 0, this.sim.time + .65);
+  }
+
+  searchMovementSound(dt, fromX, fromZ, wasSearching) {
+    // Use physical displacement, not an animation/speed flag. Waiting, blocked
+    // legs, a look-back freeze, a grab and a hidden relocation cannot crack.
+    const distance = Math.hypot(this.x - fromX, this.z - fromZ);
+    if (!wasSearching || !this.isSearching() || this.grab || this.anim.run || this.anim.frozen
+        || distance < dt * .15 || distance > C.WALK * 1.35 * dt * 1.5 + .03) {
+      this.resetSearchSound(); return;
+    }
+    this.searchSoundTravel += distance;
+    if (this.searchSoundTravel < this.searchSoundDistance || this.sim.time < this.searchSoundAt) return;
+    this.sim.emit({ type: 'hv_search_move', x: +this.x.toFixed(2), y: +(this.y + 1.15).toFixed(2), z: +this.z.toFixed(2),
+      s: this.searchSoundRng.int(0, 65535) });
+    this.searchSoundTravel = 0;
+    this.searchSoundDistance = this.searchSoundRng.range(...C.SEARCH_CRACK_TRAVEL);
+    this.searchSoundAt = this.sim.time + this.searchSoundRng.range(...C.SEARCH_CRACK_INTERVAL);
   }
 
   decideAfterSpotting(tp) {

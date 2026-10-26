@@ -105,7 +105,7 @@ export class UI {
         <tr><td>${k('forward')}${k('left')}${k('back')}${k('right')}</td><td>Move</td></tr>
         <tr><td>${k('sprint')}</td><td>Sprint (stamina)</td></tr>
         <tr><td>${k('crouch')} / ${k('crouchAlt')}</td><td>Crouch — quieter; crouch still in thick brush to hide</td></tr>
-        <tr><td>${k('leanLeft')} / ${k('leanRight')}</td><td>Lean — look around cover without stepping out</td></tr>
+        <tr><td>${k('leanLeft')} / ${k('leanRight')}</td><td>Hold to lean left / right around cover; release to center</td></tr>
         <tr><td>${k('camouflage')}</td><td>Camouflage blanket — crouch, stay still, and switch off the light</td></tr>
         <tr><td>${k('jump')}</td><td>Jump</td></tr>
         <tr><td>${k('interact')}</td><td>Interact · hold to repair / revive</td></tr>

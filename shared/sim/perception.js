@@ -2,7 +2,7 @@
 // noise propagation, cover scoring.
 import { CONFIG } from '../config.js';
 import { clamp, angleDiff } from '../math.js';
-import { leanDistance } from '../physics.js';
+import { leanDistance, LEAN_ROLL } from '../physics.js';
 
 export const eyeHeight = (p) => p.state==='downed' ? .35 : (p.crouch ? CONFIG.PLAYER.CROUCH_HEIGHT : CONFIG.PLAYER.HEIGHT) - 0.1;
 export const playerAlive = (p) => !!p && (p.state === 'alive' || p.state === 'downed');
@@ -29,7 +29,7 @@ export function onScreen(world, p, x, y, z, h = 1.9, radius = 0.36) {
     const depth = -sy * cp * dx + sp * dy - cy * cp * dz;
     if (depth < 0.06 || Math.hypot(dx, dy, dz) > (p.flash ? Math.max(28, CONFIG.FLASHLIGHT.RANGE + 8) : 28)) continue;
     const rawRight = cy * dx - sy * dz, rawUp = sy * sp * dx + cp * dy + cy * sp * dz;
-    const roll=(p.lean||0)*.075,cr=Math.cos(roll),sr=Math.sin(roll);
+    const roll=(p.lean||0)*LEAN_ROLL,cr=Math.cos(roll),sr=Math.sin(roll);
     const right=cr*rawRight+sr*rawUp,up=-sr*rawRight+cr*rawUp;
     if (Math.abs(right) > depth * tanX || Math.abs(up) > depth * tanY) continue;
     if (world.lineOfSight(ex, ey, ez, tx, y + height, tz, { brushK: 0.3 }) > 0.2) return true;
