@@ -67,7 +67,23 @@ async def play(port):
                 assert await page.evaluate("approachNight('note_memo')")
                 await tap()
                 assert await page.evaluate("game.reading?.id==='memo'")
+                assert await page.evaluate('''()=>{
+                    const h=game.info.layout.supplyHints;
+                    return !h || (game.reading.text.includes(h.fuel)&&game.reading.text.includes(h.fuse));
+                }'''), 'briefing must contain the actual randomized supply locations'
+                assert await page.locator('#note .paper').evaluate('(e)=>e.clientHeight<=innerHeight*.85'), 'long briefing stays on screen'
                 await tap()
+                await page.keyboard.down('Tab')
+                await advance(.15)
+                if await page.evaluate('!!game.info.layout.supplyHints'):
+                    assert await page.locator('#inventory svg').count()==1
+                    assert await page.locator('#inventory .map-legend span').count()==len(await page.evaluate('Object.keys(game.world.poi)'))
+                    assert await page.locator('#inventory .supply-register').is_visible()
+                    if seed==211:
+                        await page.evaluate('game.advance(1,1/30,true)')
+                        await page.screenshot(path=str(output/'field-map.png'),timeout=30000)
+                await page.keyboard.up('Tab')
+                await advance(.1)
                 report = await page.evaluate('''()=>({seed:game.sim.seed,
                     supplyHints:game.info.layout.supplyHints||null,
                     stations:game.info.layout.stations.map(s=>({id:s.id,where:s.where,hold:s.hold})),
@@ -79,6 +95,15 @@ async def play(port):
                 for station in ['gen', 'relay', 'mast']:
                     assert await page.evaluate('id=>approachNight(id,true)', station), f'{seed}: {station} approach'
                     hold = await page.evaluate('id=>game.info.layout.stations.find(s=>s.id===id).hold',station)
+                    if station=='gen' and seed==211 and await page.evaluate("!!game.info.layout.stations[0].steps"):
+                        await page.keyboard.down('e')
+                        await advance(hold*.45)
+                        await page.keyboard.up('e')
+                        await advance(45)
+                        saved=await page.evaluate("game.sim.obj.stations.find(s=>s.id==='gen').prog")
+                        assert abs(saved-1/3)<.001, f'completed first repair step survives hiding: {saved}'
+                        assert 'step 2/3' in await page.evaluate('ui._prompt'), 'repair resumes at the next step'
+                        report['savedRepairStep']=saved
                     await page.keyboard.down('e')
                     await advance(hold+.6)
                     await page.keyboard.up('e')

@@ -26,6 +26,14 @@ export class UI {
       inventory: $('#inventory'), debug: $('#debug'), fade: $('#fade'), click: $('#click-to-play'),
     };
     this._extraDom();
+    // Holding Tab keeps pointer lock. Route wheel input into the map/notebook so
+    // the player can read the whole sheet without losing control focus.
+    window.addEventListener('wheel',e=>{
+      if(!document.pointerLockElement)return;
+      const panel=!this.el.note.classList.contains('hidden')?this.el.note.querySelector('.paper'):
+        !this.el.inventory.classList.contains('hidden')?this.el.inventory:null;
+      if(panel){panel.scrollTop+=e.deltaY;e.preventDefault();}
+    },{passive:false});
     const build = window.HM_BUILD || BUILD_COMMIT;
     if (typeof build === 'string' && build && !build.startsWith('$Format:')) {
       const version=document.createElement('span');version.className='build-id';
@@ -417,9 +425,20 @@ export class UI {
     if (was && this._invT % 10) return;
     const d = dataFn();
     const m = Math.floor(d.time / 60), sec = String(Math.floor(d.time % 60)).padStart(2, '0');
-    el.innerHTML = `<h3>Objectives</h3>${d.objectives.map((l) => `<div class="obj ${l.done ? 'done' : ''}"><span class="box">${l.done ? '✓' : ''}</span><div><div>${esc(l.text)}</div>${l.sub ? `<div class="sub">${esc(l.sub)}</div>` : ''}</div></div>`).join('')}
+    const map=d.map;
+    const fieldMap=map?`<h3>East Trail field map</h3><div class="field-map"><svg viewBox="0 0 500 300" role="img" aria-label="East Trail, landmarks and your position">
+      <path d="${map.river}" fill="none" stroke="#587985" stroke-width="5" opacity=".5"/>
+      <path d="${map.path}" fill="none" stroke="#c7ba8c" stroke-width="2.5" stroke-linecap="round"/>
+      ${map.markers.map(p=>`<g><circle cx="${p.at[0]}" cy="${p.at[1]}" r="5" fill="#b8c59a"/><text x="${p.at[0]+8}" y="${p.at[1]+4}" fill="#e1dac5" font-size="12">${p.n}</text></g>`).join('')}
+      <circle cx="${map.player[0]}" cy="${map.player[1]}" r="5.5" fill="#eeb36e" stroke="#191e17" stroke-width="2"/>
+      <text x="465" y="24" fill="#c7ba8c" font-size="12">N ↑</text></svg>
+      <div class="map-legend">${map.markers.map(p=>`<span><b>${p.n}</b> ${esc(p.name)}</span>`).join('')}</div>
+      <p class="map-key">Amber dot: you · pale line: East Trail · scroll to read</p></div>`:'';
+    const supplies=d.supplyHints?`<div class="supply-register"><b>Tonight's supply register</b><div>Gas can — ${esc(d.supplyHints.fuel)}</div><div>Fuse kit — ${esc(d.supplyHints.fuse)}</div></div>`:'';
+    el.innerHTML = `${fieldMap}${supplies}<h3>Rescue plan</h3>${d.objectives.map((l) => `<div class="obj ${l.done ? 'done' : ''}"><span class="box">${l.done ? '✓' : ''}</span><div><div>${esc(l.text)}</div>${l.sub ? `<div class="sub">${esc(l.sub)}</div>` : ''}</div></div>`).join('')}
       <div class="inv-grid"><div><span class="dim">Team carries</span><br>${d.team.fuel ? 'Gas can' : '<span class="dim">—</span>'}${d.team.fuse ? '<br>Fuse kit' : ''}</div>
       <div><span class="dim">Lighter fuel</span><br>${Math.round(d.battery * 100)}%</div><div><span class="dim">Air temperature</span><br>${d.temp.toFixed(1)}°C</div><div><span class="dim">Time</span><br>${m}:${sec}</div></div>
+      ${d.blanket?`<p class="map-key">Camouflage blanket carried · crouch, lighter off, hold ${esc(this.s.keyName(this.s.bindings.camouflage))} while still.</p>`:''}
       <h3>Notes</h3>${d.notes.length ? d.notes.map((n) => `<details><summary>${esc(n.title)}</summary><p>${esc(n.text).replace(/\n/g, '<br>')}</p></details>`).join('') : '<p class="dim">None yet.</p>'}`;
     el.classList.remove('hidden');
   }

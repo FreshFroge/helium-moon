@@ -929,9 +929,8 @@ export class HeliumVoiceAI {
     this.setState('watch', { watchDur: C.LINGER + 3 }); this.lingerUntil = sim.time + C.LINGER;
   }
 
-  // Hiding (how a hunt ends): the hunted player is out of his sight, light off, not moving and
-  // quiet. HIDE_TIME s of that and he has lost them. Learned hiders need HIDE_LEARNED x longer.
-  // Returns the player he lost, or null.
+  // Concealment during a timed search: crouched/covered, lighter off, still and quiet.
+  // It prevents discovery; the hunt's shared deadline determines when he gives up.
   hidden(tp) {
     // standing upright in the open is not hiding, however far he is: crouch, get in brush or under cover
     if (!tp.flash && (tp.crouch || tp.hidden || tp.covered) && (tp.moveSpeed || 0) < C.HIDE_STILL && !tp.sprint && noiseRadius(tp, C) <= C.HIDE_NOISE) {

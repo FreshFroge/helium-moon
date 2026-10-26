@@ -118,9 +118,11 @@ for (const separation of [3,6]) for (const state of ['prowl','investigate']) tes
   assert.ok(p.health<MAXH,`a nearby flashlight must not suppress ${state} attack acquisition`);
 });
 
-test('a teammate flashlight cannot suppress the skunk attacking the nearest player',()=>{
-  const {sim,p,actor}=encounter('sf',10);p.flash=false;
-  const q=sim.addPlayer('lamp','Lamp'),at=pointAtDistance(world.trail,world.trailCum,511);
+test('a teammate lighter cannot suppress the skunk attacking the nearest player',()=>{
+  // Both players must be inside the new 6.5 m lighter range. The former 10/11 m
+  // flashlight fixture no longer supplied light or guaranteed close acquisition.
+  const {sim,p,actor}=encounter('sf',3);p.flash=false;
+  const q=sim.addPlayer('lamp','Lamp'),at=pointAtDistance(world.trail,world.trailCum,504);
   Object.assign(q,{x:at.x,z:at.z,y:world.heightAt(at.x,at.z),flash:true,
     yaw:Math.atan2(-(actor.x-at.x),-(actor.z-at.z))});
   actor.setState('prowl');

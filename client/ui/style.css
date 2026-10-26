@@ -129,6 +129,15 @@ ul.lobby-list li { padding: 8px 0; border-bottom: 1px solid var(--line); font-si
 .inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.5; }
 .inv-grid .dim { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
 #inventory details { border-bottom: 1px solid var(--line); padding: 7px 0; }
+.field-map { background: #1b241c; border: 1px solid #404c38; padding: 10px; margin-bottom: 14px; }
+.field-map svg { display: block; width: 100%; max-height: 240px; }
+.map-legend { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px 12px; font-size: 11px; color: #c4c6b4; }
+.map-legend b { color: #d8c392; margin-right: 3px; }
+.map-key { font-size: 11px; color: #a5ad99; line-height: 1.5; margin: 10px 0 2px; }
+.supply-register { margin: 0 0 18px; padding: 10px 12px; border-left: 2px solid #b39b69; background: #c7ba8c0a; line-height: 1.6; font-size: 12px; }
+.supply-register b { display: block; color: #d3c6a5; margin-bottom: 4px; }
+#note .paper { max-height: 84vh; overflow-y: auto; pointer-events: auto; }
+#note .nbody { font-size: 17px; }
 #inventory summary { cursor: pointer; font-family: var(--serif); font-size: 17px; }
 #inventory details p { font-family: var(--serif); font-size: 16px; line-height: 1.5; color: #c4bfb3; }
 #debug { position: absolute; right: 16px; bottom: 16px; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #b9c4a8; text-shadow: 0 1px 2px #000; text-align: right; }

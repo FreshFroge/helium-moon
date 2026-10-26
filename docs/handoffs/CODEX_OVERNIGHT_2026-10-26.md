@@ -63,3 +63,12 @@ still clear; `spawn.test.mjs`, `objectives.test.mjs`, `zones.test.mjs` pass.
 Three more staged browser objective/extraction runs (211–213) pass after the
 world changes. Spawn/kiosk screenshots inspected; reduced the initial lamp
 intensity and increased map roughness to avoid washing the map out.
+
+Objective pass: named-landmark supply storage with truthful session-specific
+memo/register; carried field map and landmark legend; reduced current-task
+HUD; three durable repair steps; nearby cooperative help; LOS/height/held-state
+interaction checks. The first saved third exposed a real .333 snapshot display
+bug in the browser, now fixed. Three final browser runs and a two-client network
+repair run pass; rendering workload stays inside the existing budget on every
+preset/view. Final `npm test` passes. Detailed observations, commands, limitations
+and 24 full-simulation session results: `docs/PLAYTEST_2026-10-26.md`.

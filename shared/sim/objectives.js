@@ -1,6 +1,13 @@
 // Objectives, items and notes. Locations are randomised every session.
 import { CONFIG } from '../config.js';
 import { pointAtDistance } from '../math.js';
+import { eyeHeight } from './perception.js';
+
+const REPAIR_STEPS = {
+  generator: ['Pour the fuel', 'Prime the starter', 'Start the generator'],
+  relay: ['Open the relay housing', 'Replace the blown fuse', 'Reset the breaker'],
+  transmitter: ['Tune the emergency channel', 'Power the transmitter', 'Send the distress call'],
+};
 
 export const NOTES = [
   { id: 'memo', title: 'Maintenance memo (kiosk)', text: 'TO: Refuge staff\nRepeater at the old mast is on backup only. If the main line goes down:\n1. Start the backup generator (gas can in the truck or the shed).\n2. Swap the blown fuse in the trail relay box - spares are in the orange kit.\n3. Key the emergency channel from the cabinet at the base of the mast.\nThe county will send a unit to the highway bridge.\n- R. Okafor, Parks' },
@@ -39,6 +46,7 @@ export class Objectives {
       { id: 'relay', kind: 'relay', name: 'Replace the fuse in the trail relay box', where: { blind: 'Pond Wildlife Blind', bench: 'River Bend Overlook', fishing: 'Fishing Bank', footbridge: 'Slough Footbridge' }[relayPoi], needs: ['fuse'], hold: 7, noisy: false, ...relayPos, done: false, prog: 0 },
       { id: 'mast', kind: 'transmitter', name: 'Send the distress call from the repeater mast', where: 'Old Repeater Mast', needs: ['gen', 'relay'], hold: 12, noisy: true, ...mastPos, done: false, prog: 0 },
     ];
+    for(const station of this.stations){station.steps=REPAIR_STEPS[station.kind];station.checkpoint=0;}
     const hw = P.highway;
     this.extract = { x: hw.x + 6, z: hw.z + 10, y: w.heightAt(hw.x + 6, hw.z + 10), r: CONFIG.SESSION.EXTRACT_RADIUS };
     this.extractOpen = false;
@@ -56,22 +64,29 @@ export class Objectives {
         if (w.isPlayable(x, z) && w.navWalkable(x, z) && w.waterAt(x, z) === null) { spots.push({ x, z, y: w.heightAt(x, z), rot: rng() * 6.28, label: 'trail' }); break; }
       }
     }
+    // The kiosk is reserved for the actual briefing, not unrelated campsite notes.
+    for(let i=spots.length-1;i>=0;i--)if(spots[i].label==='kiosk')spots.splice(i,1);
     rng.shuffle(spots);
-    const take = (pred) => { const i = spots.findIndex(pred); return i >= 0 ? spots.splice(i, 1)[0] : spots.shift(); };
+    const take = (pred, fallback=true) => { const i = spots.findIndex(pred); return i >= 0 ? spots.splice(i, 1)[0] : fallback ? spots.shift() : null; };
+    const names={camp:'Abandoned Campsite',shed:'Ranger Maintenance Shed',pumphouse:'Old Pump House',
+      blind:'Pond Wildlife Blind',fishing:'Fishing Bank',overlook:'River Bend Overlook',car:'South Trailhead Lot — parked cars'};
     this.items = [];
-    const fuelSpot = take((s) => s.label !== (genPoi === 'pumphouse' ? 'pumphouse' : 'shed') && s.label !== 'kiosk');
+    const fuelSpot = take((s) => ['camp','car',genPoi==='pumphouse'?'shed':'pumphouse'].includes(s.label));
     this.items.push({ id: 'fuel', kind: 'fuel', name: 'Gas can', ...fuelSpot, holder: null });
-    const fuseSpot = take((s) => s.label !== 'kiosk' && s.label !== 'car');
+    const fuseSpot = take((s) => ['blind','fishing','overlook','pumphouse','camp'].includes(s.label));
     this.items.push({ id: 'fuse', kind: 'fuse', name: 'Orange fuse kit', ...fuseSpot, holder: null });
+    this.supplyHints={fuel:names[fuelSpot.label]||'beside the marked trail',fuse:names[fuseSpot.label]||'beside the marked trail'};
+    this.memoText=NOTES[0].text+'\n\nTONIGHT\'S SUPPLY REGISTER\nGas can: '+this.supplyHints.fuel+'.\nFuse kit: '+this.supplyHints.fuse+'.'
+      +'\n\nRepairs latch at each completed step. If you hear the hunt hum, leave the equipment and hide; finished steps stay done.';
     for (let k = 0; k < 5; k++) { const s = take((s) => s.label === 'trail') || take(() => true); if (s) this.items.push({ id: 'bat' + k, kind: 'battery', name: 'Spare lighter', ...s, holder: null }); }
-    const blanketSpot = take((s) => s.label === 'camp') || take((s) => s.label === 'shed') || take(() => true);
+    const blanketSpot = take((s) => s.label === 'camp',false) || take((s) => s.label === 'shed',false) || take(() => true);
     if (blanketSpot) this.items.push({ id: 'camo_blanket', kind: 'blanket', name: 'Camouflage blanket', ...blanketSpot, holder: null });
     // notes: the maintenance memo always sits on the kiosk; three of the others are scattered
     const kiosk = w.structures.find((o) => o.type === 'kiosk');
     const kp = stationAt('kiosk', 0, 0.45);
     this.items.push({ id: 'note_memo', kind: 'note', note: 'memo', name: NOTES[0].title, x: kp.x, z: kp.z, y: kp.y + 1.2, rot: kiosk.rot, holder: null, wall: true });
     const others = rng.shuffle(NOTES.slice(1)).slice(0, 3);
-    for (const n of others) { const s = (n.id === 'camp' && take((s) => s.label === 'camp')) || take(() => true); if (s) this.items.push({ id: 'note_' + n.id, kind: 'note', note: n.id, name: n.title, ...s, holder: null }); }
+    for (const n of others) { const s = (n.id === 'camp' && take((s) => s.label === 'camp',false)) || take(() => true); if (s) this.items.push({ id: 'note_' + n.id, kind: 'note', note: n.id, name: n.id==='camp'&&s.label!=='camp'?'Crumpled campsite note':n.title, ...s, holder: null }); }
     this.team = { fuel: false, fuse: false };
     this.notesRead = [];
   }
@@ -98,29 +113,37 @@ export class Objectives {
     let noisy = false;
     for (const s of this.stations) {
       if (s.done) continue;
-      let working = null;
+      const workers=[];
       for (const p of sim.playerList) {
-        if (p.state !== 'alive' || p.use !== s.id) continue;
+        if (p.state !== 'alive' || p.use !== s.id || p.covered || (p.heldUntil??-1)>sim.time) continue;
         if (Math.hypot(p.x - s.x, p.z - s.z) > 2.8 || !this.canUse(s)) continue;
-        working = p; break;
+        if(Math.abs(p.y-s.y)>2 || this.world.lineOfSight(p.x,p.y+eyeHeight(p),p.z,s.x,s.y+.6,s.z,{brushK:0})<.2)continue;
+        workers.push(p);
       }
-      if (working) {
-        s.prog = Math.min(1, s.prog + dt / s.hold);
-        if (s.noisy) { working.interactNoise = true; noisy = true; }
+      if (workers.length) {
+        const working=workers[0];
+        s.prog = Math.min(1, s.prog + dt / s.hold * Math.min(1.7,1+.35*(workers.length-1)));
+        const checkpoint=Math.floor(s.prog*3+1e-7)/3;
+        if(checkpoint>s.checkpoint){
+          s.checkpoint=checkpoint;
+          sim.emit({type:'objective_step',id:s.id,pid:working.id,step:Math.min(3,Math.round(checkpoint*3)),name:s.steps[Math.min(2,Math.round(checkpoint*3)-1)]});
+        }
+        if (s.noisy) { for(const worker of workers)worker.interactNoise=true; noisy = true; }
         if (s.prog >= 1) {
           s.done = true;
           sim.emit({ type: 'objective', id: s.id, pid: working.id, name: s.name });
           if (s.id === 'mast') { this.extractOpen = true; sim.state = 'extract'; sim.emit({ type: 'extract_open' }); }
         }
-      } else s.prog = Math.max(0, s.prog - dt * 0.02); // progress is mostly kept
+      } else s.prog = Math.max(s.checkpoint, s.prog - dt * 0.02); // completed steps stay latched
     }
     return noisy;
   }
 
   pickup(p, id) {
     const it = this.items.find((i) => i.id === id);
-    if (!it || it.holder) return false;
+    if (!it || it.holder || p.state!=='alive' || (p.heldUntil??-1)>this.sim.time) return false;
     if (Math.hypot(p.x - it.x, p.z - it.z) > 2.6) return false;
+    if(Math.abs(p.y-it.y)>2 || this.world.lineOfSight(p.x,p.y+eyeHeight(p),p.z,it.x,it.y+.12,it.z,{brushK:0})<.2)return false;
     it.holder = p.id;
     if (it.kind === 'fuel' || it.kind === 'fuse') this.team[it.kind] = true;
     if (it.kind === 'note') this.notesRead.push(it.note);
@@ -139,8 +162,9 @@ export class Objectives {
   // static layout sent once at session start
   layout() {
     return {
-      stations: this.stations.map(({ id, kind, name, where, needs, hold, x, y, z, rot }) => ({ id, kind, name, where, needs, hold, x, y, z, rot })),
-      items: this.items.map(({ id, kind, name, note, x, y, z, rot, wall }) => ({ id, kind, name, note, x, y, z, rot, wall })),
+      stations: this.stations.map(({ id, kind, name, where, needs, hold, steps, x, y, z, rot }) => ({ id, kind, name, where, needs, hold, steps, x, y, z, rot })),
+      items: this.items.map(({ id, kind, name, note, label, x, y, z, rot, wall }) => ({ id, kind, name, note, label, x, y, z, rot, wall })),
+      supplyHints:this.supplyHints, memoText:this.memoText,
       extract: this.extract,
     };
   }

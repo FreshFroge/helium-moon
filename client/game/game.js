@@ -229,6 +229,7 @@ export class Game {
     this.snapT = -1; this.renderT = 0; this.interp = this.net.networked ? 0.12 : 0.06;
     this.hvBuf.clear(); this.sfBuf.clear(); this.plBufs.clear();
     this.objViews.build(info.layout, this.world);
+    this._trailMap = null;
     for (const [id, a] of this.avatars) a.dispose(this.scene);
     this.avatars.clear();
     info.players.forEach((p, i) => { if (p.id !== this.myId) this._ensureAvatar(p.id, p.name, i); });
@@ -465,7 +466,7 @@ export class Game {
         if (e.pid === this.myId) {
           if (e.kind === 'battery') { this.flashlight.addBattery(CONFIG.FLASHLIGHT.BATTERY_PICKUP); A.ui('clink', 0.6); this.ui.toast('A spare lighter. More fuel.', 2000); }
           else if (e.kind === 'blanket') { this.player.hasCamoBlanket = true; A.ui('paper', 0.55); this.ui.toast('Camouflage blanket: crouch, light off, hold X while still to hide.', 4500); }
-          else if (e.kind === 'note') { A.ui('paper', 0.8); const n = NOTES.find((q) => q.id === e.note); if (n) { this.notesRead.push(n.id); this.reading = n; this.ui.showNote(n); } }
+          else if (e.kind === 'note') { A.ui('paper', 0.8); const n = this._sessionNote(e.note); if (n) { this.notesRead.push(n.id); this.reading = n; this.ui.showNote(n); } }
           else { A.ui('clink', 0.7); this.ui.toast(e.kind === 'fuel' ? 'Picked up the gas can.' : 'Picked up the fuse kit.', 3000); }
         } else if (it && e.kind !== 'battery') this.ui.toast(`${this._name(e.pid)} found ${e.kind === 'note' ? 'a note' : it.name.toLowerCase()}.`, 3000);
         if (e.kind === 'note' && e.pid !== this.myId) { const n = NOTES.find((q) => q.id === e.note); if (n && !this.notesRead.includes(n.id)) this.notesRead.push(n.id); }
@@ -473,6 +474,7 @@ export class Game {
         break;
       }
       case 'mimic': this.voice.onMimicEvent(e); break;
+      case 'objective_step': this._objectivesDirty = true; break;
       case 'end': this._end(e); break;
       default: break;
     }
@@ -909,7 +911,7 @@ export class Game {
     const pl = this.player, inp = this.input, L = this.info.layout;
     this.useId = null; this.reviveId = null; this._stationNoisy = false;
     let best = null, bd = 1e9;
-    if (active && this.myState === 'alive') {
+    if (active && this.myState === 'alive' && !pl.covered) {
       const f = this.camera.getWorldDirection(this._v5 || (this._v5 = new THREE.Vector3()));
       const eye = this.camera.position;
       const consider = (x, y, z, r, o) => {
@@ -918,6 +920,7 @@ export class Game {
         const to = (this._v6 || (this._v6 = new THREE.Vector3())).set(x - eye.x, y - eye.y, z - eye.z).normalize();
         const facing = dh < 0.9 ? 1 : to.dot(f);
         if (facing < 0.35) return;
+        if(this.world.lineOfSight(eye.x,eye.y,eye.z,x,y,z,{brushK:0})<.2)return;
         const score = dh - facing;
         if (score < bd) { bd = score; best = o; }
       };
@@ -937,7 +940,10 @@ export class Game {
         const missing = this._missing(s);
         if (missing.length) prompt = `<span class="dim">${s.name} — ${missing.join(', ')}</span>`;
         else {
-          prompt = `Hold <b>${key}</b> ${s.name.toLowerCase()}`;
+          // Progress arrives rounded to .001 in snapshots; .333 is a secured third.
+          const step=Math.min((s.steps?.length||1)-1,Math.floor(((best.s.prog||0)+.0005)*(s.steps?.length||1)+1e-6));
+          const detail=s.steps?.[step];
+          prompt = `Hold <b>${key}</b> ${s.name.toLowerCase()}${detail?`<br><span class="dim">${detail} · step ${step+1}/${s.steps.length}</span>`:''}`;
           if (inp.down('interact')) { this.useId = best.id; this._stationNoisy = s.kind !== 'relay'; prog = best.s.prog || 0; this._workSound(dt, s); }
           else if (best.s.prog > 0) prog = best.s.prog;
         }
@@ -971,13 +977,15 @@ export class Game {
   // ---------------------------------------------------------------- HUD
   _objectiveLines() {
     const L = this.info.layout, out = [];
-    if (!this.notesRead.includes('memo')) out.push({ text: 'Read the maintenance memo on the trailhead kiosk', done: false });
+    if (!this.notesRead.includes('memo')) out.push({ id:'memo',text: 'Read the maintenance memo on the trailhead kiosk', done: false });
     for (const s of L.stations) {
       const v = this.objViews.stations.get(s.id), done = v && v.done;
       let sub = s.where;
-      if (!done && s.id === 'gen') sub += this.team.fuel ? ' · gas can ✓' : ' · find the gas can';
-      if (!done && s.id === 'relay') sub += this.team.fuse ? ' · fuse kit ✓' : ' · find the fuse kit';
-      out.push({ text: s.name, sub, done });
+      if (!done && s.id === 'gen') sub += this.team.fuel ? ' · gas can ✓' : ' · gas can: '+(this.notesRead.includes('memo')?L.supplyHints?.fuel||'check the supply register':'read the kiosk memo');
+      if (!done && s.id === 'relay') sub += this.team.fuse ? ' · fuse kit ✓' : ' · fuse kit: '+(this.notesRead.includes('memo')?L.supplyHints?.fuse||'check the supply register':'read the kiosk memo');
+      const secured=Math.floor(((v?.prog||0)+.0005)*3+1e-6);
+      if(!done&&secured)sub+=` · ${secured}/3 steps secured`;
+      out.push({ id:s.id,text: s.name, sub, done });
     }
     if (this.extractOpen) out.push({ text: 'Get to the highway bridge — a county unit is waiting', done: false, urgent: true });
     return out;
@@ -987,14 +995,44 @@ export class Game {
     return {
       objectives: this._objectiveLines(),
       team: this.team, battery: this.flashlight.battery, temp: this.temp ?? T.BASE_TEMP_C,
-      notes: this.notesRead.map((id) => NOTES.find((n) => n.id === id)).filter(Boolean),
+      notes: this.notesRead.map((id) => this._sessionNote(id)).filter(Boolean),
+      map:this._fieldMapData(),blanket:this.player.hasCamoBlanket,
+      supplyHints:this.notesRead.includes('memo')?this.info.layout.supplyHints:null,
       time: this.sessionT,
     };
   }
 
+  _sessionNote(id){
+    const note=NOTES.find(n=>n.id===id);
+    return note&&id==='memo'&&this.info.layout.memoText?{...note,text:this.info.layout.memoText}:note;
+  }
+
+  _activeObjectiveLines(){
+    const lines=this._objectiveLines();
+    if(!this.notesRead.includes('memo'))return lines.filter(l=>l.id==='memo');
+    if(this.extractOpen)return lines.filter(l=>l.urgent);
+    const repairs=lines.filter(l=>!l.done&&(l.id==='gen'||l.id==='relay'));
+    return (repairs.length?repairs:lines.filter(l=>!l.done)).slice(0,2);
+  }
+
+  _fieldMapData(){
+    const w=this.world;
+    if(!this._trailMap){
+      const xs=w.trail.map(p=>p[0]),zs=w.trail.map(p=>p[1]);
+      const minX=Math.min(...xs)-40,maxX=Math.max(...xs)+40,minZ=Math.min(...zs)-40,maxZ=Math.max(...zs)+40;
+      const scale=Math.min(450/(maxX-minX),260/(maxZ-minZ));
+      const padX=(500-(maxX-minX)*scale)/2,padZ=(300-(maxZ-minZ)*scale)/2;
+      const project=(x,z)=>[+(padX+(x-minX)*scale).toFixed(1),+(padZ+(z-minZ)*scale).toFixed(1)];
+      const path=points=>points.map((p,i)=>(i?'L':'M')+project(...p).join(',')).join(' ');
+      this._trailMap={project,path:path(w.trail),river:path(w.river),
+        markers:Object.values(w.poi).map((p,i)=>({n:i+1,name:p.name,at:project(p.x,p.z)}))};
+    }
+    return {...this._trailMap,player:this._trailMap.project(this.player.pos.x,this.player.pos.z)};
+  }
+
   _hud(dt) {
     const pl = this.player;
-    if (this._objectivesDirty) { this._objectivesDirty = false; this.ui.objectives(this._objectiveLines()); }
+    if (this._objectivesDirty) { this._objectivesDirty = false; this.ui.objectives(this._activeObjectiveLines()); }
     this.ui.meters(pl.stamina / CONFIG.PLAYER.STAMINA_MAX, this.flashlight.battery, this.flashlight.on);
     this._teamT = (this._teamT || 0) - dt;
     if (this._teamT <= 0) {
