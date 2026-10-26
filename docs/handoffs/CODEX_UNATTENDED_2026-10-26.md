@@ -50,6 +50,15 @@ waiting for decay; a slow key release on software rendering previously made
 the fixed-duration assumption fail at progress 0.473.
 
 The bounded check runner's real child timeout, stop and duplicate-lock checks
-pass (3 tests). Scheduled operation has not yet been started. Full suite and
-first actual scheduled batch still need verification before publishing the
-implementation. Main-river crossing/objective implementation remains in progress.
+pass (3 tests). It is running locally, started at 06:39:57 UTC, every 30 minutes
+until 13:00 UTC / 8 a.m. America/Chicago. State/logs are in
+`/tmp/helium-checks-66e961dfeee7`. First batch at `f7322b2` passes the full
+`npm test` (96 seconds), 12 scripted hunt sessions (20 seconds) and two real
+browser clients. Browser ground contacts additionally pass: 3,791 Helium
+hand/foot samples and 6,192 skunk paw samples on three real slopes and the
+slough bridge; maximum skunk support error 0.0054 m. This does not establish
+hardware FPS or owner acceptance of the animation style.
+
+Animation/scheduler source published at `f7322b2`; animation files are released
+unless subsequent crossing integration needs them. Main-river crossing and
+objective/UI/world file reservations remain active for the next increment.
