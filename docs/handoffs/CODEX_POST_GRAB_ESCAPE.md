@@ -6,6 +6,11 @@ the player; retain its existing damage and final-grab consequences.
 
 Codex reserves `shared/sim/heliumVoice.js`, `tests/attacks.test.mjs`, focused
 post-grab browser checks in `tests/browser_encounters.py`, and this handoff.
+Also reserved: `tests/hush.test.mjs`. The new escape/recovery changes the number
+of approaches in its fixed six-session sample (two hushes rather than the old
+minimum of three). Preserve the cue settings and validate its probability and
+once-per-approach behavior directly instead of depending on that incidental
+session count. Retain the end-to-end timing/distance checks.
 The prior continuation's reservations are released. No director/audio/rig
 rewrite is proposed.
 
