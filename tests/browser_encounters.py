@@ -59,6 +59,8 @@ async def play(port):
                 sim.sf.update=()=>{};sim.mimic.update=()=>{};
                 hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);
                 hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.setState('chase');hv.speed=6.6;
+                hv.huntHideUntil=sim.time;hv.huntPhase='search';hv.huntEndsAt=sim.time+35;
+                hv.lastSeenChase={x:p.x,z:p.z,t:sim.time};hv.huntContactAt=sim.time;
                 for(let i=0;i<1800&&p.health===3;i++)game.advance(1,1/30,false);
                 game.advance(30,1/30,false);
                 return {server:p.health,client:game.health};
@@ -78,7 +80,7 @@ async def play(port):
                 // Here the rendered result: he goes limp, lies there while watched, gone once unwatched.
                 game.flashlight.on=false;hv.hidden=()=>true;
                 let lost=null,start=null;
-                for(let i=0;i<400&&lost==null;i++){game.advance(1,1/30,false);if(hv.state==='collapse'){lost=i/30;start=[hv.x,hv.z];}}
+                for(let i=0;i<1850&&lost==null;i++){game.advance(1,1/30,false);if(hv.state==='collapse'){lost=i/30;start=[hv.x,hv.z];}}
                 const fell={flags:game.hv.flags};
                 game.look(Math.atan2(-(hv.x-p.x),-(hv.z-p.z)),-.2);game.advance(45,1/30,false);
                 const stayed=Math.hypot(hv.x-start[0],hv.z-start[1]);

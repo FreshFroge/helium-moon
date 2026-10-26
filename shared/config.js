@@ -75,28 +75,22 @@ export const CONFIG = {
     SIGNATURE_PROB: 0.4, SIGNATURE_FIRST_PROB: 0.75, SIGNATURE_COOLDOWN: 95, // uploaded .ogg on first sighting
     FOOTSTEP_FADE_START: 1.8, FOOTSTEP_MAX_DISTANCE: 2.4, // roughly 6-8 feet
     FOOTSTEP_STALK_GAIN: 0.45, FOOTSTEP_CHASE_GAIN: 0.8,
-    // Hunts (owner, Oct 25 2026, docs/HUNT_PLAYTESTS.md). A hunt starts only within
-    // HUNT_START_RANGE; farther out he first closes in unseen (HUNT_CLOSE_TIMEOUT s max).
-    // Once a hunt starts, the ONLY way to call it off is a flashlight on him while he is
-    // within HUNT_BREAK_LIT_DIST (7 ft) of whoever shines it. Being seen at range, losing
-    // sight of the player and time do not end it: when he loses sight he re-acquires the
-    // player's position every HUNT_TRACK_EVERY s. A hunt still ends when he lands a hit,
-    // the target is downed/dead, or the target reaches the spawn area (he can't enter).
+    // Owner Oct 26: a bounded hunt opens with a concealed stalk, then a search of
+    // the last sight/sound. Actual discovery can become a damaging rush. Without a
+    // catch, the hunt ends after both phases; no exact-position tracking through cover.
+    // Farther than HUNT_START_RANGE he first closes in unseen (HUNT_CLOSE_TIMEOUT max).
     // The client's hunt hum plays only within HUNT_HUM_RANGE of him.
     HUNT_STALK_DIST: [30, 45],   // owner: the opening stalk of a hunt holds this far out, concealed
     HUNT_START_RANGE: 42, HUNT_CLOSE_TIMEOUT: 45,
     HUNT_BREAK_LIT_DIST: 2.13, HUNT_TRACK_EVERY: 2.5,   // HUNT_BREAK_LIT_DIST: legacy 7-ft rule (unused); hunts now end by hiding (HIDE_* below)
-    // Hiding ends a hunt (owner, Oct 25 Puppet rework: "find a more creative way to end a hunt";
-    // the strings above him were removed at the owner's request). The hunted player must be out of
-    // his sight (sightOf ~0), flashlight off, nearly still (< HIDE_STILL m/s) and quiet (noise
-    // radius <= HIDE_NOISE) for HIDE_TIME s, more than HIDE_MIN_DIST from him. He loses them, goes
-    // limp and is gone once nobody is looking. While they hide he searches where he last saw or
-    // heard them instead of tracking them. Learned hiders need HIDE_LEARNED x longer. After a
-    // successful hide, HIDE_GRACE s (solo / team) with no new hunt on that player.
+    // Crouch in cover, lighter off, still and quiet: he searches the last evidence.
+    // HIDE_TIME tracks settled concealment; it no longer cancels the opening stalk.
+    // Survive the deadline and HIDE_GRACE gives a breather before the next hunt.
     HIDE_TIME: 6, HIDE_STILL: 0.6, HIDE_NOISE: 6, HIDE_MIN_DIST: 2.5, HIDE_LEARNED: 1.5, HIDE_GRACE: [45, 25],
     // A hunt opens with an escape window. He searches and closes pressure, but cannot grab;
     // this gives players time to kill the light and settle into brush or a broken sightline.
     HUNT_HIDE_WINDOW: [15, 20],
+    HUNT_SEARCH_TIME: [30, 40], HUNT_SEARCH_RADIUS: [4, 14], HUNT_CONTACT_MEMORY: 1.8,
     HUNT_PACE: [0.88, 1.18], HUNT_PACE_INTERVAL: [0.9, 2.3],
     HUNT_CUTOFF_JITTER: [0.65, 1.25],
     HUNT_LUNGE_DIST: 4,   // within this (clear line), the final lunge uses real collision, not the 2 m nav grid

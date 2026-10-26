@@ -16,6 +16,10 @@ function encounter(separation=2.3) {
   Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),flash:true,pitch:0,viewFov:75,viewAspect:16/9});
   hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);
   hv.target=p.id;hv.awareness.set(p.id,2);hv.spotted.add(p.id);hv.setState('chase');hv.speed=CONFIG.HV.BURST;
+  // This fixture stages discovered contact during the search, after the opening stalk.
+  hv.huntHideUntil=sim.time;hv.huntPhase='search';hv.huntEndsAt=sim.time+35;
+  hv.lastSeenChase={x:p.x,z:p.z,t:sim.time};hv.huntContactAt=sim.time;
+  sim.director.onChaseStart(p);
   p.yaw=Math.atan2(hv.x-p.x,hv.z-p.z); // looking away (camera faces -Z)
   return {sim,p,hv};
 }
@@ -28,8 +32,8 @@ test('a committed chase attacks a player who never looks back',()=>{
   assert.equal(sim.director.chasing,false,'the hit ends the chase');
 });
 
-// Hunts: once a hunt is on, the ONLY way to call it off is to hide from him (CONFIG.HV.HIDE_*;
-// owner, Puppet rework). Being seen, lit at any range, and time do not end it.
+// Owner Oct 26: actual contact remains dangerous during search, while unseen players
+// can survive until its deadline. Being seen or lit does not instantly cancel a hunt.
 function aimAt(p,q){const ey=p.y+1.6;p.yaw=Math.atan2(-(q.x-p.x),-(q.z-p.z));p.pitch=Math.atan2(q.y-ey,Math.hypot(q.x-p.x,q.z-p.z));}
 test('a glimpse at range does not call off a hunt',()=>{
   const {sim,p,hv}=encounter(10);p.yaw+=Math.PI;          // turns and looks, light on
@@ -56,12 +60,13 @@ function hidingFixture(sep=20){
   hv.lastSeenChase={x:decoy.x,z:decoy.z,t:sim.time-3};
   return {sim,p,hv};
 }
-test('hiding ends a hunt: out of his sight, dark, still and quiet - he loses you and goes limp',()=>{
+test('a hidden player survives the full search, then he loses them and goes limp',()=>{
   const {sim,p,hv}=hidingFixture();
+  const blocked=Object.create(world);blocked.lineOfSight=()=>0;hv.world=blocked;
   let lost=null,events=[];
-  for(let t=0;t<14&&lost==null;t+=.05){p.moveSpeed=0;p.noise=0;sim.step(.05);events.push(...sim.drainEvents());if(hv.state==='collapse')lost=t;}
+  for(let t=0;t<40&&lost==null;t+=.05){p.moveSpeed=0;p.noise=0;sim.step(.05);events.push(...sim.drainEvents());if(hv.state==='collapse')lost=t;}
   assert.ok(lost!=null,`he lost them (state ${hv.state}, hide ${hv.hide?.t?.toFixed(2)})`);
-  assert.ok(lost>=CONFIG.HV.HIDE_TIME-.06,`not instantly (${lost?.toFixed(2)} s)`);
+  assert.ok(lost>=35-.06,`he searches to the deadline (${lost?.toFixed(2)} s)`);
   assert.ok(events.some(e=>e.type==='hv_lost'&&e.pid===p.id));
   assert.equal(sim.director.chasing,false);assert.equal(p.health,MAXH);
   assert.ok(p.hideGraceUntil>sim.time,'a breather before the next hunt');
@@ -86,14 +91,15 @@ test('no hunt opens on a downed player; after hiding there is a breather',()=>{
   p.hideGraceUntil=null;hv.startChase(p);assert.equal(hv.state,'chase');
 });
 
-test('losing sight or time no longer ends a hunt',()=>{
+test('losing sight leaves the last evidence intact instead of acquiring a hidden live position',()=>{
   const {sim,p,hv}=encounter(25);
-  hv.startChase(p);assert.equal(sim.director.chasing,true);
-  hv.huntHideUntil=sim.time; // exercise the committed-pursuit behavior after the opening stalk
+  assert.equal(sim.director.chasing,true);
+  const blocked=Object.create(world);blocked.lineOfSight=()=>0;hv.world=blocked;
   hv.lastSeenChase={x:p.x+30,z:p.z+30,t:sim.time-20};hv.stateT=90;
+  const known={...hv.lastSeenChase};hv.huntContactAt=-999;
   tick(sim,.5);
   assert.equal(hv.state,'chase');assert.equal(sim.director.chasing,true);
-  assert.ok(Math.hypot(hv.lastSeenChase.x-p.x,hv.lastSeenChase.z-p.z)<1,'he re-acquires where the player really is');
+  assert.deepEqual(hv.lastSeenChase,known,'no omniscient reacquisition');
 });
 
 test('screen checks account for pitch, screen edges, aspect ratio and occlusion',()=>{

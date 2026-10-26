@@ -253,8 +253,8 @@ async def play(port):
 
             await page.evaluate('''() => {
                 const player = game.sim.players.get(game.myId);
-                game.sim.damagePlayer(player, 'hv', game.sim.hv);
-                game.sim.damagePlayer(player, 'hv', game.sim.hv);
+                const hits = player.health;
+                for (let i = 0; i < hits; i++) game.sim.damagePlayer(player, 'hv', game.sim.hv);
             }''')
             await advance(5)
             assert await page.evaluate("game.mode === 'ended' && game.result.result === 'lost'")

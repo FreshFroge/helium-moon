@@ -102,10 +102,11 @@ test('fail-safe: a hunt on a target he cannot reach ends instead of running fore
   assert.equal(sim.director.chasing, false);
 });
 
-test('running away is not an escape: a sprinting player (9 s stamina) still gets caught', () => {
+test('a moving player can outlast a hunt without extending its deadline', () => {
   for (const seed of [3, 4, 5]) {
     const { sim, p, hv } = fixture(30, seed);
     hv.startChase(p);
+    const deadline=hv.huntEndsAt;
     let along = 530, stamina = CONFIG.PLAYER.STAMINA_MAX, ended = null;
     for (let t = 0; t < 120 && ended == null; t += 0.05) {
       const sprint = stamina > 0.2; stamina -= sprint ? 0.05 : -0.05 * CONFIG.PLAYER.STAMINA_REGEN;
@@ -117,33 +118,28 @@ test('running away is not an escape: a sprinting player (9 s stamina) still gets
       for (const e of sim.drainEvents()) if (e.type === 'chase' && !e.on) ended = t;
     }
     assert.ok(ended != null, `seed ${seed}: the hunt ends`);
-    assert.ok(p.health < MAXH, `seed ${seed}: it ends with a hit, not by outrunning him (ended at ${ended?.toFixed(1)} s)`);
+    assert.ok(sim.time<=deadline+.1,`seed ${seed}: pursuit never runs past its deadline`);
   }
 });
 
-test('a dark, still player behind a big tree trunk can end a hunt', () => {
-  // spots a real player body can occupy (pushed out of colliders) inside a 2 m nav cell
-  // that the trunk blocks for the creature
-  const spots = [];
-  for (let a = 300; a < 1700 && spots.length < 5; a += 11) for (const side of [-14, -10, -6, 6, 10, 14]) {
-    const q = pointAtDistance(world.trail, world.trailCum, a);
-    const x = q.x + Math.cos(q.dir) * side, z = q.z - Math.sin(q.dir) * side;
-    if (world.navWalkable(x, z) || !world.isPlayable(x, z) || waterDepthAt(world, x, z) > CONFIG.DEEP_WATER) continue;
-    const r = moveCharacter(world, { x, y: world.heightAt(x, z), z }, 0, 0, CONFIG.PLAYER.RADIUS, { boundary: true });
-    if (world.navWalkable(r.x, r.z)) continue;
-    const inside = world.queryColliders(r.x, r.z, 2, []).some((ref) => ref < 100000 && Math.hypot(r.x - world.circles[ref][0], r.z - world.circles[ref][1]) < world.circles[ref][2] + 0.25);
-    if (inside) continue;
-    spots.push({ a, x: r.x, z: r.z }); break;
+test('crouched players can use real trunks for cover, and light or stepping out exposes them', () => {
+  let checked=0;
+  for(const tree of world.trees) {
+    if(tree.trunkR<.35 || tree.height<4)continue;
+    const {sim,p,hv}=fixture(20,3);
+    const offset=(tree.collisionR||tree.trunkR)+CONFIG.PLAYER.RADIUS+.02;
+    const px=tree.x,pz=tree.z+offset,hx=tree.x,hz=tree.z-20;
+    if(!world.isPlayable(px,pz)||!world.navWalkable(hx,hz)||!hv.outsideSpawn(px,pz)||!hv.outsideSpawn(hx,hz))continue;
+    Object.assign(p,{x:px,z:pz,y:world.heightAt(px,pz),lastX:px,lastZ:pz,flash:false,crouch:true,noise:0,sprint:false,moveSpeed:0});
+    hv.place(hx,hz);hv.observers=[];
+    p.x+=3;const otherCover=hv.trunkShield(p);p.x-=3;
+    if(otherCover)continue; // choose a side-step without a second nearby trunk
+    assert.equal(hv.trunkShield(p),true,'a solid trunk between player and Helium provides cover');
+    assert.equal(hv.hidden(p),true,'crouched, still and unlit behind the trunk is hidden');
+    p.flash=true;assert.equal(hv.hidden(p),false,'a lighter defeats concealment');
+    p.flash=false;p.x+=3;
+    assert.equal(hv.trunkShield(p),false,'stepping around the trunk removes its shield');
+    if(++checked===5)break;
   }
-  assert.ok(spots.length >= 3, `fixture: found ${spots.length} trunk-hugging spots`);
-  for (const sp of spots) {
-    const { sim, p, hv } = fixture(20, 3);
-    Object.assign(p, { x: sp.x, z: sp.z, y: world.heightAt(sp.x, sp.z), flash: false, crouch: true, noise: 0, sprint: false, moveSpeed: 0 });
-    const at = pointAtDistance(world.trail, world.trailCum, sp.a - 20); hv.place(at.x, at.z);
-    hv.startChase(p);
-    let lost = false;
-    for (let t = 0; t < 20 && !lost; t += 0.05) { sim.step(0.05); if (sim.drainEvents().some((e) => e.type === 'hv_lost' && e.pid === p.id)) lost = true; }
-    assert.ok(lost, `trail ${sp.a}: the trunk breaks line of sight and lets the player hide`);
-    assert.equal(p.health, MAXH, `trail ${sp.a}: hiding behind the trunk causes no damage`);
-  }
+  assert.equal(checked,5,'five real trees exercised');
 });

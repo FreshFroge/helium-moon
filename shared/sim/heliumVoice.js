@@ -51,6 +51,13 @@ export class HeliumVoiceAI {
   setState(s, info) {
     this.state = s; this.stateT = 0; this.path = null; this.goal = null; this.finalGoal = null;
     if (s !== 'chase') this.closeCommitted = false;
+    if (s === 'chase') {
+      this.huntStartedAt = this.sim.time;
+      this.huntHideUntil = this.sim.time + this.rng.range(...C.HUNT_HIDE_WINDOW);
+      this.huntEndsAt = this.huntHideUntil + this.rng.range(...C.HUNT_SEARCH_TIME);
+      this.huntPhase = 'stalk'; this.huntContactAt = -999; this.huntHeardAt = this.sim.time;
+      this.huntSearchGoal = null; this.stalkBackingOff = false;
+    } else this.huntPhase = null;
     if (info) Object.assign(this, info);
   }
 
@@ -211,6 +218,13 @@ export class HeliumVoiceAI {
     const step = Math.min(d, this.speed * dt);
     const nx = dx / d, nz = dz / d;
     const r = moveCharacter(this.world, this, nx * step, nz * step, 0.32, { nav: !this.freeLunge, slope: false, step: C.STEP_OVER });
+    // Stalking paths can detour toward the player. Never cut through their body en route
+    // to cover; when already close, only an outward step is allowed in the opening phase.
+    if (this.state === 'chase' && !this.grab && this.sim.playerList.some(p => {
+      if (!playerActive(p)) return false;
+      const was = this.dist(p), next = Math.hypot(p.x-r.x,p.z-r.z);
+      return next < (this.huntPhase === 'stalk' ? Math.min(8,was-.001) : .85);
+    })) { this.path = null; this.stop(dt); return false; }
     const minimum = this.openingDistance();
     if (minimum && this.sim.playerList.some(p => playerActive(p)
         && this.dist(p) >= minimum && Math.hypot(p.x-r.x,p.z-r.z) < minimum)) {
@@ -393,16 +407,10 @@ export class HeliumVoiceAI {
         && sim.time - this.attackT >= C.ATTACK_COOLDOWN
         && (dir.allowChase(tp) || close || this.dist(tp) < C.ATTACK_RANGE * 2)) this.startChase(tp);
 
-    // Hunts end only when the hunted player hides from him (HIDE_*; owner, Puppet rework):
-    // out of his sight, light off, still and quiet for HIDE_TIME s - he loses them and goes limp.
-    const lostBy = this.state === 'chase' && !this.grab && tp ? this.updateHide(dt, tp) : null;
-    if (lostBy) {
-      this.noteTactic(lostBy.id, 'hide');
-      sim.emit({ type: 'hv_lost', pid: lostBy.id, x: +this.x.toFixed(2), y: +this.y.toFixed(2), z: +this.z.toFixed(2) });
-      const grace = C.HIDE_GRACE[sim.playerList.filter(playerActive).length <= 1 ? 0 : 1];
-      lostBy.hideGraceUntil = sim.time + grace;
-      this.collapseFrom(lostBy);
-    } else if (watched && !['chase', 'retreat', 'collapse', 'lie'].includes(this.state)) {
+    // Concealment prevents discovery throughout the search. The timed hunt keeps going
+    // around the last evidence rather than collapsing six seconds into its opening.
+    if (this.state === 'chase' && !this.grab && tp) this.updateHide(dt, tp);
+    if (watched && !['chase', 'retreat', 'collapse', 'lie'].includes(this.state)) {
       // Watched outside a hunt: he is "worn". He freezes mid-pose and holds, head locked on
       // whoever is looking; after FREEZE s he backs away upright, facing them. Look away and
       // he moves (operated); a fresh look after FREEZE_RESET s starts a new freeze.
@@ -590,134 +598,70 @@ export class HeliumVoiceAI {
       }
       case 'reveal': this.updateReveal(dt); lookP = this.reveal && sim.players.get(this.reveal.pid); break;
       case 'chase': {
-        anim.run = 1;
-        if (!tp || !playerAlive(tp) || tp.state === 'downed') { if (this.grab) this.releaseGrab(tp, false); this.retreatFrom(tp || this, false); break; }
-        // the grab owns him until he lets go
+        lookP = null;
+        if (!tp || !playerActive(tp)) { this.finishHunt(tp, 'target'); break; }
+        // The entire encounter has one deadline. Neither noise, sight nor another request
+        // can keep resetting it. Cancel even a pending grab at the deadline.
+        if (sim.time >= this.huntEndsAt) { this.finishHunt(tp, 'timeout'); break; }
         if (this.grab) { this.updateGrab(dt, tp); lookP = tp; break; }
-        if ((this.hide?.t || 0) > 0) lookP = null; else this.lookAtPoint(tp.x, tp.y + 1.5, tp.z);   // hiding: he doesn't know where to look
-        const d = this.dist(tp);
-        const openingSearch = sim.time < (this.huntHideUntil ?? -1);
-        // The opening is a stalking window, not a disabled attack while he continues to run
-        // through the player.  He holds a concealed position 9–24 m away, giving the player
-        // a real chance to cut the lighter and settle into cover.
-        if (openingSearch) {
-          // The deliberate stalk is not a navigation failure; do not carry its distance
-          // changes into the post-window stuck-hunt fail-safe.
-          this.huntStall = null;
-          this.replanT = (this.replanT || 0) - dt;
-          // owner: far out, so the player can't easily tell where he is (HUNT_STALK_DIST), in cover,
-          // changing position only now and then
-          const [near, far] = C.HUNT_STALK_DIST, tooClose = d < near - 4;
-          if (!this.path || this.replanT <= 0 || (tooClose && !this.stalkBackingOff)) {
-            const spot = tooClose ? this.coverAway(tp, near, far) : this.observationSpot(tp, 'behind', near, far);
-            if (spot) this.planTo(spot[0], spot[1], 'cover');
-            else if (tooClose) this.path = null;
-            this.stalkBackingOff = tooClose;
-            this.replanT = tooClose ? 1.2 : this.rng.range(4, 7);
-          }
-          if (this.path) this.followPath(dt, tooClose ? C.STALK * 1.3 : C.STALK * 0.9);
-          else this.stop(dt);
-          anim.run = 0;
+        if (sim.time < this.huntHideUntil) {
+          this.updateHuntStalk(dt, tp);
           break;
         }
-        // Looking back at him (owner): each fresh look freezes him for a beat, then he comes on
-        // upright with dead arms. Unwatched he runs low, on all fours (operated).
-        const seenByTarget = this.observers.some((o) => o.p.id === tp.id);
-        const hiding = (this.hide?.t || 0) > 0;
+        if (this.huntPhase === 'stalk') {
+          this.huntPhase = 'search'; this.path = null; this.huntSearchGoal = null; this.replanT = 0;
+          sim.emit({ type: 'hv_hunt_phase', phase: 'search', pid: tp.id });
+        }
+        const concealed = this.dist(tp) > C.HIDE_MIN_DIST && this.hidden(tp);
+        const vis = concealed ? 0 : sightOf(this.world, this, EYE, this.lookYaw, tp, C);
+        if (vis > 0.02) {
+          this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
+          this.huntContactAt = sim.time; this.huntSearchGoal = null;
+        } else if (this.stimulus?.pid === tp.id && this.stimulus.t > (this.huntHeardAt ?? this.huntStartedAt)) {
+          // Hearing reveals an approximate source, never the player's current position.
+          this.huntHeardAt = this.stimulus.t;
+          this.lastSeenChase = { x: this.stimulus.x, z: this.stimulus.z, t: this.stimulus.t };
+          this.huntSearchGoal = null; this.replanT = 0;
+        }
+        const contact = !concealed && sim.time - (this.huntContactAt ?? -999) < C.HUNT_CONTACT_MEMORY;
+        if (!contact) {
+          this.updateHuntSearch(dt, tp);
+          break;
+        }
+        // Actual discovery leads to a rush. Once sight is broken, that rush only follows
+        // the remembered point briefly; it cannot chase a hidden player's live coordinates.
+        anim.run = 1;
+        if (vis > 0.02) { lookP = tp; this.lookAtPoint(tp.x, tp.y + eyeHeight(tp), tp.z); }
+        const d = this.dist(tp), seenByTarget = this.observers.some(o => o.p.id === tp.id);
         if (seenByTarget && !this.lbWatched && sim.time >= this.lbNext && d > C.LOOKBACK_MIN_DIST) {
-          this.lbUntil = sim.time + this.rng.range(C.LOOKBACK_FREEZE[0], C.LOOKBACK_FREEZE[1]);
+          this.lbUntil = sim.time + this.rng.range(...C.LOOKBACK_FREEZE);
           this.lbNext = this.lbUntil + C.LOOKBACK_GAP;
           sim.emit({ type: 'hv_freeze', pid: tp.id, x: +this.x.toFixed(2), z: +this.z.toFixed(2) });
         }
         this.lbWatched = seenByTarget;
         if (sim.time < this.lbUntil) { this.stop(dt); anim.run = 0; anim.still = 1; anim.frozen = 1; break; }
         if (!watched) anim.low = 1;
-        const vis = sightOf(this.world, this, EYE, this.lookYaw, tp, C);
-        // close by he senses you - unless you are hiding (dark, still, quiet, out of sight)
-        if (vis > 0.02 || d < 2.5 || (d < 12 && !((this.hide?.t || 0) > 0))) { this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time }; this.huntUnseenT = 0; }
-        else this.huntUnseenT = (this.huntUnseenT || 0) + dt;
-        // remember sprinters (once per hunt, after 2 s of sprinting away)
-        this.huntSprintT = tp.sprint ? (this.huntSprintT || 0) + dt : 0;
-        if (this.huntSprintT > 2 && !this.huntSprintNoted) { this.huntSprintNoted = true; this.noteTactic(tp.id, 'sprint'); }
-        // Cut-off: lost sight of them for RELOCATE_CUTOFF_UNSEEN s mid-hunt -> reappear ahead (once per hunt);
-        // learned sprinters get cut off sooner
-        const cutBase = this.counters(tp.id, 'sprint') ? C.LEARN_CUTOFF_UNSEEN : C.RELOCATE_CUTOFF_UNSEEN;
-        const cutAfter = cutBase * (this.huntCutMul || 1);
-        if (!this.huntRelocated && this.huntUnseenT >= cutAfter && d > 25 && this.tryRelocate(tp, 'cutoff')) {
-          if (cutBase < C.RELOCATE_CUTOFF_UNSEEN) this.usedCounter(tp.id, 'sprint');
-          this.huntRelocated = true; this.huntUnseenT = 0; this.huntStall = null; this.replanT = 0;
-          this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
-        }
-        // hearing keeps the chase going when sight is lost (sprinting is loud)
-        if (this.stimulus && this.stimulus.pid === tp.id && sim.time - this.stimulus.t < 0.2) this.lastSeenChase = { x: this.stimulus.x, z: this.stimulus.z, t: sim.time - 0.5 };
-        let ls = this.lastSeenChase || { x: tp.x, z: tp.z, t: sim.time };
-        // reached the last known point with nothing new: guess along their last heading
-        if (Math.hypot(ls.x - this.x, ls.z - this.z) < 2.5 && tp.moveDir && !ls.extrap) {
-          ls = this.lastSeenChase = { x: ls.x + tp.moveDir[0] * 10, z: ls.z + tp.moveDir[1] * 10, t: ls.t, extrap: true };
-          this.path = null;
-        }
-        // they are hiding: he searches round where he last had them, upright, listening
-        const searching = hiding && sim.time - ls.t > 1.2;
-        if (searching && Math.hypot(ls.x - this.x, ls.z - this.z) < 2 && sim.time >= (this.huntSearchAt || 0)) {
-          const a = this.rng.range(0, Math.PI * 2), r = this.rng.range(2, 7);
-          const sx = ls.x + Math.sin(a) * r, sz = ls.z + Math.cos(a) * r;
-          if (this.world.navWalkable(sx, sz) && this.outsideSpawn(sx, sz)) { ls = this.lastSeenChase = { x: sx, z: sz, t: ls.t, extrap: true }; this.path = null; this.replanT = 0; }
-          this.huntSearchAt = sim.time + this.rng.range(1.8, 3.2);
-        }
-        if (searching) { anim.run = 0; anim.low = 0; this.lookYaw += Math.sin(sim.time * 1.3) * dt * 2.4; this.huntStall = null; }   // searching is not being stuck
         this.replanT -= dt;
-        if (this.replanT <= 0) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = d < 15 ? 0.3 : 0.7; }
-        if (sim.time >= (this.huntPaceAt || 0)) {
+        const ls = this.lastSeenChase;
+        if (!this.path || this.replanT <= 0) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = d < 15 ? .3 : .7; }
+        // A visible final lunge uses physical collision around the coarse nav-grid cells.
+        if (vis > .02 && d < C.HUNT_LUNGE_DIST
+            && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + eyeHeight(tp), tp.z, { brushK: 0 }) > .5) {
+          this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1; this.freeLunge = true;
+        }
+        if (sim.time >= this.huntPaceAt) {
           this.huntPace = this.rng.range(...C.HUNT_PACE);
           this.huntPaceAt = sim.time + this.rng.range(...C.HUNT_PACE_INTERVAL);
         }
-        const burst = openingSearch ? C.STALK : (d < 12 ? C.BURST : C.CHASE);
-        if (d < 7 && this.world._straightWalkable([this.x, this.z], [tp.x, tp.z])) {
-          // close enough to lunge straight at them
-          this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1;
-        } else if (d < C.HUNT_LUNGE_DIST && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.5) {
-          // Final lunge with real collision instead of the 2 m nav grid: a big trunk blocks
-          // its whole grid cell, so a player pressed against the bark used to be unreachable
-          // (he stopped 2.3-3.6 m away). He still can't pass through the trunk itself, and
-          // spawn/deep-water limits still apply.
-          this.path = [[this.x, this.z], [tp.x, tp.z]]; this.pathI = 1; this.freeLunge = true;
-        }
-        // Variable approach cadence prevents a flat, learnable chase speed.
-        // Inside seven metres he never draws the final strike out with a slow beat.
         const tempo = d < 7 ? Math.max(1, this.huntPace || 1) : (this.huntPace || 1);
-        this.followPath(dt, searching ? C.WALK * 1.5 : burst * tempo * dir.chaseSpeedMul() * (1 + .12 * escalation));
+        this.followPath(dt, (d < 12 ? C.BURST : C.CHASE) * tempo * dir.chaseSpeedMul() * (1 + .12 * escalation));
         this.freeLunge = false;
         if (d < 4 && watched) anim.reach = 1;
         if (sim.time < (this.missPauseUntil ?? -1)) { this.stop(dt); anim.still = 1; break; }
-        // Pinned behind a trunk next to them and nobody is looking: he is simply on their side
-        // of it the next moment (the Puppet moves when unwatched)
-        if (!watched && d < 5 && this.huntStall && sim.time - this.huntStall.t > 1.5 && sim.time - (this.slipT ?? -9) > 3) this.slipAround(tp);
-        // still pinned: his arms reach round it (GRAB_AROUND)
-        const around = d < C.GRAB_AROUND && this.huntStall && sim.time - this.huntStall.t > 1.5;
-        if (!openingSearch && (d < C.GRAB_REACH || around) && Math.abs(this.y - tp.y) < 1.8 && sim.time - this.attackT > C.ATTACK_COOLDOWN
-            && (around || this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + 1, tp.z, { brushK: 0 }) > 0.2)) {
-          this.startGrab(tp, around);
-          lookP = tp;
-          break;
-        }
-        // Fail-safe, not counterplay: if he is physically stuck (target somewhere he
-        // can't path to, e.g. wading in the river) and has barely moved for
-        // HUNT_STALL_TIME s outside attack range, end the hunt instead of
-        // standing there forever with the hunt hum on.
-        // "Stuck" = not 0.5 m closer for HUNT_STALL_TIME while barely moving (jittering at an
-        // edge), or not closer at all for 3x that. A sprinting player's 9 s of stamina can't
-        // hold him off that long, so running never ends a hunt.
-        const st = this.huntStall || (this.huntStall = { x: this.x, z: this.z, d, t: sim.time });
-        if (d < st.d - 0.5) { st.x = this.x; st.z = this.z; st.d = d; st.t = sim.time; }
-        else if (d > C.GRAB_REACH && ((sim.time - st.t > C.HUNT_STALL_TIME && Math.hypot(this.x - st.x, this.z - st.z) < 4) || sim.time - st.t > 3 * C.HUNT_STALL_TIME)) {
-          dir.onChaseEnd(false); this.retreatFrom(tp, false); break;
-        }
-        // A hunt no longer ends by losing sight or by time (owner, Oct 25): with no fresh
-        // sight or sound for LOSE_TIME, he re-acquires where the player really is every
-        // HUNT_TRACK_EVERY s (tracking them by scent/sound) and keeps coming.
-        // ...unless they are hiding from him: then he has to find them (see updateHide)
-        if (!hiding && sim.time - ls.t > C.LOSE_TIME && sim.time - (this.trackT || 0) >= C.HUNT_TRACK_EVERY) {
-          this.trackT = sim.time; this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time - C.LOSE_TIME * 0.5 }; this.replanT = 0;
+        if (vis > .02 && d < C.GRAB_REACH && Math.abs(this.y - tp.y) < 1.8
+            && sim.time - this.attackT > C.ATTACK_COOLDOWN
+            && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + eyeHeight(tp), tp.z, { brushK: 0 }) > .2) {
+          this.startGrab(tp); lookP = tp;
         }
         break;
       }
@@ -817,6 +761,7 @@ export class HeliumVoiceAI {
     if (!p || !playerActive(p) || p.state !== 'alive') return false;          // never on a downed/dead player (PLAYTESTS_50 P0)
     if (!this.outsideSpawn(p.x,p.z) || this.sim.director.inDread?.()) return false;
     if (this.sim.time < (p.hideGraceUntil ?? -1) && !this.sim.dev) return false;  // just hid from him: a breather
+    if (this.state === 'chase') return this.target === p.id; // never reset an active encounter
     // Hunts start close (owner, Oct 25): farther out, mark the player and close in
     // unseen first (stalk handles the approach and commits inside the range).
     if (this.dist(p) > C.HUNT_START_RANGE) {
@@ -833,7 +778,6 @@ export class HeliumVoiceAI {
     this.huntPace = this.rng.range(...C.HUNT_PACE);
     this.huntPaceAt = this.sim.time + this.rng.range(...C.HUNT_PACE_INTERVAL);
     this.huntCutMul = this.rng.range(...C.HUNT_CUTOFF_JITTER);
-    this.huntHideUntil = this.sim.time + this.rng.range(...C.HUNT_HIDE_WINDOW);
     this.hide = { t: 0 };
     this.target = p.id; this.lastSeenChase = { x: p.x, z: p.z, t: this.sim.time }; this.windup = null; this.lingerUntil = null; this.grab = null; this.lbWatched = false; this.lbNext = this.sim.time + 0.4;
     this.setState('chase'); this.replanT = 0;
@@ -841,9 +785,78 @@ export class HeliumVoiceAI {
     this.sim.director.onChaseStart(p);
   }
 
+  // A distant opening stalk gives players time to choose a hiding place. Replan on a
+  // cadence, including when no cover is available, so failed searches cannot run every tick.
+  updateHuntStalk(dt, tp) {
+    this.anim.run = 0; this.huntStall = null;
+    this.replanT -= dt;
+    const tooClose = this.dist(tp) < C.HUNT_STALK_DIST[0] - 4;
+    if (this.replanT <= 0 || (tooClose && !this.stalkBackingOff)) {
+      const spot = this.observationSpot(tp, 'behind', ...C.HUNT_STALK_DIST)
+        || (tooClose ? this.coverAway(tp, ...C.HUNT_STALK_DIST) : null);
+      if (spot) this.planTo(...spot, 'cover'); else this.path = null;
+      this.stalkBackingOff = tooClose;
+      this.replanT = tooClose ? 1.2 : this.rng.range(4, 7);
+    }
+    if (this.path) { if (this.followPath(dt, tooClose ? C.STALK * 1.3 : C.STALK * .9)) this.path = null; }
+    else this.stop(dt);
+    // Remember sightings/sounds acquired during stalking, not an invisible live target.
+    const seen = this.lastSeen.get(tp.id);
+    if (seen?.t === this.sim.time) this.lastSeenChase = { ...seen };
+    else if (this.stimulus?.pid === tp.id && this.stimulus.t > this.huntHeardAt) {
+      this.huntHeardAt = this.stimulus.t;
+      this.lastSeenChase = { x: this.stimulus.x, z: this.stimulus.z, t: this.stimulus.t };
+    }
+  }
+
+  updateHuntSearch(dt, tp) {
+    this.anim.run = 0; this.anim.low = 0; this.huntStall = null;
+    this.lbWatched = false;
+    const known = this.lastSeenChase;
+    if (!known) { this.stop(dt); return; }
+    this.replanT -= dt;
+    // First examine the last sight/sound. Then check separate points around it, stop
+    // briefly and listen. Search points never overwrite the last real evidence.
+    if (!this.huntSearchGoal && this.replanT <= 0) {
+      if (this.huntSearchedAt !== known.t) {
+        this.huntSearchedAt = known.t; this.huntSearchGoal = [known.x, known.z];
+      } else for (let i = 0; i < 8; i++) {
+        const a = this.rng.range(0,Math.PI*2), r = this.rng.range(...C.HUNT_SEARCH_RADIUS);
+        const x = known.x+Math.sin(a)*r, z=known.z+Math.cos(a)*r;
+        if (this.world.navWalkable(x,z) && this.openingClear(x,z)) { this.huntSearchGoal=[x,z]; break; }
+      }
+      if (this.huntSearchGoal && !this.planTo(...this.huntSearchGoal,'quiet')) this.huntSearchGoal=null;
+      this.replanT = 1.5;
+    }
+    if (this.path && this.followPath(dt, C.WALK * 1.35)) {
+      this.path = null; this.huntSearchGoal = null; this.replanT = this.rng.range(.7,1.6);
+    } else if (!this.path && this.huntSearchGoal) this.huntSearchGoal = null;
+    if (!this.path) { this.stop(dt); this.anim.still = .5; }
+    this.lookYaw = this.yaw + Math.sin(this.sim.time * .85) * .8;
+  }
+
+  finishHunt(tp, reason = 'timeout') {
+    if (this.grab) {
+      const kind = this.grab.kind;
+      this.releaseGrab(tp, false);
+      this.sim.emit({ type: 'hv_attack', phase: 'release', kind, pid: tp?.id, x: this.x, z: this.z });
+    }
+    const hidden = tp && this.hidden(tp);
+    if (tp && playerActive(tp)) {
+      tp.hideGraceUntil = this.sim.time + C.HIDE_GRACE[this.sim.playerList.filter(playerActive).length <= 1 ? 0 : 1];
+      if (hidden) {
+        this.noteTactic(tp.id,'hide');
+        this.sim.emit({ type:'hv_lost', pid:tp.id, x:this.x, y:this.y, z:this.z });
+      }
+    }
+    this.sim.emit({ type:'hv_hunt_phase', phase:'end', reason, pid:tp?.id });
+    if (hidden) this.collapseFrom(tp); else this.retreatFrom(tp,false,true);
+  }
+
   // ---- the grab (owner, Puppet rework): replaces the swing. Survive two; the third kills.
   startGrab(tp, around = false) {
     const sim = this.sim;
+    if (this.huntPhase === 'stalk' || sim.time >= this.huntEndsAt || !playerActive(tp)) return false;
     const [fx, fz] = playerFwd(tp);
     const ex = this.x - tp.x, ez = this.z - tp.z, el = Math.hypot(ex, ez) || 1;
     const facing = (fx * ex + fz * ez) / el;            // > 0: they are facing him
@@ -953,8 +966,8 @@ export class HeliumVoiceAI {
   updateHide(dt, tp) {
     const h = this.hide ||= { t: 0 };
     const need = C.HIDE_TIME * (this.counters(tp.id, 'hide') ? C.HIDE_LEARNED : 1);
-    if (this.dist(tp) > C.HIDE_MIN_DIST && this.hidden(tp)) h.t += dt; else h.t = Math.max(0, h.t - dt * 2);
-    if (h.t >= need) { h.t = 0; return tp; }
+    if (this.dist(tp) > C.HIDE_MIN_DIST && this.hidden(tp)) h.t = Math.min(need,h.t + dt); else h.t = Math.max(0, h.t - dt * 2);
+    if (h.t >= need) return tp;
     return null;
   }
 
