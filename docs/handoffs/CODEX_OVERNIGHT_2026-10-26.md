@@ -72,3 +72,9 @@ bug in the browser, now fixed. Three final browser runs and a two-client network
 repair run pass; rendering workload stays inside the existing budget on every
 preset/view. Final `npm test` passes. Detailed observations, commands, limitations
 and 24 full-simulation session results: `docs/PLAYTEST_2026-10-26.md`.
+
+Follow-up claimed by Codex: cover-safe leaning. `client/game/player.js`,
+`shared/physics.js`, `shared/sim/perception.js`, player lean input in
+`shared/sim/sim.js` / `client/game/game.js`, relevant camera/perception tests.
+Current Q/R camera offset is unswept and absent from server perception; fix
+both together, preserving all behavior when lean is zero.
