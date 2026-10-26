@@ -31,6 +31,7 @@ import { CONFIG } from '../shared/config.js';
 import { pointAtDistance, makeRng } from '../shared/math.js';
 import { onScreen } from '../shared/sim/perception.js';
 import { inSpawnZone } from '../shared/sim/zones.js';
+import { groundAt } from '../shared/physics.js';
 
 const DT = 0.05;
 const MINUTES = +(process.env.HUNT_MINUTES || 30);
@@ -103,8 +104,8 @@ class Bot {
     const memo = item('note_memo');
     if (this.role === 'gen' && !memo.holder) return { key: 'memo', x: memo.x, z: memo.z, act: 'pickup', id: 'note_memo', label: 'reading the kiosk memo', travel: 'walking to the kiosk' };
     const chains = {
-      gen: [['fuel', 'item'], ['gen', 'st'], ['fuse', 'item'], ['relay', 'st']],
-      relay: [['fuse', 'item'], ['relay', 'st'], ['fuel', 'item'], ['gen', 'st']],
+      gen: [['fuel', 'item'], ['gen', 'st'], ['fuse', 'item'], ['relay', 'st'],['crank','item'],['uplink','st']],
+      relay: [['fuse', 'item'], ['relay', 'st'], ['crank','item'],['uplink','st'],['fuel', 'item'], ['gen', 'st']],
     };
     const claimedByOther = (k) => sim._bots.some((b) => b !== this && b.claim === k && b.p?.state === 'alive');
     // grab anything useful lying within 15 m (players pick things up as they pass)
@@ -117,7 +118,7 @@ class Bot {
       chains[this.role].forEach(([k, kind], order) => {
         if (claimedByOther(k)) return;
         if (kind === 'item') { const it = item(k); if (!it.holder && !O.team[k]) cand.push({ order: order < 2 ? 0 : 1, k, x: it.x, z: it.z, act: 'pickup', id: k, label: `picking up the ${it.name.toLowerCase()}`, travel: `heading for the ${it.name.toLowerCase()}` }); return; }
-        const s = st(k); if (!s.done && O.canUse(s)) cand.push({ order: order < 2 ? 0 : 1, k, x: s.x, z: s.z, act: 'use', id: k, label: `repairing: ${s.name.toLowerCase()}`, travel: `heading to ${s.where} (${k})` });
+        const s = st(k); if (!s.done && O.canUse(s)) cand.push({ order: order < 2 ? 0 : 1, k, x: s.x, z: s.z, act: s.action==='dial'?'dial':'use', id: k, label: `working: ${s.name.toLowerCase()}`, travel: `heading to ${s.where} (${k})` });
       });
       cand.sort((a, b) => a.order - b.order || Math.abs(world.trailInfo(a.x, a.z).along - here) - Math.abs(world.trailInfo(b.x, b.z).along - here));
       if (cand.length) { const c = cand[0]; this.claim = c.k; return { key: c.k, ...c }; }
@@ -228,6 +229,7 @@ class Bot {
     if (atGoal && g) {
       if (g.act === 'use') { use = g.id; yaw = faceYaw(p.x, p.z, g.x, g.z); }
       if (g.act === 'pickup') sim.action(this.id, { a: 'pickup', id: g.id });
+      if (g.act === 'dial') {sim.action(this.id,{a:'dial',id:g.id});yaw=faceYaw(p.x,p.z,g.x,g.z);}
       if (g.act === 'revive') { revive = g.target; yaw = faceYaw(p.x, p.z, g.x, g.z); }
       if (g.act === 'watch' || g.act === 'stand') { this.lookT -= DT; if (this.lookT <= 0) { this.watchYaw = rng.range(-Math.PI, Math.PI); this.lookT = rng.range(2, 4); } yaw = this.watchYaw ?? yaw; }
       if (g.act === 'use' && this.P.workLook) {   // nervously look up from the repair
@@ -252,7 +254,7 @@ class Bot {
       if (this.glancing > 0) { this.glancing -= DT; yaw += this.glanceYaw; }
     }
     const noise = sprint ? 1 : Math.hypot(mvx, mvz) > 1e-4 ? 0.45 : 0.12;
-    sim.input(this.id, { x: nx, y: world.heightAt(nx, nz), z: nz, yaw, pitch, crouch: false, sprint, flash: true, noise, voice: 0, hidden: false, use, revive, viewFov: 75, viewAspect: 16 / 9 });
+    sim.input(this.id, { x: nx, y: groundAt(world,nx,nz), z: nz, yaw, pitch, crouch: false, sprint, flash: true, noise, voice: 0, hidden: false, use, revive, viewFov: 75, viewAspect: 16 / 9 });
   }
 }
 
@@ -369,7 +371,7 @@ function playtest(n, { team, seed }) {
   if (open) { open.end = +sim.time.toFixed(1); open.endReason = 'session ended mid-hunt'; open.minDist = +open.minDist.toFixed(1); open.seenSec = +open.seenSec.toFixed(1); hunts.push(open); }
   return {
     n, team, seed, personas: bots.map((b) => `${b.id} ${b.role} ${b.persona}`), outcome: sim.state === 'won' ? 'escaped' : sim.state === 'lost' ? 'all dead' : 'time up',
-    minutes: +(sim.time / 60).toFixed(1), objectives: sim.obj.doneCount(), hunts, timeline: timeline.sort((a, b) => a.t - b.t),
+    minutes: +(sim.time / 60).toFixed(1), objectives: sim.obj.doneCount(),totalObjectives:sim.obj.stations.length, hunts, timeline: timeline.sort((a, b) => a.t - b.t),
     players: bots.map((b) => ({ id: b.id, state: b.p?.state })), ...ctx,
   };
 }
@@ -378,7 +380,7 @@ function playtest(n, { team, seed }) {
 const t0 = Date.now();
 const results = PLAN.map((cfg) => {
   const r = playtest(cfg.n, cfg);
-  console.log(`\n### Playtest ${r.n}: ${r.team === 1 ? 'solo' : r.team + ' players'} (seed ${r.seed}): ${r.outcome} at ${mmss(r.minutes * 60)}, ${r.objectives}/3 objectives, ${r.hunts.length} hunts`);
+  console.log(`\n### Playtest ${r.n}: ${r.team === 1 ? 'solo' : r.team + ' players'} (seed ${r.seed}): ${r.outcome} at ${mmss(r.minutes * 60)}, ${r.objectives}/${r.totalObjectives} objectives, ${r.hunts.length} hunts`);
   console.log(`players: ${r.personas.join('; ')}`);
   console.log('# | start | end | length | target | he was | start dist | target doing | where | player reacted | ended | closest | on target screen');
   for (const h of r.hunts) console.log([h.n, mmss(h.start), mmss(h.end), `${(h.end - h.start).toFixed(0)} s`, h.pid, h.before, `${h.startDist} m`, h.activity, h.where, h.noticed == null ? 'never noticed' : `${h.noticeHow} +${h.noticed} s`, h.endReason, `${h.minDist} m`, `${h.seenSec} s`].join(' | '));

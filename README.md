@@ -1,6 +1,6 @@
 # HELIUM MOON
 
-Co-op survival horror on the East Trail of Stinchcomb Wildlife Refuge, Oklahoma City, 10:00 PM under a waxing-gibbous "Helium Moon". Restore emergency comms (generator → trail relay → repeater mast), then reach the county cruiser at the highway bridge, while Helium Voice stalks you through the trees and Sulfur Hexafluoride waits in the brush.
+Co-op survival horror on the East Trail of Stinchcomb Wildlife Refuge, Oklahoma City, 10:00 PM under a waxing-gibbous "Helium Moon". Restore emergency comms (generator, trail relay, far-bank aerial, then the repeater mast), then reach the county cruiser at the highway bridge, while Helium Voice stalks you through the trees and Sulfur Hexafluoride waits in the brush.
 
 This is a **work-in-progress build**: the full game loop is playable in single player and co-op; see "Status" below for what is tested and what is not.
 
@@ -101,9 +101,18 @@ WASD move · Shift sprint · C / Ctrl crouch · Space jump · E interact (hold t
 Read the kiosk memo for this session's gas-can and fuse-kit locations. The field
 map marks the trail, landmarks and your position. Repairs have three steps;
 completed steps stay saved if you leave to hide, and nearby teammates can help.
+Take the marked river service path near Fishing Bank to cross the main river.
+Recover the handwheel at the far-bank landing and press E to turn the aerial
+clockwise toward the mast bearing printed in the memo and on the controls.
+Its green light confirms alignment; it stays locked when you leave. The mast
+call requires the generator, relay and aerial. The river maintenance crossing
+is a fictional gameplay addition to the traced map.
 Hunts begin with 15–20 seconds of concealed stalking, followed by a 30–40 second
 search. He can rush you if he actually finds you; surviving that search ends the
 hunt. Crouch in cover, switch off the lighter and stay quiet to avoid discovery.
+
+Local unattended playtest scheduling and its cloud-session limitations are
+documented in [docs/UNATTENDED_CHECKS.md](docs/UNATTENDED_CHECKS.md).
 
 ## Microphone, voice chat and mimicry (privacy)
 

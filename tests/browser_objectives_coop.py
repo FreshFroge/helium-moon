@@ -141,6 +141,24 @@ async def play(port):
             await a.evaluate('game.advance(1,1/30,true)')
             await a.screenshot(path=str(output/'river-crossing.png'),timeout=60000)
             print('  ok  both real clients walk across the main river and back; authoritative positions agree',flush=True)
+            assert await a.evaluate("coopApproach('crank')")
+            await pump(.4);await a.keyboard.press('e');await pump(.4)
+            for page in pages:assert await page.evaluate('game.team.crank'),'one player recovers the shared handwheel'
+            for page in pages:assert await page.evaluate("coopApproach('uplink',true)")
+            await pump(.5)
+            before=await a.evaluate("game.objViews.stations.get('uplink').dial")
+            await a.keyboard.down('e');await pump(2);await a.keyboard.up('e');await pump(.4)
+            settings=[await p.evaluate("game.objViews.stations.get('uplink').dial")for p in pages]
+            assert settings==[(before+1)%8]*2,settings
+            await pump(1)
+            assert await a.evaluate("game.objViews.stations.get('uplink').dial")==settings[0]
+            for _ in range(8):
+                if await a.evaluate("game.objViews.stations.get('uplink').done"):break
+                await b.keyboard.press('e');await pump(.5)
+            for page in pages:
+                assert await page.evaluate("game.objViews.stations.get('uplink').done")
+                assert await page.evaluate("game.objViews.stations.get('uplink').handwheel.visible")
+            print('  ok  handwheel, single-click compass turns and locked aerial replicate between real clients',flush=True)
             assert not errors,errors
             print('  ok  cooperative work completes on the authoritative server and both clients; no page errors',flush=True)
         finally:

@@ -105,6 +105,7 @@ export class GameSim {
     const p = this.players.get(id);
     if (!p) return;
     if (a.a === 'pickup' && p.state === 'alive') this.obj.pickup(p, a.id);
+    else if (a.a === 'dial') this.obj.turn(p,a.id);
     else if (a.a === 'phrase') this.mimic.addPhrase(id, a.id, +a.dur);
     else if (a.a === 'phrase_drop') this.mimic.dropPhrase(id, a.id);
     else if (a.a === 'mimic_off') this.mimic.clear(id);

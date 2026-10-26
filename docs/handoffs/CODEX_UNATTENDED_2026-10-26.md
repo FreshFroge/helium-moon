@@ -76,7 +76,8 @@ and agree with server positions. First broad run exposed an RNG perturbation:
 clearing new structures during vegetation generation reshuffled other trees and
 failed the integrated hush check. Clearing is now a final local filter instead;
 46,194 retained tree records compare exactly with the prior world, only 23
-trees removed for access; hush and bridge checks pass. Broad recheck is running.
+trees removed for access; hush and bridge checks pass. Broad recheck passes.
+Crossing source published at `548c2a0`.
 
 Next #33 increment: a recoverable handwheel at the far-bank service landing and
 a manually aligned rescue antenna, required before the existing mast call. This
@@ -84,3 +85,49 @@ adds an exploration goal and a compass/dial interaction rather than another
 hold-E repair. Codex reserves `client/entities/views.js` and `shared/sim/sim.js`
 again for its interaction/replication and antenna animation, alongside the
 existing objective/UI reservations. Preserve the completed player/enemy poses.
+
+## River objective expansion complete
+
+The far-bank landing now contains an orange antenna handwheel and a directional
+rescue aerial. The handwheel is a shared pickup. With it recovered, each press
+of E turns the aerial clockwise one compass point; holding E does not repeat.
+The mast bearing appears in the memo and the controls. Alignment locks and
+lights green. Incorrect settings persist through hiding, and any teammate can
+take over. The existing mast call requires generator, relay and aligned aerial.
+Four station objectives now exist, plus the explicit handwheel recovery goal.
+
+Both server and client reject blocked/held/covered/remote actions. A shared
+350 ms turn interval prevents simultaneous teammates from skipping settings.
+Snapshots carry the authoritative compass setting; the rendered dish and fitted
+handwheel turn smoothly. The initial compass position varies by seed without
+consuming the AI RNG stream. The world, hunt timers and quiet mix are preserved.
+
+Validation on final production source:
+
+- `npm test`: passes (`/tmp/helium-overnight/river-final-node.log`).
+- `node tests/bridge.test.mjs`: eight pass, including both actual creature route
+  followers crossing both directions with grounded movement and no relocation.
+- `tests/browser_overnight.py`: seeds 211–213 all complete pickup/dial/repair/
+  extraction with actual keyboard input; threats disabled and approaches staged.
+  Saved repair step, accurate memo/register, map and scrolling also pass.
+- `HM_TEST=1 tests/browser_objectives_coop.py`: two real clients pass Q/R/crouch,
+  shared fuel and durable coop repair, W traversal across/return over the main
+  river, shared handwheel and discrete/persistent/locked aerial state; no page
+  errors. Staged approach fixtures are explicit, not unassisted survival play.
+- `HUNT_SESSIONS=12 HUNT_MINUTES=25 ... tests/hunt_playtests.mjs`: 63 hunts,
+  maximum 57.4 seconds; 3 escapes / 6 all-dead / 3 timeouts. Seven sessions align
+  the aerial; completed station mean 2.58 of four. Scripted agents, not humans.
+- `tests/browser_perf_budget.py`: all 16 preset/view counts remain within the
+  existing +25% budget. Software Chromium counts do not establish GPU FPS.
+
+Logs/screenshots and session JSON are under `/tmp/helium-overnight/`; they are
+not committed. The local scheduled checker remains active every 30 minutes
+through 13:00 UTC while the environment stays alive; its next batches exercise
+the updated objective-aware bots and expanded two-client crossing/antenna suite.
+It does not edit code or start AI sessions.
+
+All file reservations in this handoff are released after this increment is
+published. #32 still needs broader attack/transition/first-person/environmental
+animation review, and #33 can grow beyond this first objective expansion. Human
+playtesting should assess the far-bank trip, compass clue clarity, hunt pressure
+and visual quality before treating these areas as finished.

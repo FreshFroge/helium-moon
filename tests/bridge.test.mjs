@@ -6,6 +6,7 @@ import { World } from '../shared/world.js';
 import { CONFIG } from '../shared/config.js';
 import { groundAt, moveCharacter, supportHeight } from '../shared/physics.js';
 import { cumulativeLengths, nearestOnPolyline } from '../shared/math.js';
+import { GameSim } from '../shared/sim/sim.js';
 
 const world = new World();
 const bridge = world.structures.find((o) => o.type === 'footbridge');
@@ -135,5 +136,23 @@ test('creature paths cross the main river without treating it as a safe island',
       }
     }
     assert.ok(Math.hypot(to[0]-p.x,to[1]-p.z)<.2,'the creature reaches the other bank');
+  }
+});
+
+test('both real creature route followers cross the main-river bridge without stalls or relocations',()=>{
+  for(const [key,method] of [['hv','followPath'],['sf','follow']])for(const direction of [-1,1]){
+    const sim=new GameSim(world,{seed:211});sim.time=400;sim.state='play';
+    const actor=sim[key],from=acrossRiver(-direction*25),to=acrossRiver(direction*25);
+    actor.setState(key==='hv'?'roam':'prowl');actor.target=null;
+    Object.assign(actor,from,{y:groundAt(world,from.x,from.z)});
+    assert.ok(actor.planTo(to.x,to.z),`${key} plans to the opposite bank`);
+    let arrived=false;
+    for(let i=0;i<1200&&!arrived;i++){
+      const before={x:actor.x,z:actor.z};sim.time+=.05;
+      arrived=actor[method](.05,2);
+      assert.ok(Math.hypot(actor.x-before.x,actor.z-before.z)<.11,'movement follows footsteps rather than teleporting');
+      assert.ok(Math.abs(actor.y-groundAt(world,actor.x,actor.z))<.02,'the creature remains on the visible deck');
+    }
+    assert.ok(arrived && Math.hypot(actor.x-to.x,actor.z-to.z)<.9,`${key} crosses in direction ${direction}`);
   }
 });

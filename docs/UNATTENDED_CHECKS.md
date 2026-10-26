@@ -4,7 +4,8 @@
 
 1. `npm test` — gameplay, AI, animation, startup and network regressions.
 2. Twelve scripted hunt sessions, each with a 25-minute simulated limit.
-3. Two actual browser clients — leaning, briefing, shared supplies and repairs.
+3. Two actual browser clients — leaning, briefing, shared supplies and repairs,
+   main-river crossing/return and shared handwheel/compass-aerial operation.
 
 This is scheduled testing. It does not start an AI, edit code, consume AI API
 messages, or activate Claude/Kimi. The computer/cloud environment must remain

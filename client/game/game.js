@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../../shared/config.js';
 import { World, SURFACE } from '../../shared/world.js';
 import { GameSim } from '../../shared/sim/sim.js';
-import { NOTES } from '../../shared/sim/objectives.js';
+import { NOTES, ANTENNA_BEARINGS } from '../../shared/sim/objectives.js';
 import { HV_STATES } from '../../shared/sim/heliumVoice.js';
 import { SF_STATES } from '../../shared/sim/skunk.js';
 import { clamp, lerp, smoothstep, pointAtDistance } from '../../shared/math.js';
@@ -358,7 +358,7 @@ export class Game {
       const wasTeam = { ...this.team };
       this.obj = s.obj; this.team = s.obj.team; this.extractOpen = s.obj.ex;
       this.objViews.apply(s.obj);
-      if (wasTeam.fuel !== this.team.fuel || wasTeam.fuse !== this.team.fuse) this._objectivesDirty = true;
+      if (wasTeam.fuel !== this.team.fuel || wasTeam.fuse !== this.team.fuse || wasTeam.crank !== this.team.crank) this._objectivesDirty = true;
     }
     this.gas = s.gas || [];
     if (this.me) {
@@ -444,7 +444,7 @@ export class Game {
       case 'gas': A.sfVocal('gas', e.seq || 1, pos); break;
       case 'objective': {
         const s = this.objViews.stations.get(e.id);
-        this.ui.toast({ gen: 'The generator coughs and catches.', relay: 'The relay box hums back to life.', mast: 'Distress call sent. A county unit is responding to the highway bridge.' }[e.id] || 'Objective complete.', 5000);
+        this.ui.toast({ gen: 'The generator coughs and catches.', relay: 'The relay box hums back to life.', uplink:'The aerial locks toward the mast. The rescue link is aligned.', mast: 'Distress call sent. A county unit is responding to the highway bridge.' }[e.id] || 'Objective complete.', 5000);
         if (s) {
           const sp = { x: s.def.x, y: s.def.y + 0.6, z: s.def.z };
           if (e.id === 'gen') A.loopAt('gen', 'genLoop', sp, { gain: 1.1, ref: 5, reverb: 0.3 });
@@ -467,7 +467,7 @@ export class Game {
           if (e.kind === 'battery') { this.flashlight.addBattery(CONFIG.FLASHLIGHT.BATTERY_PICKUP); A.ui('clink', 0.6); this.ui.toast('A spare lighter. More fuel.', 2000); }
           else if (e.kind === 'blanket') { this.player.hasCamoBlanket = true; A.ui('paper', 0.55); this.ui.toast('Camouflage blanket: crouch, light off, hold X while still to hide.', 4500); }
           else if (e.kind === 'note') { A.ui('paper', 0.8); const n = this._sessionNote(e.note); if (n) { this.notesRead.push(n.id); this.reading = n; this.ui.showNote(n); } }
-          else { A.ui('clink', 0.7); this.ui.toast(e.kind === 'fuel' ? 'Picked up the gas can.' : 'Picked up the fuse kit.', 3000); }
+          else { A.ui('clink', 0.7); this.ui.toast(e.kind === 'fuel' ? 'Picked up the gas can.' : e.kind==='crank'?'Handwheel recovered. Fit it to the far-bank aerial and turn toward the mast.':'Picked up the fuse kit.', 3000); }
         } else if (it && e.kind !== 'battery') this.ui.toast(`${this._name(e.pid)} found ${e.kind === 'note' ? 'a note' : it.name.toLowerCase()}.`, 3000);
         if (e.kind === 'note' && e.pid !== this.myId) { const n = NOTES.find((q) => q.id === e.note); if (n && !this.notesRead.includes(n.id)) this.notesRead.push(n.id); }
         this._objectivesDirty = true;
@@ -475,6 +475,7 @@ export class Game {
       }
       case 'mimic': this.voice.onMimicEvent(e); break;
       case 'objective_step': this._objectivesDirty = true; break;
+      case 'objective_dial': this._objectivesDirty = true; break;
       case 'end': this._end(e); break;
       default: break;
     }
@@ -939,7 +940,10 @@ export class Game {
         const s = best.s.def;
         const missing = this._missing(s);
         if (missing.length) prompt = `<span class="dim">${s.name} — ${missing.join(', ')}</span>`;
-        else {
+        else if(s.action==='dial'){
+          prompt=`<b>${key}</b> ${s.name}<br><span class="dim">Turn clockwise · now: ${ANTENNA_BEARINGS[best.s.dial]} · mast bearing: ${s.targetBearing}</span>`;
+          if(inp.hit('interact'))this.net.send({t:'act',a:'dial',id:best.id});
+        } else {
           // Progress arrives rounded to .001 in snapshots; .333 is a secured third.
           const step=Math.min((s.steps?.length||1)-1,Math.floor(((best.s.prog||0)+.0005)*(s.steps?.length||1)+1e-6));
           const detail=s.steps?.[step];
@@ -962,6 +966,8 @@ export class Game {
     for (const n of s.needs) {
       if (n === 'fuel' && !this.team.fuel) out.push('needs the gas can');
       else if (n === 'fuse' && !this.team.fuse) out.push('needs the fuse kit');
+      else if (n === 'crank' && !this.team.crank) out.push('needs the handwheel beside this antenna');
+      else if (n === 'uplink' && !(this.objViews.stations.get(n)||{}).done) out.push('far-bank aerial is not aligned');
       else if ((n === 'gen' || n === 'relay') && !(this.objViews.stations.get(n) || {}).done) out.push(n === 'gen' ? 'no power (generator)' : 'relay box is dead');
     }
     return [...new Set(out)];
@@ -978,13 +984,15 @@ export class Game {
   _objectiveLines() {
     const L = this.info.layout, out = [];
     if (!this.notesRead.includes('memo')) out.push({ id:'memo',text: 'Read the maintenance memo on the trailhead kiosk', done: false });
+    out.push({id:'crank',text:'Recover the antenna handwheel across the river',sub:'Far-bank Service Landing · take the crossing near Fishing Bank',done:!!this.team.crank});
     for (const s of L.stations) {
       const v = this.objViews.stations.get(s.id), done = v && v.done;
       let sub = s.where;
       if (!done && s.id === 'gen') sub += this.team.fuel ? ' · gas can ✓' : ' · gas can: '+(this.notesRead.includes('memo')?L.supplyHints?.fuel||'check the supply register':'read the kiosk memo');
       if (!done && s.id === 'relay') sub += this.team.fuse ? ' · fuse kit ✓' : ' · fuse kit: '+(this.notesRead.includes('memo')?L.supplyHints?.fuse||'check the supply register':'read the kiosk memo');
       const secured=Math.floor(((v?.prog||0)+.0005)*3+1e-6);
-      if(!done&&secured)sub+=` · ${secured}/3 steps secured`;
+      if(!done&&s.action==='dial')sub+=` · turn toward ${s.targetBearing} · now ${ANTENNA_BEARINGS[v?.dial??s.dial]}`;
+      else if(!done&&secured)sub+=` · ${secured}/3 steps secured`;
       out.push({ id:s.id,text: s.name, sub, done });
     }
     if (this.extractOpen) out.push({ text: 'Get to the highway bridge — a county unit is waiting', done: false, urgent: true });

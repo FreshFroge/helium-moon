@@ -435,7 +435,7 @@ export class UI {
       <text x="465" y="24" fill="#c7ba8c" font-size="12">N ↑</text></svg>
       <div class="map-legend">${map.markers.map(p=>`<span><b>${p.n}</b> ${esc(p.name)}</span>`).join('')}</div>
       <p class="map-key">Amber dot: you · pale line: East Trail · dashed line: river service path · scroll to read</p></div>`:'';
-    const supplies=d.supplyHints?`<div class="supply-register"><b>Tonight's supply register</b><div>Gas can — ${esc(d.supplyHints.fuel)}</div><div>Fuse kit — ${esc(d.supplyHints.fuse)}</div></div>`:'';
+    const supplies=d.supplyHints?`<div class="supply-register"><b>Tonight's supply register</b><div>Gas can — ${esc(d.supplyHints.fuel)}</div><div>Fuse kit — ${esc(d.supplyHints.fuse)}</div>${d.supplyHints.crank?`<div>Handwheel — ${esc(d.supplyHints.crank)}</div>`:''}</div>`:'';
     el.innerHTML = `${fieldMap}${supplies}<h3>Rescue plan</h3>${d.objectives.map((l) => `<div class="obj ${l.done ? 'done' : ''}"><span class="box">${l.done ? '✓' : ''}</span><div><div>${esc(l.text)}</div>${l.sub ? `<div class="sub">${esc(l.sub)}</div>` : ''}</div></div>`).join('')}
       <div class="inv-grid"><div><span class="dim">Team carries</span><br>${d.team.fuel ? 'Gas can' : '<span class="dim">—</span>'}${d.team.fuse ? '<br>Fuse kit' : ''}</div>
       <div><span class="dim">Lighter fuel</span><br>${Math.round(d.battery * 100)}%</div><div><span class="dim">Air temperature</span><br>${d.temp.toFixed(1)}°C</div><div><span class="dim">Time</span><br>${m}:${sec}</div></div>

@@ -92,7 +92,7 @@ try {
   ok(!B.msgs.some((m) => m.t === 'start'), 'non-host cannot start');
   A.send({ t: 'start' });
   const st = await B.wait((m) => m.t === 'start');
-  ok(st.info.players.length === 2 && st.info.layout.stations.length === 3, 'game starts with 2 players and 3 stations');
+  ok(st.info.players.length === 2 && st.info.layout.stations.length === 4, 'game starts with 2 players, three repairs and the far-bank aerial');
   C.send({ t: 'join', code: lob.code });
   const err2 = await C.wait((m) => m.t === 'error' && /progress/.test(m.msg));
   ok(!!err2, 'cannot join a game in progress');

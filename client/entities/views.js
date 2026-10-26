@@ -268,6 +268,7 @@ export class ObjectiveViews {
 
   _station(s, world) {
     const g = new THREE.Group(), M = this.m, X = this.mats;
+    let rotor=null,handwheel=null;
     const led = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: 0x300404 }));
     if (s.kind === 'generator') {
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.44, 0.46), X.redPlastic); body.position.y = 0.32; g.add(body);
@@ -286,6 +287,29 @@ export class ObjectiveViews {
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.1), new THREE.MeshStandardMaterial({ map: makeTextTexture([{ text: 'DANGER 240V', font: 'bold 40px Inter' }], { w: 384, h: 128, bg: '#c9a51c', fg: '#111' }), roughness: 0.6 }));
       sign.position.set(0, 1.2, 0.229); g.add(sign);
       led.position.set(0.15, 0.85, 0.23); g.add(led);
+    } else if(s.kind==='antenna') {
+      const pole=new THREE.Mesh(new THREE.CylinderGeometry(.045,.065,1.85,12),M.metal);
+      pole.position.y=.925;g.add(pole);
+      for(const angle of [0,Math.PI*2/3,Math.PI*4/3]){
+        const foot=new THREE.Mesh(new THREE.BoxGeometry(.06,.07,.8),M.metal);
+        foot.position.set(Math.sin(angle)*.35,.06,Math.cos(angle)*.35);foot.rotation.y=angle;g.add(foot);
+      }
+      const panel=new THREE.Mesh(new THREE.BoxGeometry(.42,.45,.22),X.grey);panel.position.set(0,.78,.12);g.add(panel);
+      const compass=new THREE.Mesh(new THREE.PlaneGeometry(.34,.18),new THREE.MeshStandardMaterial({map:makeTextTexture([
+        {text:'RIVER AERIAL',font:'bold 34px Arial'},{text:'N  NE  E  SE  S  SW  W  NW',font:'22px Arial'},
+      ],{w:512,h:180,bg:'#d5cead',fg:'#202820'}),roughness:.9}));compass.position.set(0,.91,.235);g.add(compass);
+      handwheel=new THREE.Mesh(new THREE.TorusGeometry(.13,.018,8,20),X.orange);
+      handwheel.position.set(0,.67,.26);handwheel.visible=false;g.add(handwheel);
+      rotor=new THREE.Group();rotor.position.y=1.62;g.add(rotor);
+      const reflectorMaterial=M.metal.clone();reflectorMaterial.side=THREE.DoubleSide;
+      const reflector=new THREE.Mesh(new THREE.LatheGeometry([new THREE.Vector2(.02,0),new THREE.Vector2(.12,.012),
+        new THREE.Vector2(.25,.045),new THREE.Vector2(.42,.12)],24),reflectorMaterial);
+      reflector.rotation.x=Math.PI/2-.12;rotor.add(reflector);
+      const feed=new THREE.Mesh(new THREE.CylinderGeometry(.012,.012,.4,8),X.grey);
+      feed.rotation.x=Math.PI/2;feed.position.z=.2;rotor.add(feed);
+      const cap=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.1),X.black);cap.position.z=.4;rotor.add(cap);
+      led.position.set(.15,.7,.24);g.add(led);
+      rotor.rotation.y=Math.PI-(s.dial||0)*Math.PI/4;
     } else {
       const cab = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.45, 0.42), X.grey); cab.position.y = 0.72; g.add(cab);
       const vent = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.01), M.dark); vent.position.set(0, 1.25, 0.215); g.add(vent);
@@ -293,8 +317,8 @@ export class ObjectiveViews {
       sign.position.set(0, 0.95, 0.215); g.add(sign);
       led.position.set(0.22, 1.35, 0.22); g.add(led);
     }
-    this._place(g, s.x, s.y, s.z, (s.rot || 0) + Math.PI);
-    this.stations.set(s.id, { def: s, obj: g, led, done: false });
+    this._place(g, s.x, s.y, s.z, s.kind==='antenna'?0:(s.rot || 0) + Math.PI);
+    this.stations.set(s.id, { def: s, obj: g, led, done: false,rotor,handwheel,dial:s.dial||0 });
   }
 
   _item(it, world) {
@@ -309,6 +333,14 @@ export class ObjectiveViews {
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.11, 0.24), X.orange); body.position.y = 0.055; g.add(body);
       const lab = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.08), new THREE.MeshStandardMaterial({ map: makeTextTexture([{ text: 'FUSE KIT', font: 'bold 44px Inter' }], { w: 256, h: 96, bg: '#efe9db', fg: '#222' }) }));
       lab.rotation.x = -Math.PI / 2; lab.position.y = 0.111; g.add(lab);
+    } else if(it.kind==='crank') {
+      const rim=new THREE.Mesh(new THREE.TorusGeometry(.16,.022,8,24),X.orange);
+      rim.rotation.x=Math.PI/2;rim.position.y=.035;g.add(rim);
+      for(const yaw of [0,Math.PI/2]){
+        const spoke=new THREE.Mesh(new THREE.BoxGeometry(.29,.025,.025),X.grey);
+        spoke.position.y=.035;spoke.rotation.y=yaw;g.add(spoke);
+      }
+      const hub=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.065,6),X.grey);hub.position.y=.035;g.add(hub);
     } else if (it.kind === 'battery') {
       // a spare disposable lighter lying on its side
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.012, 0.068), new THREE.MeshStandardMaterial({ color: 0x1d5c8c, roughness: 0.45 }));
@@ -376,15 +408,22 @@ export class ObjectiveViews {
     if (!o) return;
     const held = new Set(o.it);
     for (const [id, it] of this.items) if (it.held !== held.has(id)) this.setHeld(id, held.has(id));
-    for (const [id, done, prog] of o.st) {
+    for (const [id, done, prog, dial] of o.st) {
       const s = this.stations.get(id); if (!s) continue;
       s.prog = prog;
+      if(Number.isFinite(dial))s.dial=dial;
+      if(s.handwheel)s.handwheel.visible=!!o.team.crank;
       if (done && !s.done) { s.done = true; s.led.material.color.setRGB(0.2, 3, 0.4); }
     }
     if (this.extract && o.ex && !this.extract.open) { this.extract.open = true; this.extract.car.visible = true; this.extract.flare.visible = true; this.extract.hl.color.setRGB(3, 3, 2.6); }
   }
 
   update(dt, time, flash) {
+    for(const s of this.stations.values())if(s.rotor){
+      const turn=angleDiff(s.rotor.rotation.y,Math.PI-s.dial*Math.PI/4)*(1-Math.exp(-dt*7));
+      s.rotor.rotation.y+=turn;
+      if(s.handwheel)s.handwheel.rotation.z-=turn*2;
+    }
     // glints: an item's shiny parts catch your lighter's flame when you are close and facing it
     const R = flash?.range || 32;
     for (const it of this.items.values()) {

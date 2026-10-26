@@ -88,12 +88,21 @@ async def play(port):
                     supplyHints:game.info.layout.supplyHints||null,
                     stations:game.info.layout.stations.map(s=>({id:s.id,where:s.where,hold:s.hold})),
                     supplyLocations:game.info.layout.items.filter(i=>i.kind==='fuel'||i.kind==='fuse').map(i=>({id:i.id,x:i.x,z:i.z,label:i.label||null}))})''')
-                for item in ['fuel', 'fuse']:
+                for item in ['fuel', 'fuse','crank']:
                     assert await page.evaluate('id=>approachNight(id)', item), f'{seed}: {item} approach'
                     await tap()
                     assert await page.evaluate('id=>game.team[id]', item)
-                for station in ['gen', 'relay', 'mast']:
+                for station in ['gen', 'relay','uplink', 'mast']:
                     assert await page.evaluate('id=>approachNight(id,true)', station), f'{seed}: {station} approach'
+                    if station=='uplink':
+                        for _ in range(8):
+                            if await page.evaluate("game.objViews.stations.get('uplink').done"):break
+                            await tap();await advance(.4)
+                        assert await page.evaluate("game.objViews.stations.get('uplink').done"),'compass presses align the aerial'
+                        if seed==211:
+                            await page.evaluate('game.advance(1,1/30,true)')
+                            await page.screenshot(path=str(output/'far-bank-antenna.png'),timeout=30000)
+                        continue
                     hold = await page.evaluate('id=>game.info.layout.stations.find(s=>s.id===id).hold',station)
                     if station=='gen' and seed==211 and await page.evaluate("!!game.info.layout.stations[0].steps"):
                         await page.keyboard.down('e')

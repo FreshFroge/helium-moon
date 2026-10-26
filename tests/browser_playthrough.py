@@ -208,7 +208,7 @@ async def play(port):
             assert await page.evaluate('game.reading === null')
             print('  ok  maintenance memo opens and closes with the interaction key')
 
-            for item in ['fuel', 'fuse']:
+            for item in ['fuel', 'fuse','crank']:
                 await approach(item)
                 await advance(0.5)
                 glint = await page.evaluate('''id=>{
@@ -222,10 +222,16 @@ async def play(port):
                 assert glint['opacity'] > 0.01, f'{item} catches the flashlight: {glint}'
                 await press('e')
                 assert await page.evaluate('id => game.team[id] && game.objViews.items.get(id).held', item)
-            print('  ok  fuel/fuse glints and pickups update the shared inventory and visible items')
+            print('  ok  fuel/fuse/handwheel glints and pickups update the shared inventory and visible items')
 
-            for station in ['gen', 'relay', 'mast']:
+            for station in ['gen', 'relay','uplink', 'mast']:
                 await approach(station, station=True)
+                if station=='uplink':
+                    for _ in range(8):
+                        if await page.evaluate("game.objViews.stations.get('uplink').done"):break
+                        await press('e');await advance(.45)
+                    assert await page.evaluate("game.objViews.stations.get('uplink').done"),'actual E presses align the aerial'
+                    continue
                 hold = await page.evaluate('id => game.info.layout.stations.find(s => s.id === id).hold', station)
                 await page.keyboard.down('e')
                 await advance(hold + 0.6)
@@ -237,7 +243,7 @@ async def play(port):
                 if station == 'gen':
                     assert await page.evaluate('game.objViews.workLight.intensity > 0')
             assert await page.evaluate('game.extractOpen && game.objViews.extractLight.intensity > 0')
-            print('  ok  all three repairs complete through hold-E; equipment sounds/lights and extraction strobes work')
+            print('  ok  three hold-E repairs plus the compass aerial complete; equipment sounds/lights and extraction strobes work')
 
             await page.evaluate('''() => {
                 const ex = game.info.layout.extract;
