@@ -514,6 +514,8 @@ export class World {
     const pk = this.parking;
     add('lot', pk.x, pk.z, pk.rot, { hx: pk.hx, hz: pk.hz });
     add('kiosk', P.trailhead.x - 6, P.trailhead.z - 2, faceTrail({ x: P.trailhead.x + 6, z: P.trailhead.z + 6 }) + Math.PI);
+    const kiosk = s[s.length-1];
+    add('trailhead_bench', kiosk.x - 3.7*Math.cos(kiosk.rot), kiosk.z + 3.7*Math.sin(kiosk.rot), kiosk.rot);
     add('car', pk.x + 6, pk.z - 4, pk.rot + 1.45, { color: 0x3a4652 });
     add('car', pk.x - 4, pk.z + 6, pk.rot - 1.6, { color: 0x6b1f1f });
     add('gate', P.trailhead.x - 1, P.trailhead.z + 1, faceTrail(P.trailhead) + Math.PI / 2);
@@ -526,6 +528,8 @@ export class World {
       const m0 = pointAtDistance(this.trail, this.trailCum, 34);
       const l2 = m0.dir - Math.PI / 2;
       add('monument', m0.x + Math.sin(l2) * 4.2, m0.z + Math.cos(l2) * 4.2, Math.atan2(-Math.sin(l2), -Math.cos(l2)));
+      const entry = pointAtDistance(this.trail,this.trailCum,19), side = entry.dir-Math.PI/2;
+      add('trailpost',entry.x+Math.sin(side)*3.8,entry.z+Math.cos(side)*3.8,entry.dir+Math.PI);
     }
     add('streetlight', pk.x + 20, pk.z - 12, 0);
     add('bench', P.overlook.x, P.overlook.z, Math.atan2(...this._riverDir(P.overlook)));
@@ -780,6 +784,8 @@ export class World {
         case 'streetlight': circles.push([o.x, o.z, 0.15]); break;
         case 'sign': box(1.6, 0.15, 2.2); break;
         case 'bench': box(0.9, 0.3, 0.5); break;
+        case 'trailhead_bench': box(0.95,0.35,.9); break;
+        case 'trailpost': box(.45,.10,1.65); break;
         case 'monument': box(0.55, 0.22, 0.75); break;
         case 'warning': circles.push([o.x, o.z, 0.08]); break;
         default: break;

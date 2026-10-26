@@ -55,3 +55,11 @@ Checks so far:
 Observed objective fault: required supplies can randomize onto isolated ground
 with no location clue (three browser seeds exposed no supply hints). Next:
 recognizable landmark supplies, in-world navigation and interruption-safe repairs.
+
+Trailhead pass: warm sheltered kiosk lamp (one unshadowed light), framed and
+landmarked map, entry waypost, real-collision seating, irregular gravel edges
+and batched stone/leaf dressing. Six spawn slots and the initial five metres
+still clear; `spawn.test.mjs`, `objectives.test.mjs`, `zones.test.mjs` pass.
+Three more staged browser objective/extraction runs (211–213) pass after the
+world changes. Spawn/kiosk screenshots inspected; reduced the initial lamp
+intensity and increased map roughness to avoid washing the map out.

@@ -96,7 +96,10 @@ export class Props {
     const c = Math.cos(o.rot), s = Math.sin(o.rot);
     for (let i = 0; i < pos.count; i++) {
       const lx = pos.getX(i), lz = pos.getZ(i);
-      const wx = o.x + lx * c + lz * s, wz = o.z - lx * s + lz * c;
+      // Feather the old gravel boundary with irregular edges instead of a perfect slab.
+      const edgeX=Math.abs(lx)>o.hx-.1?Math.sign(lx)*(.45*Math.sin(lz*1.7)+.3*Math.cos(lz*3.1)):0;
+      const edgeZ=Math.abs(lz)>o.hz-.1?Math.sign(lz)*(.5*Math.sin(lx*1.3)+.2*Math.cos(lx*3.7)):0;
+      const wx = o.x + (lx+edgeX) * c + (lz+edgeZ) * s, wz = o.z - (lx+edgeX) * s + (lz+edgeZ) * c;
       pos.setXYZ(i, wx, w.heightAt(wx, wz) + 0.04, wz);
       uv.setXY(i, lx / 3, lz / 3);
     }
@@ -107,13 +110,32 @@ export class Props {
       const wx = o.x + lx * c + lz * s, wz = o.z - lx * s + lz * c;
       B.add('concrete', boxUV(1.8, 0.14, 0.25), M(wx, w.heightAt(wx, wz) + 0.1, wz, o.rot));
     }
+    // Small stones and leaves ground the edge without changing walkable collision.
+    const rng=makeRng(731);
+    for(let i=0;i<110;i++){
+      const side=i%4, t=rng.range(-1,1), outward=rng.range(-.5,1.2);
+      const lx=side<2?(side?1:-1)*(o.hx+outward):t*o.hx;
+      const lz=side>=2?(side===2?1:-1)*(o.hz+outward):t*o.hz;
+      const x=o.x+lx*c+lz*s,z=o.z-lx*s+lz*c;
+      if(i%3===0)B.add('stone',new THREE.DodecahedronGeometry(rng.range(.025,.065),0),M(x,w.heightAt(x,z)+.02,z,rng()*6.28,0,0,1,.5,1));
+      else B.add('woodDark',boxUV(rng.range(.05,.12),.004,rng.range(.025,.055)),M(x,w.heightAt(x,z)+.055,z,rng()*6.28,.12));
+    }
   }
 
   _kiosk(o, B) {
     for (const x of [-1.25, 1.25]) B.add('woodDark', boxUV(0.16, 2.9, 0.16), this.W(o, x, 1.45, 0));
     B.add('woodDark', boxUV(3.1, 0.08, 1.2), this.W(o, 0, 2.95, 0, 0, 0.18));
     B.add('wood', boxUV(2.4, 1.3, 0.06), this.W(o, 0, 1.55, 0.03));
-    const mat = patchMaterial(new THREE.MeshStandardMaterial({ map: this._mapBoardTexture(), roughness: 0.6 }), { key: 'kioskmap' });
+    for(const x of [-1.15,1.15])B.add('woodDark',boxUV(.075,1.38,.10),this.W(o,x,1.55,.09));
+    for(const y of [.86,2.24])B.add('woodDark',boxUV(2.4,.075,.10),this.W(o,0,y,.09));
+    // A single sheltered, non-shadow-casting lamp makes this safe gathering point readable.
+    B.add('metal',boxUV(.42,.08,.28),this.W(o,0,2.68,.27));
+    const bulb=new THREE.Mesh(new THREE.PlaneGeometry(.32,.12),new THREE.MeshBasicMaterial({color:0xffd49b}));
+    bulb.applyMatrix4(this.W(o,0,2.63,.29,0,-Math.PI/2));this.group.add(bulb);
+    const light=new THREE.PointLight(0xffc68a,30,10,2);
+    light.name='trailhead-lantern';light.position.set(0,2.55,1.1).applyMatrix4(M(o.x,o.y,o.z,o.rot));
+    this.group.add(light);
+    const mat = patchMaterial(new THREE.MeshStandardMaterial({ map: this._mapBoardTexture(), roughness: .98, envMapIntensity: .15 }), { key: 'kioskmap' });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.15), mat);
     m.applyMatrix4(this.W(o, 0, 1.55, 0.065));
     m.receiveShadow = true;
@@ -127,19 +149,32 @@ export class Props {
     g.fillStyle = '#4a3b2a'; g.fillRect(0, 0, 1024, 70);
     g.fillStyle = '#efe6c8'; g.font = 'bold 40px Georgia, serif'; g.textAlign = 'center';
     g.fillText('STINCHCOMB WILDLIFE REFUGE', 512, 50);
-    g.fillStyle = '#7c8f6a'; g.fillRect(40, 90, 620, 420);
+    g.fillStyle = '#829172'; g.fillRect(40, 90, 620, 420);
+    const rng=makeRng(420);
+    for(let i=0;i<900;i++){
+      g.fillStyle=i%2?'rgba(43,66,39,.13)':'rgba(218,209,162,.12)';
+      g.beginPath();g.ellipse(rng.range(45,650),rng.range(95,505),rng.range(2,8),rng.range(1,5),rng()*3,0,Math.PI*2);g.fill();
+    }
     const w = this.world;
     const xs = w.trail.map((p) => p[0]), zs = w.trail.map((p) => p[1]);
     const minX = Math.min(...xs) - 60, maxX = Math.max(...xs) + 60, minZ = Math.min(...zs) - 60, maxZ = Math.max(...zs) + 60;
-    const sc = Math.min(600 / (maxX - minX), 400 / (maxZ - minZ));
-    const P = (p) => [50 + (p[0] - minX) * sc, 100 + (p[1] - minZ) * sc];
+    const sc = Math.min(560 / (maxX - minX), 360 / (maxZ - minZ));
+    const P = (p) => [70 + (p[0] - minX) * sc, 115 + (p[1] - minZ) * sc];
+    g.save();g.beginPath();g.rect(40,90,620,420);g.clip();
     g.strokeStyle = '#5b7da3'; g.lineWidth = 7; g.beginPath();
     w.river.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
     g.strokeStyle = '#8a2d1d'; g.lineWidth = 4; g.setLineDash([10, 6]); g.beginPath();
     w.trail.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke(); g.setLineDash([]);
     const [sx, sy] = P(w.trail[0]);
     g.fillStyle = '#c0261d'; g.beginPath(); g.arc(sx, sy, 9, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#222'; g.font = 'bold 18px Arial'; g.textAlign = 'left'; g.fillText('YOU ARE HERE', sx - 140, sy + 6);
+    g.fillStyle = '#222'; g.font = 'bold 16px Arial'; g.textAlign = 'left'; g.fillText('TRAILHEAD', Math.max(46,Math.min(540,sx+12)), Math.min(495,sy+6));
+    for(const key of ['pumphouse','shed','bridge','mast','camp']){
+      const p=w.poi[key];if(!p)continue;
+      const [x,y]=P([p.x,p.z]);g.fillStyle='#f2e7c8';g.fillRect(x-4,y-4,8,8);
+      g.fillStyle='#273326';g.font='bold 13px Arial';g.fillText(({pumphouse:'PUMP',shed:'SHED',bridge:'BRIDGE',mast:'MAST',camp:'CAMP'})[key],x+7,y+4);
+    }
+    g.restore();
+    g.fillStyle='#273326';g.font='bold 18px Arial';g.fillText('N',620,116);g.beginPath();g.moveTo(626,123);g.lineTo(621,138);g.lineTo(631,138);g.fill();
     g.font = '20px Arial'; g.fillStyle = '#2a2a2a';
     ['EAST TRAIL (old River Road)', 'Open 5:00 AM - 11:00 PM', '', 'NO motorized vehicles', 'Stay on marked trails', 'Waterfowl hunting area -', '  seasonal closures apply', '', 'Report emergencies:', 'Ranger radio at the', 'maintenance shed']
       .forEach((l, i) => g.fillText(l, 690, 120 + i * 32));
@@ -253,6 +288,17 @@ export class Props {
     for (const x of [-0.75, 0.75]) B.add('concrete', boxUV(0.12, 0.45, 0.45), this.W(o, x, 0.22, 0));
     for (const z of [-0.14, 0, 0.14]) B.add('wood', boxUV(1.8, 0.05, 0.12), this.W(o, 0, 0.47, z));
     B.add('wood', boxUV(1.8, 0.12, 0.05), this.W(o, 0, 0.78, -0.24, 0, -0.2));
+  }
+
+  _trailhead_bench(o,B){ this._bench(o,B); }
+
+  _trailpost(o,B){
+    B.add('woodDark',boxUV(.16,1.75,.16),this.W(o,0,.875,0));
+    B.add('wood',boxUV(.9,.32,.07),this.W(o,0,1.43,.02));
+    const tex=makeTextTexture([{text:'EAST TRAIL  ↑',font:'bold 46px Arial'},{text:'OLD RIVER ROAD',font:'24px Arial'}],{w:512,h:180,bg:'#3e4b35',fg:'#e8dfbc',pad:20});
+    const face=new THREE.Mesh(new THREE.PlaneGeometry(.86,.30),new THREE.MeshStandardMaterial({map:tex,roughness:1,side:THREE.DoubleSide}));
+    face.applyMatrix4(this.W(o,0,1.43,.06));this.group.add(face);
+    B.add('white',boxUV(.06,.06,.025),this.W(o,0,1.7,.09));
   }
 
   _pumphouse(o, B) {
