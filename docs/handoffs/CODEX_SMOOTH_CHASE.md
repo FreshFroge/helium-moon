@@ -20,3 +20,9 @@ on the shared/Claude branches at the start of this session. GitHub API posting
 remains unavailable; this published handoff coordinates the work.
 
 Implementation and before/after evidence will be recorded here.
+
+Additional test reservation: `tests/hunts.test.mjs`. Its unreachable-target
+check still expects the retired eight-second stall ending (under 36 s total),
+while the current owner-authorized stalk/search hunt deliberately lasts up to
+60 s. Keep the real deadline and no-late-damage assertions instead of restoring
+the earlier behavior. A route change exposed this old fixture assumption.
