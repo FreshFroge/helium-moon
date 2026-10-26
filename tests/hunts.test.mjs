@@ -96,10 +96,12 @@ test('fail-safe: a hunt on a target he cannot reach ends instead of running fore
   Object.assign(p, { x: spot.x, z: spot.z, y: world.heightAt(spot.x, spot.z) });
   const at = pointAtDistance(world.trail, world.trailCum, spot.a - 20); hv.place(at.x, at.z);
   hv.startChase(p);
+  const deadline=hv.huntEndsAt;
   let ended = null;
   for (let t = 0; t < 60 && ended == null; t += 0.05) { sim.step(0.05); for (const e of sim.drainEvents()) if (e.type === "chase" && !e.on) ended = t; }
-  assert.ok(ended != null && ended < Math.max(...CONFIG.HV.HUNT_HIDE_WINDOW) + CONFIG.HV.HUNT_STALL_TIME + 8, `stuck hunt ends (at ${ended?.toFixed(1)} s)`);
+  assert.ok(ended != null && sim.time<=deadline+.1, `unreachable hunt respects its shared deadline (ended at ${ended?.toFixed(1)} s)`);
   assert.equal(sim.director.chasing, false);
+  assert.equal(p.health,MAXH,'an unreachable target receives no grab damage');
 });
 
 test('a moving player can outlast a hunt without extending its deadline', () => {

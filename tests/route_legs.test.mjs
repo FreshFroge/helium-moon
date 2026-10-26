@@ -62,3 +62,45 @@ test('skunk replaces a prowl destination the moving player has left far behind',
   assert.notEqual(ai.path,old,'do not finish a stale route and lurk far behind the player');
   assert.ok(Math.hypot(ai.goal[0]-p.x,ai.goal[1]-p.z)<110);
 });
+
+test('Helium runs through close waypoints without spending a movement tick at each one',()=>{
+  const ai=actor(HeliumVoiceAI);ai.setState('chase');
+  ai.path=Array.from({length:41},(_,i)=>[0,i*.2]);ai.pathI=1;
+  let arrived=false,pauses=0;
+  for(let i=0;i<120&&!arrived;i++){
+    const before=ai.z;arrived=ai.followPath(.05,5);
+    if(!arrived && Math.abs(ai.z-before)<.001)pauses++;
+  }
+  assert.ok(arrived && ai.z>7.6,'the complete run reaches its endpoint');
+  assert.equal(pauses,0,'consuming a nearby waypoint must continue movement in the same tick');
+});
+
+for(const obstacle of ['trunk','fence'])test(`Helium pursuit steers around a ${obstacle} missed by the coarse nav grid`,()=>{
+  const ai=actor(HeliumVoiceAI);ai.setState('chase');ai.z=4;
+  if(obstacle==='trunk'){ai.world.circles=[[0,0,.55]];ai.world.queryColliders=()=>[0];}
+  else{ai.world.segs=[[-3,0,3,0,.25,2]];ai.world.queryColliders=()=>[100000];}
+  // The planner's straight segment models a locally obstructed coarse grid
+  // cell. Actual physics must steer the creature; no teleport/ignored collision.
+  ai.planTo(0,-4);let arrived=false,maxStep=0;
+  for(let i=0;i<300&&!arrived;i++){
+    if(!ai.path || i%6===0)ai.planTo(0,-4);
+    const x=ai.x,z=ai.z;ai.sim.time+=.05;
+    arrived=ai.followPath(.05,6.6);
+    maxStep=Math.max(maxStep,Math.hypot(ai.x-x,ai.z-z));
+    if(obstacle==='trunk')assert.ok(Math.hypot(ai.x,ai.z)>=.55+.32-.001,'the running cylinder stays outside bark');
+    else assert.ok(Math.abs(ai.x)>3 || Math.abs(ai.z)>=.25+.32-.001,'the route never passes through the fence');
+  }
+  assert.ok(arrived && ai.z<-3.6,`run reaches the far side, ended at ${ai.x},${ai.z}`);
+  assert.ok(maxStep<=6.6*.05*1.5+.001,'bounded physical movement, including collision correction');
+});
+
+test('Helium snapshots stop the running gait when the body cannot move',()=>{
+  const ai=actor(HeliumVoiceAI);ai.setState('chase');ai.world.navWalkable=()=>false;
+  ai.planTo(4,0);ai.anim.run=1;
+  for(let i=0;i<20;i++){
+    if(!ai.path)ai.planTo(4,0);
+    ai.sim.time+=.05;ai.followPath(.05,6.6);
+  }
+  assert.ok(ai.speed>3,'the route is still requesting a run');
+  assert.equal(ai.snapshot()[6],0,'network gait speed reflects the blocked body rather than its requested speed');
+});

@@ -20,7 +20,7 @@ export class HeliumVoiceAI {
   constructor(sim) {
     this.sim = sim; this.world = sim.world; this.rng = sim.rng;
     this.x = 0; this.y = 0; this.z = 0; this.yaw = 0; this.lookYaw = 0; this.lookPitch = 0;
-    this.speed = 0; this.vx = 0; this.vz = 0;
+    this.speed = 0; this.motionSpeed = 0; this.vx = 0; this.vz = 0;
     this.state = 'dormant'; this.stateT = 0;
     this.path = null; this.pathI = 0; this.goal = null; this.replanT = 0;
     this.awareness = new Map(); this.lastSeen = new Map(); this.spotted = new Set();
@@ -50,6 +50,7 @@ export class HeliumVoiceAI {
 
   setState(s, info) {
     this.state = s; this.stateT = 0; this.path = null; this.goal = null; this.finalGoal = null;
+    this.avoidHeading = null; this.avoidSign = 0; this.avoidT = 0; this.routeProgress = null;
     if (s !== 'retreat') this.fleeAfterGrab = false;
     if (s !== 'chase') this.closeCommitted = false;
     if (s === 'chase') {
@@ -194,18 +195,59 @@ export class HeliumVoiceAI {
     // The straight-line leg can end outside the refuge where the map boundary bends (no nav
     // cell there: seed 1003 froze 20 s+ in roam). Plan the whole trip instead; it's rare.
     if (!this.path && D > 110 && mode !== 'direct') this.path = w.findPath(this.x, this.z, x, z, { costFn: safetyCost, maxExpand: 24000 });
-    this.pathI = 1; this.goal = [x, z];
+    this.pathI = 1; this.goal = [x, z]; this.pathMode = mode;
     return !!this.path;
   }
 
+  // Probe the actual cylinder, not just the coarse nav cells or an eye ray.
+  // This also catches logs/fences below eye level and protects water/spawn edges.
+  walkLineClear(x, z, limit = 3) {
+    const d = Math.hypot(x-this.x,z-this.z); if(d<1e-5)return true;
+    const length=Math.min(d,limit),count=Math.ceil(length/.3),dx=(x-this.x)/d,dz=(z-this.z)/d;
+    const opts={nav:!this.freeLunge,slope:false,step:C.STEP_OVER};
+    let p={x:this.x,y:this.y,z:this.z};
+    for(let i=1;i<=count;i++){
+      const tx=this.x+dx*length*i/count,tz=this.z+dz*length*i/count;
+      const q=moveCharacter(this.world,p,tx-p.x,tz-p.z,.32,opts);
+      if(Math.hypot(q.x-tx,q.z-tz)>.015 || spawnStepBlocked(this.world,p.x,p.z,q.x,q.z))return false;
+      p={...q,y:groundAt(this.world,q.x,q.z)};
+    }
+    return true;
+  }
+
+  rememberBlocked(x,z) {
+    if(this.world.cellOf)(this.navBlocks ||= []).push({i:this.world.cellOf(x,z),t:this.sim.time});
+    if(this.navBlocks?.length>8)this.navBlocks.shift();
+  }
+
   followPath(dt, speed) {
+    this.motionSpeed = 0;
     if (this.path && this.pathI >= this.path.length && this.finalGoal) { const fg = this.finalGoal; this.planTo(fg[0], fg[1], fg[2]); }
     if (!this.path || this.pathI >= this.path.length) { this.speed = lerp(this.speed, 0, 1 - Math.exp(-dt * 8)); return true; }
     if (this.operated) speed *= C.OPERATED_MUL;
+    // Consume reached points in this tick. Returning at every point created
+    // recurring full-tick pauses, especially when pursuit replans frequently.
+    const arrival=this.state==='chase' ? .3 : .8;
+    while(this.pathI<this.path.length && Math.hypot(this.path[this.pathI][0]-this.x,this.path[this.pathI][1]-this.z)<arrival)this.pathI++;
+    if(this.pathI>=this.path.length)return !this.finalGoal;
+    // Round only direct pursuit paths. Quiet/cover paths retain their costs.
+    if(this.state==='chase' && this.pathMode==='direct' && !this.freeLunge){
+      for(let i=Math.min(this.path.length-1,this.pathI+3);i>this.pathI;i--){
+        const [x,z]=this.path[i];
+        if(Math.hypot(x-this.x,z-this.z)<=4 && this.walkLineClear(x,z,4)){this.pathI=i;break;}
+      }
+    }
     const [tx, tz] = this.path[this.pathI];
     const dx = tx - this.x, dz = tz - this.z, d = Math.hypot(dx, dz);
-    // Keep the state alive until all bounded legs reach the actual destination.
-    if (d < (this.state === 'chase' ? 0.3 : 0.8)) { this.pathI++; return this.pathI >= this.path.length && !this.finalGoal; }
+    // Sideways collision corrections are not progress toward a waypoint.
+    // Keep this check across replans to the same point, so a chase cannot
+    // orbit an unreachable grid center indefinitely while its legs keep moving.
+    let progress=this.routeProgress;
+    if(!progress || Math.hypot(progress.x-tx,progress.z-tz)>.5)
+      progress=this.routeProgress={x:tx,z:tz,best:d,stalled:0};
+    if(d<progress.best-.05){progress.best=d;progress.stalled=0;}
+    else if(this.speed>.1)progress.stalled+=dt;
+    if(progress.stalled>1.4){this.rememberBlocked(tx,tz);this.path=null;this.routeProgress=null;return false;}
     // Brake unseen stalking at eight feet. A committed chase is allowed
     // to close and hit without waiting for the player to look back.
     const tp = this.target != null ? this.sim.players.get(this.target) : null;
@@ -218,7 +260,29 @@ export class HeliumVoiceAI {
     this.speed = lerp(this.speed, speed, 1 - Math.exp(-dt * (this.state === 'retreat' ? 18 : speed > 3 ? 3 : 5)));
     const step = Math.min(d, this.speed * dt);
     const nx = dx / d, nz = dz / d;
-    const r = moveCharacter(this.world, this, nx * step, nz * step, 0.32, { nav: !this.freeLunge, slope: false, step: C.STEP_OVER });
+    const opts={nav:!this.freeLunge,slope:false,step:C.STEP_OVER};
+    let r = moveCharacter(this.world, this, nx * step, nz * step, 0.32, opts);
+    const forward=(r.x-this.x)*nx+(r.z-this.z)*nz;
+    const obstructed=step>1e-5 && (forward<step*.55
+      || ((this.avoidHeading!=null || speed>3) && !this.walkLineClear(tx,tz,this.avoidHeading!=null?3:1.1)));
+    if(obstructed){
+      // Keep one side around local obstacles instead of choosing alternating
+      // corrections into the same trunk on each freshly planned chase path.
+      const heading=this.avoidHeading??Math.atan2(dx,dz),preferred=this.avoidSign||1;
+      let found=false;
+      for(const sign of [preferred,-preferred]){
+        for(const angle of [.45,.8,1.2,1.55,1.85]){
+          const a=heading+sign*angle;
+          const q=moveCharacter(this.world,this,Math.sin(a)*step,Math.cos(a)*step,.32,opts);
+          const travel=Math.hypot(q.x-this.x,q.z-this.z);
+          if(travel<step*.65 || travel>step*1.5 || spawnStepBlocked(this.world,this.x,this.z,q.x,q.z))continue;
+          r=q;this.avoidHeading=heading;this.avoidSign=sign;found=true;break;
+        }
+        if(found)break;
+      }
+      this.avoidT=(this.avoidT||0)+dt;
+      if(this.avoidT>4){this.rememberBlocked(tx,tz);this.path=null;this.avoidHeading=null;this.avoidSign=-preferred;this.avoidT=0;return false;}
+    }else if(forward>step*.9){this.avoidHeading=null;this.avoidSign=0;this.avoidT=0;}
     // Stalking paths can detour toward the player. Never cut through their body en route
     // to cover; when already close, only an outward step is allowed in the opening phase.
     if (this.state === 'chase' && !this.grab && this.sim.playerList.some(p => {
@@ -248,27 +312,29 @@ export class HeliumVoiceAI {
           && this.dist(p)>=minimum && Math.hypot(p.x-x,p.z-z)<minimum);
         if(!crossesOpening && !spawnStepBlocked(this.world,this.x,this.z,x,z)) {
           this.x=x;this.z=z;this.y=groundAt(this.world,x,z);
+          this.motionSpeed=dt>0?Math.min(this.speed,Math.min(step,distance)/dt):0;
         }
       }
       this.path=null;return false;
     }
+    const facing=moved>1e-5?Math.atan2(r.x-this.x,r.z-this.z):this.yaw;
     this.x = r.x; this.z = r.z; this.y = groundAt(this.world, this.x, this.z);
+    this.motionSpeed=dt>0?Math.min(this.speed,moved/dt):0;
     const back = this.state === 'retreat' && this.backwards;
-    const desired = Math.atan2(nx, nz) + (back ? Math.PI : 0);
-    this.yaw += angleDiff(this.yaw, desired) * Math.min(1, dt * (this.state === 'retreat' ? 22 : speed > 3 ? 8 : 4));
+    const desired = facing + (back ? Math.PI : 0);
+    this.yaw += angleDiff(this.yaw, desired) * (1-Math.exp(-dt*(this.state === 'retreat'?22:speed>3?8:4)));
     if (moved < step * 0.2) {
       this.stuckT = (this.stuckT || 0) + dt;
       if (this.stuckT > 1.2) {
         this.stuckT = 0; this.path = null;
         // remember the grid cell he couldn't get into so the replan routes around it (see planTo)
-        if (this.world.cellOf) (this.navBlocks ||= []).push({ i: this.world.cellOf(tx, tz), t: this.sim.time });
-        if (this.navBlocks?.length > 8) this.navBlocks.shift();
+        this.rememberBlocked(tx,tz);
       }
     } else this.stuckT = 0;
     return false;
   }
 
-  stop(dt) { this.speed = lerp(this.speed, 0, 1 - Math.exp(-dt * 10)); }
+  stop(dt) { this.motionSpeed=0;this.speed = lerp(this.speed, 0, 1 - Math.exp(-dt * 10)); }
 
   lookAtPoint(x, y, z) {
     this.lookYaw = Math.atan2(x - this.x, z - this.z);
@@ -375,6 +441,7 @@ export class HeliumVoiceAI {
   // ---------------------------------------------------------------- main update
   update(dt) {
     const sim = this.sim, dir = sim.director;
+    this.motionSpeed=0;
     const escalation = dir.escalation?.() || 0;
     this.stateT += dt;
     if (this.state === 'dormant') { this.stop(dt); return; }
@@ -652,7 +719,7 @@ export class HeliumVoiceAI {
         if (!watched) anim.low = 1;
         this.replanT -= dt;
         const ls = this.lastSeenChase;
-        if (!this.path || this.replanT <= 0) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = d < 15 ? .3 : .7; }
+        if (!this.path || this.pathMode !== 'direct' || this.replanT <= 0) { this.planTo(ls.x, ls.z, 'direct'); this.replanT = d < 15 ? .3 : .7; }
         // A visible final lunge uses physical collision around the coarse nav-grid cells.
         if (vis > .02 && d < C.HUNT_LUNGE_DIST
             && this.world.lineOfSight(this.x, this.y + 1, this.z, tp.x, tp.y + eyeHeight(tp), tp.z, { brushK: 0 }) > .5) {
@@ -1269,7 +1336,7 @@ export class HeliumVoiceAI {
   snapshot() {
     const a = this.anim;
     return [+this.x.toFixed(2), +this.y.toFixed(2), +this.z.toFixed(2), +this.yaw.toFixed(3), +this.lookYaw.toFixed(3), +this.lookPitch.toFixed(3),
-      +this.speed.toFixed(2), (a.run ? 1 : 0) | (a.reach > 0.5 ? 2 : 0) | (a.still > 0.5 ? 4 : 0) | (this.state === 'dormant' ? 8 : 0) | (a.low ? 16 : 0) | (a.windup ? 32 : 0) | (a.strike ? 64 : 0)
+      +this.motionSpeed.toFixed(2), (a.run ? 1 : 0) | (a.reach > 0.5 ? 2 : 0) | (a.still > 0.5 ? 4 : 0) | (this.state === 'dormant' ? 8 : 0) | (a.low ? 16 : 0) | (a.windup ? 32 : 0) | (a.strike ? 64 : 0)
         | (a.frozen ? 128 : 0) | (a.collapse ? 256 : 0) | (a.prone ? 512 : 0) | (a.rise ? 1024 : 0) | (a.grab ? 2048 : 0) | (a.back ? 4096 : 0),
       +a.tilt.toFixed(2), +a.jaw.toFixed(2), HV_STATES.indexOf(this.state),
       // 11: grab kind (GRAB_KINDS index), 12: grab phase 0 none / 1 reach / 2 hold, 13: peek kind

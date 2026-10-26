@@ -69,6 +69,42 @@ Object.values(creature.b).forEach((bone, i) => [...bone.position, ...bone.quater
 assert.ok(frozenDelta < 1e-5, 'watched/frozen stance must settle without idle twitching');
 console.log('  ok  frozen pose settles while retaining the requested gaze');
 
+let freezeJump=0,grabJump=0,crawlJump=0,crawlHeadJump=0,crawlHeadPeak=0;
+for(const frames of [51,73,107]){
+  const a=new HeliumAnimator(character());
+  for(let i=0;i<frames;i++)a.update(1/60,{speed:5,run:true,unnatural:true,state:8});
+  const before=['L','R'].map(s=>a.rig.wp(a.b['foot.'+s]));
+  a.update(1/60,{speed:0,frozen:true,still:true,unnatural:true,state:8});
+  for(const [i,side] of ['L','R'].entries())freezeJump=Math.max(freezeJump,a.rig.wp(a.b['foot.'+side]).distanceTo(before[i]));
+}
+for(let kind=1;kind<=6;kind++){
+  const a=new HeliumAnimator(character());
+  for(let i=0;i<120;i++)a.update(1/60,{speed:0,grab:kind,grabPhase:1,unnatural:true,state:8});
+  const before=['L','R'].map(s=>a.rig.wp(a.b['wrist.'+s]));
+  a.update(1/60,{speed:0,grab:kind,grabPhase:2,unnatural:true,state:8});
+  for(const [i,side] of ['L','R'].entries())grabJump=Math.max(grabJump,a.rig.wp(a.b['wrist.'+side]).distanceTo(before[i]));
+}
+{
+  const a=new HeliumAnimator(character());
+  for(let i=0;i<180;i++)a.update(1/60,{speed:5,run:true,unnatural:true,state:8});
+  const before=a.b.root.position.clone();
+  let head=a.rig.wp(a.b.head);
+  a.update(1/60,{speed:5,crawl:true,unnatural:true,state:8});
+  crawlJump=a.b.root.position.distanceTo(before);
+  crawlHeadJump=a.rig.wp(a.b.head).distanceTo(head);
+  for(let i=0;i<18;i++){
+    head=a.rig.wp(a.b.head);
+    a.update(1/60,{speed:5,crawl:true,unnatural:true,state:8});
+    crawlHeadPeak=Math.max(crawlHeadPeak,a.rig.wp(a.b.head).distanceTo(head));
+  }
+}
+console.log({freezeJump,grabJump,crawlJump,crawlHeadJump,crawlHeadPeak});
+assert.ok(freezeJump<.08,'freeze holds the existing stride instead of jumping the feet to a different phase');
+assert.ok(grabJump<.12,'all grab holds ease from the actual reaching arm pose');
+assert.ok(crawlJump<.10,'upright-to-crawl blends the pelvis without a one-frame drop');
+assert.ok(crawlHeadJump<.12 && crawlHeadPeak<.25,'the head eases into crawling without snapping forward on the first frame');
+console.log('  ok  freeze, all grab holds and crawl transitions have bounded first-frame movement');
+
 const natural = new HeliumAnimator(character()), unnatural = new HeliumAnimator(character());
 for (let i = 0; i < 240; i++) {
   const pose = { speed: 0, lookYaw: 0.8, yaw: 0, state: 4 };

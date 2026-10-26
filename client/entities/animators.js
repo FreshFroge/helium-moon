@@ -81,7 +81,7 @@ export class HeliumAnimator {
     this.speed = 0; this.accel = 0; this.turn = 0; this.lastYaw = null; this.torsoYaw = 0;
     this.blend = { walk: 0, run: 0, crouch: 0, reach: 0, still: 0, stalk: 0, crawl: 0, windup: 0, strike: 0, hang: 0, dead: 0, peek: 0, grab: 0, limp: 0, rigid: 0 };
     this.wasFrozen = false; this.frozenMoving = 0; this.peekSide = 1; this.grabKind = 0; this.grabPhase = 0; this.sideLean = 0;
-    this.hands = {};
+    this.hands = {}; this.grabArms = {}; this.peekLow = 0; this.crawlV = 0;
   }
 
   // MakeHuman's thigh, shin and arms each contain intermediate bones. Aim the
@@ -139,15 +139,15 @@ export class HeliumAnimator {
       1 - Math.exp(-dt * 12));
     const frozen = !!(creature && p.frozen);
     if (frozen && !this.wasFrozen) {
-      // caught mid-stride; standing, he is caught with one foot off the ground
-      const m = clamp(this.speed / 0.5, 0, 1);
-      this.frozenMoving = Math.max(m, 0.8);
-      // held with one foot off the ground: snap to the nearer mid-swing point of the cycle
-      this.phase = Math.abs(((this.phase - 0.8 + 1.5) % 1) - 0.5) < Math.abs(((this.phase - 0.3 + 1.5) % 1) - 0.5) ? 0.8 : 0.3;
+      // Hold the stride that was actually visible. Rephasing and lifting the
+      // foot on this frame made a deliberate freeze look like a broken clip.
+      this.frozenMoving = clamp(this.speed / 0.5, 0, 1);
+      this.frozenRun = this.blend.run;
     }
     this.wasFrozen = frozen;
     if (p.grab && p.grab !== this.grabKind) this.grabKind = p.grab;
-    this.grabPhase = p.grabPhase || 0;
+    if (p.grabPhase) this.grabPhase = p.grabPhase;
+    this.peekLow = lerp(this.peekLow, p.peek === 2 ? 1 : 0, 1-Math.exp(-dt*8));
     if (p.peek && !B.peek) this.peekSide = (Math.floor(this.t * 7.3) % 2) ? 1 : -1;
     const oldSpeed = this.speed;
     if (!frozen) this.speed = lerp(this.speed, sp, 1 - Math.exp(-dt * 9));
@@ -159,8 +159,8 @@ export class HeliumAnimator {
       }
       this.lastYaw = p.yaw;
     } else this.turn = lerp(this.turn, 0, k);
-    B.walk = lerp(B.walk, clamp(sp / 1.4, 0, 1), k);
-    B.run = lerp(B.run, p.run ? 1 : 0, 1 - Math.exp(-dt * 4));
+    B.walk = lerp(B.walk, clamp((frozen ? this.speed : sp) / 1.4, 0, 1), k);
+    B.run = lerp(B.run, frozen ? this.frozenRun : p.run ? (creature?clamp(this.speed/3,0,1):1) : 0, 1 - Math.exp(-dt * 4));
     B.crouch = lerp(B.crouch, p.crouch || 0, k);
     B.reach = lerp(B.reach, p.reach || 0, 1 - Math.exp(-dt * 10));
     // attack (owner): arms thrown up and back while he screams, then a fast swing down at you
@@ -169,7 +169,13 @@ export class HeliumAnimator {
     B.still = lerp(B.still, p.still ? 1 : 0, 1 - Math.exp(-dt * 8));
     const stalking = creature && !p.run && (p.state === 3 || p.state === 4 || p.state === 7 || p.state === 9);
     B.stalk = lerp(B.stalk, stalking ? 1 : 0, k);
-    B.crawl = lerp(B.crawl, creature && p.crawl ? 1 : 0, 1 - Math.exp(-dt * 22));
+    // Critically damp the full-body transition: it starts with zero velocity
+    // instead of throwing the head forward on the first crawl frame.
+    const crawlTarget=creature&&p.crawl?1:0,offset=B.crawl-crawlTarget;
+    const spring=(this.crawlV+18*offset)*dt,decay=Math.exp(-18*dt);
+    this.crawlV=(this.crawlV-18*spring)*decay;
+    const crawl=crawlTarget+(offset+spring)*decay;
+    B.crawl=clamp(crawl,0,1);if(B.crawl!==crawl)this.crawlV=0;
     B.hang = lerp(B.hang, creature && p.still && !frozen && sp < 0.3 && !p.grab ? 1 : 0, 1 - Math.exp(-dt * 3));
     // worn: dead arms, rigid torso (upright run, backing away, stalking upright)
     B.dead = lerp(B.dead, creature && !p.crawl && (p.run || p.back || stalking) ? 1 : 0, k);
@@ -179,7 +185,8 @@ export class HeliumAnimator {
     B.rigid = lerp(B.rigid, creature && p.rigid ? 1 : 0, 1 - Math.exp(-dt * 8));
     const stride = lerp(0.66, 1.1, B.run) * (1 - 0.08 * B.stalk) * (1 + 0.32 * B.dead * B.run);
     // backing away: the gait runs in reverse; frozen: the pose holds exactly where it was
-    if (sp > 0.02 && !frozen) this.phase = (this.phase + (p.back ? -1 : 1) * dt * sp / (stride * 2) + 1) % 1;
+    const phaseSpeed=creature?this.speed:sp;
+    if (phaseSpeed > 0.02 && !frozen) this.phase = (this.phase + (p.back ? -1 : 1) * dt * phaseSpeed / (stride * 2) + 1) % 1;
     rig.reset();
     const moving = frozen ? this.frozenMoving : clamp(this.speed / 0.5, 0, 1);
     const free = 1 - B.still;
@@ -197,7 +204,7 @@ export class HeliumAnimator {
     b.root.position.x = b.root.userData.restPos.x + weight + Math.sin(cycle) * 0.012 * B.walk * creature * free - this.sideLean * 0.08;
     b.root.position.y = b.root.userData.restPos.y - 0.04 * B.walk - 0.15 * B.run - (creature ? 0.22 : 0.60) * B.crouch + bob + 0.055 * B.hang - 0.3 * B.limp;
     // leaning out from behind a trunk
-    b.root.position.x += this.peekSide * 0.16 * B.peek * (p.peek === 2 ? 0.6 : 1);
+    b.root.position.x += this.peekSide * 0.16 * B.peek * lerp(1,.6,this.peekLow);
     if (p.ground) {
       // Lower the pelvis toward the downhill support rather than stretching
       // the downhill leg or leaving its foot suspended above the terrain.
@@ -210,7 +217,7 @@ export class HeliumAnimator {
     this.torsoYaw = lerp(this.torsoYaw, clamp((p.lookYaw || 0) * 0.22, -0.3, 0.3) * creature,
       1 - Math.exp(-dt * (p.still ? 0.7 : 1.7)));
     const gaitYaw = Math.sin(cycle) * 0.035 * moving * free;
-    const peekRoll = this.peekSide * B.peek * (p.peek === 2 ? 0.09 : 0.14);
+    const peekRoll = this.peekSide * B.peek * lerp(.14,.09,this.peekLow);
     for (const n of ['spine05', 'spine04', 'spine03', 'spine02']) {
       b[n].quaternion.setFromEuler(_e.set(lean / 4 + breathe * 0.3,
         this.torsoYaw / 5 + gaitYaw * (1 - B.dead),
@@ -248,7 +255,7 @@ export class HeliumAnimator {
         fy = Math.sin(Math.PI * t) * (0.09 + 0.16 * B.run);
         roll = -0.12 * Math.sin(Math.PI * t);
       }
-      fz *= moving; fy *= moving * (frozen ? 2.6 : 1); foot.roll = roll * moving + 0.5 * B.hang;
+      fz *= moving; fy *= moving; foot.roll = roll * moving + 0.5 * B.hang;
       fy += 0.06 * B.hang;
       const hip = rig.wp(b['upperleg01.' + s]);
       // Ankle targets stay on the support plane while pelvis/chest shift above
@@ -291,8 +298,11 @@ export class HeliumAnimator {
       }
       if (B.grab > 0.01) {
         const [gu, gf] = this._grabArm(sign);
-        up.lerp(gu, B.grab).normalize(); fore.lerp(gf, B.grab).normalize();
-      }
+        const pose=this.grabArms[s] ||= {up:up.clone(),fore:fore.clone()};
+        const grip=1-Math.exp(-dt*9);
+        pose.up.lerp(gu,grip).normalize();pose.fore.lerp(gf,grip).normalize();
+        up.lerp(pose.up, B.grab).normalize(); fore.lerp(pose.fore, B.grab).normalize();
+      } else this.grabArms[s]=null;
       if (B.limp > 0.01) {          // gone limp: arms flung out, loose
         up.lerp(_v3.set(0.8 * sign, -0.35, 0.45).normalize(), B.limp).normalize();
         fore.lerp(_v3.set(0.55 * sign, -0.5, 0.65).normalize(), B.limp).normalize();
@@ -306,7 +316,7 @@ export class HeliumAnimator {
       this._aimSegment(b['lowerarm01.' + s], L.foreDir, fore);
       rig.aim(b['wrist.' + s], fore);
     }
-    if (B.crawl > 0.001) this._reverseCrawl(B.crawl, sp, p, !p.reverseCrawl);
+    if (B.crawl > 0.001) this._reverseCrawl(B.crawl, this.speed, p, !p.reverseCrawl);
   }
 
   // grab arm directions (skeleton space; +Z is toward the victim). sign: +1 left arm, -1 right

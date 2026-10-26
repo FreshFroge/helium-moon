@@ -66,10 +66,10 @@ export class HeliumView {
     this.anim = new HeliumAnimator(this.char);
     this.head = this.char.bones.head;
     this.pos = new THREE.Vector3(); this.state = 0; this.flags = 8; this.speed = 0; this.yaw = 0;
-    this.stepAcc = 0;
+    this.stepAcc = 0; this.supportBlend = 1;
     this.ground = (x, z) => {
       const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
-      return groundAt(this.world, this.pos.x + c * x + s * z, this.pos.z - s * x + c * z) - this.pos.y;
+      return (groundAt(this.world, this.pos.x + c * x + s * z, this.pos.z - s * x + c * z) - this.pos.y)*this.supportBlend;
     };
   }
   // s: [x,y,z,yaw,lookYaw,lookPitch,speed,flags,tilt,jaw,stateIdx, grabKind,grabPhase,peek]
@@ -79,35 +79,47 @@ export class HeliumView {
   update(dt, s, camPos = null) {
     if (!s) { this.root.visible = false; return; }
     const [x, y, z, yaw, lookYaw, lookPitch, speed, flags, tilt, jaw, st] = s;
+    const wasVisible = this.root.visible;
     this.flags = flags; this.state = st; this.speed = speed;
     this.root.visible = !(flags & 8);
     // Always update at the render cadence.  His unnatural movement comes from the animation,
     // not an artificial low-frame-rate effect.
-    const step = dt;
+    const step = Math.max(0,Math.min(dt,.1));
     const prev = this.pos.clone();
-    this.pos.set(x, y, z); this.yaw = yaw;
+    this.pos.set(x, y, z);
+    const reset=!wasVisible || prev.distanceToSquared(this.pos)>64;
+    // Keep authoritative/interpolated positions exact. Ease just the rendered
+    // heading so a fresh route or an angle wrap cannot whip the whole rig.
+    if(reset)this.yaw=yaw;
+    else this.yaw+=clamp(angleDiff(this.yaw,yaw)*(1-Math.exp(-step*14)),-12*step,12*step);
     this.root.position.copy(this.pos);
-    this.root.rotation.y = yaw;
+    this.root.rotation.y = this.yaw;
     this.moved = prev.distanceTo(this.pos);
     // whole-body tip about his feet: goes limp (falls forward), lying flat, the plank rise
     const collapse = !!(flags & 256), prone = !!(flags & 512), rise = !!(flags & 1024);
     const concealedLie = prone && !rise;
     for (const entry of this.lieMaterials) entry.material.color.copy(entry.color).multiplyScalar(concealedLie ? 0.42 : 1);
-    if (rise) { this.riseT = (this.riseT ?? 0) + step; } else this.riseT = null;
+    if (rise) {
+      if(this.riseT==null){
+        this.riseT=0;this.riseFrom=reset?Math.PI/2*.97:(this.tip||0);
+      }
+      this.riseT+=step;
+    } else this.riseT = null;
     let tipTo = 0;
     if (collapse || prone) tipTo = Math.PI / 2 * 0.97;
-    if (rise) { const u = clamp(this.riseT / CONFIG.HV.RISE_TIME, 0, 1); tipTo = Math.PI / 2 * 0.97 * (1 - u * u * (3 - 2 * u)); this.tip = tipTo; }
+    if (rise) { const u = clamp(this.riseT / CONFIG.HV.RISE_TIME, 0, 1); tipTo = this.riseFrom * (1 - u * u * (3 - 2 * u)); this.tip = tipTo; }
     else if (collapse) { this.tipV = (this.tipV || 0) + step * 9; this.tip = Math.min(tipTo, (this.tip || 0) + this.tipV * step); }   // drops, accelerating
     else { this.tipV = 0; this.tip = lerp(this.tip || 0, tipTo, 1 - Math.exp(-step * (prone ? 12 : 6))); }
-    this.root.rotation.set(this.tip, yaw, 0, 'YXZ');
+    this.root.rotation.set(this.tip, this.yaw, 0, 'YXZ');
     const tipped = this.tip > 0.05;
+    this.supportBlend=1-clamp((this.tip-.03)/.17,0,1);
     if (this.root.visible) {
       this.anim.update(step, { speed: tipped ? 0 : speed, run: !!(flags & 1), reach: flags & 2 ? 1 : 0, still: !!(flags & 4), crawl: !!(flags & 16),
         frozen: !!(flags & 128), back: !!(flags & 4096), limp: collapse, rigid: prone || rise,
         grab: flags & 2048 ? (s[11] || 1) : 0, grabPhase: s[12] || 0, peek: s[13] || 0,
         crouch: s[13] === 2 ? 0.85 : (flags & 2048 && s[11] === 5 && s[12] === 2) ? 0.55 : collapse ? 0.9 : 0,
-        lookYaw: angleDiff(yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw, state: st,
-        ground: this.world && !tipped ? this.ground : null });
+        lookYaw: angleDiff(this.yaw, lookYaw), lookPitch: -lookPitch, tilt, jaw, armSwing: 0.04, snap: !!(flags & 4), unnatural: true, yaw:this.yaw, state: st,
+        ground: this.world ? this.ground : null });
     }
   }
   headPos(out = new THREE.Vector3()) { this.root.updateMatrixWorld(true); return this.head.getWorldPosition(out); }
