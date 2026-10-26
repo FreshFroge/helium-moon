@@ -96,7 +96,11 @@ Headphones strongly recommended. Chrome, Edge or Firefox with hardware accelerat
 
 ## Controls
 
-WASD move · Shift sprint · C / Ctrl crouch · Space jump · E interact (hold to repair / revive) · F lighter · Q / R hold to lean left / right (release to center) · X camouflage blanket (hold while crouched and still, if carried) · Tab field map, supply register, objectives & notes (hold) · V push-to-talk · Enter text chat · Esc pause · F3 performance overlay. All keys can be rebound in Settings → Controls.
+WASD move · Shift sprint · C / Ctrl crouch · Space jump · E interact (hold to repair / revive) · F lighter · Q / R hold to lean left / right (release to center) · X camouflage blanket (hold while crouched and still, if carried) · G throw a pebble (unlimited; 20-second cooldown; search distraction only) · Tab field map, supply register, objectives & notes (hold) · V push-to-talk · Enter text chat · Esc pause · F3 performance overlay. All keys can be rebound in Settings → Controls.
+
+Pebbles draw Helium toward the place they land while he is searching. Aim away
+from your hiding place. They cannot interrupt an attack rush, and being seen or
+heard still gives you away. Missed or blocked throws do not extend the hunt.
 
 Read the kiosk memo for this session's gas-can and fuse-kit locations. The field
 map marks the trail, landmarks and your position. Repairs have three steps;

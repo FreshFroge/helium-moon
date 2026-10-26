@@ -11,6 +11,7 @@ import { clamp, lerp, smoothstep } from '../../shared/math.js';
 import { horrorCues, distanceGain, creatureFootstepCue, teammateFootstepCue, skunkVocalCue } from '../../shared/horror.js';
 import { SURFACE } from '../../shared/world.js';
 import { CONFIG } from '../../shared/config.js';
+import { groundAt } from '../../shared/physics.js';
 
 const SURF_NAME = { [SURFACE.LITTER]: 'litter', [SURFACE.DIRT]: 'dirt', [SURFACE.MUD]: 'mud', [SURFACE.GRASS]: 'grass', [SURFACE.SILT]: 'silt', [SURFACE.WATER]: 'water', [SURFACE.GRAVEL]: 'gravel', [SURFACE.WOOD]: 'wood', [SURFACE.ASPHALT]: 'asphalt' };
 // Keep Helium Voice nonverbal.  The server only requests these three sounds, and
@@ -68,6 +69,7 @@ export class AudioEngine {
     // the Puppet: joints, crawl, knuckles, the collapse and the grab
     for (let i = 0; i < 4; i++) { add('pop' + i, () => S.jointPop(200 + i)); add('crawl' + i, () => S.crawlPatter(210 + i)); }
     for (let i = 0; i < 4; i++) add('searchCrack' + i, () => S.searchJointCrack(240 + i));
+    for (let i = 0; i < 3; i++) add('pebble' + i, () => S.pebbleImpact(300 + i));
     for (let i = 0; i < 3; i++) { add('knuckle' + i, () => S.knuckleWood(220 + i)); }
     for (let i = 0; i < 2; i++) { add('bodyDrop' + i, () => S.bodyDrop(250 + i)); add('cloth' + i, () => S.clothGrab(260 + i)); add('choke' + i, () => S.choke(270 + i)); }
     for (let i = 0; i < 3; i++) { add('deerBlow' + i, () => S.deerBlow(40 + i)); add('owlHoot' + i, () => S.owl(50 + i)); add('wings' + i, () => S.wingFlap(60 + i)); }
@@ -416,6 +418,14 @@ export class AudioEngine {
       range: { fadeStart: C.SEARCH_CRACK_FADE_START, maxDistance: C.SEARCH_CRACK_MAX_DISTANCE },
       rate: .94 + ((seed >>> 2) % 9) * .015,
     });
+  }
+
+  pebbleImpact(pos,seed) {
+    const water=this.world?.waterAt(pos.x,pos.z);
+    if(water!=null&&water>groundAt(this.world,pos.x,pos.z)+.02)
+      return this.play(this.pick('fs_water',4,seed),{pos,bus:'sfx',gain:.16,rate:1.6,ref:3,reverb:.06,range:{fadeStart:8,maxDistance:24}});
+    return this.at('pebble'+((Number(seed)>>>0)%3),pos,{bus:'sfx',gain:.55,ref:3,rolloff:.8,reverb:.08,
+      range:{fadeStart:8,maxDistance:24}});
   }
 
   at(name, pos, o = {}) { return this.play(this.lib[name], { pos, ...o }); }

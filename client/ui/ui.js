@@ -53,6 +53,8 @@ export class UI {
     const mk = (id, cls = '') => { const d = document.createElement('div'); d.id = id; if (cls) d.className = cls; hud.appendChild(d); return d; };
     this.el.mic = mk('mic-ind', 'hidden');
     this.el.intro = mk('intro');
+    this.el.pebble=mk('pebble-tool');
+    this.el.pebble.title='Throw a pebble where you are looking. Unlimited pebbles; 20 seconds between throws. Distracts Helium only during search.';
     this.el.note = document.createElement('div'); this.el.note.id = 'note'; this.el.note.className = 'hidden'; document.body.appendChild(this.el.note);
   }
 
@@ -107,6 +109,7 @@ export class UI {
         <tr><td>${k('crouch')} / ${k('crouchAlt')}</td><td>Crouch — quieter; crouch still in thick brush to hide</td></tr>
         <tr><td>${k('leanLeft')} / ${k('leanRight')}</td><td>Hold to lean left / right around cover; release to center</td></tr>
         <tr><td>${k('camouflage')}</td><td>Camouflage blanket — crouch, stay still, and switch off the light</td></tr>
+        <tr><td>${k('pebble')}</td><td>Throw a pebble where you look — search distraction, unlimited, 20-second cooldown</td></tr>
         <tr><td>${k('jump')}</td><td>Jump</td></tr>
         <tr><td>${k('interact')}</td><td>Interact · hold to repair / revive</td></tr>
         <tr><td>${k('flashlight')}</td><td>Lighter (flick on / let go)</td></tr>
@@ -121,6 +124,7 @@ export class UI {
         <li>Unexplained cold is the approach warning within about ${CONFIG.TERROR.OUTER} m. His footsteps are only audible within about 8 feet.</li>
         <li>He does not like being watched or lit. Keep your light on him — but don't count on it.</li>
         <li>Sprinting, working on loud machinery and talking carry far. Silence makes him curious instead of certain.</li>
+        <li>During his search, toss a pebble away from your hiding place to draw him toward its landing sound. He can still spot you; pebbles do not stop an attack rush.</li>
         <li>Stay away from low brush near water. If the air smells like a struck match, back off.</li>
         <li>If you hear your own voice in the trees behind you, it is not you.</li>
       </ul>
@@ -409,6 +413,18 @@ export class UI {
     this.el.team.innerHTML = list.map((p) => `<div class="mate ${p.state} ${p.talking ? 'talking' : ''}"><span class="sw" style="background:${p.color}"></span>${esc(p.name)}${p.me ? ' <span class="dim">(you)</span>' : ''}<span class="st">${{ alive: '', downed: 'DOWN', dead: 'DEAD', escaped: 'OUT' }[p.state] || ''}</span></div>`).join('');
   }
 
+  pebble(remaining,available) {
+    const seconds=Math.ceil(Math.max(0,remaining-.01)),key=this.s.keyName(this.s.bindings.pebble);
+    const state=seconds?`${seconds}s`:available?'Ready':'Unavailable';
+    const stamp=`${key}:${state}`;
+    if(this._pebbleStamp!==stamp){
+      this._pebbleStamp=stamp;
+      this.el.pebble.innerHTML=`<kbd>${esc(key)}</kbd><span><b>PEBBLE</b><small>${esc(state)} · unlimited</small></span><i><em></em></i>`;
+      this.el.pebble.classList.toggle('unavailable',!available||seconds>0);
+    }
+    this.el.pebble.querySelector('em').style.height=`${Math.round(Math.max(0,1-remaining/CONFIG.PEBBLE.COOLDOWN)*100)}%`;
+  }
+
   toast(text, ms = 3000) {
     const el = this.el.toast;
     clearTimeout(this._toastT);
@@ -440,6 +456,7 @@ export class UI {
       <div class="inv-grid"><div><span class="dim">Team carries</span><br>${d.team.fuel ? 'Gas can' : '<span class="dim">—</span>'}${d.team.fuse ? '<br>Fuse kit' : ''}</div>
       <div><span class="dim">Lighter fuel</span><br>${Math.round(d.battery * 100)}%</div><div><span class="dim">Air temperature</span><br>${d.temp.toFixed(1)}°C</div><div><span class="dim">Time</span><br>${m}:${sec}</div></div>
       ${d.blanket?`<p class="map-key">Camouflage blanket carried · crouch, lighter off, hold ${esc(this.s.keyName(this.s.bindings.camouflage))} while still.</p>`:''}
+      <p class="map-key">${esc(this.s.keyName(this.s.bindings.pebble))} · unlimited pebbles · ${d.pebbleRemaining>0?`ready in ${Math.ceil(d.pebbleRemaining)}s`:'ready'} · distracts Helium only while searching. Aim away from your hiding place.</p>
       <h3>Notes</h3>${d.notes.length ? d.notes.map((n) => `<details><summary>${esc(n.title)}</summary><p>${esc(n.text).replace(/\n/g, '<br>')}</p></details>`).join('') : '<p class="dim">None yet.</p>'}`;
     el.classList.remove('hidden');
   }

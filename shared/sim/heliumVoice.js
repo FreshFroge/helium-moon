@@ -28,7 +28,7 @@ export class HeliumVoiceAI {
     this.anim = { run: 0, reach: 0, still: 0, tilt: 0, jaw: 0, crouch: 0, windup: 0, strike: 0, frozen: 0, low: 0, collapse: 0, prone: 0, rise: 0, back: 0, grab: 0, peek: 0 };
     this.grab = null; this.freeze = null; this.lbUntil = -1; this.lbNext = -1; this.lbWatched = false; this.lowPose = false;
     this.sigT = -999; this.vocalT = -999; this.chaseT = 0; this.attackT = -999;
-    this.observedT = 0; this.litT = 0; this.watchDur = 6; this.reveal = null;
+    this.observedT = 0; this.litT = 0; this.watchDur = 6; this.reveal = null;this.observers=[];
     this.searchPts = []; this.stimulus = null; this.lastRetreatT = -999; this.falseRetreat = false;
     this.snapT = 0;
     this.closeCommitted = false;
@@ -53,6 +53,7 @@ export class HeliumVoiceAI {
 
   setState(s, info) {
     if(s==='chase' && (this.withdrawal || this.sim.time<(this.sim.director?.nextChaseAt||0)))return false;
+    this.pebbleDecoy=null;
     this.state = s; this.stateT = 0; this.path = null; this.goal = null; this.finalGoal = null;
     this.avoidHeading = null; this.avoidSign = 0; this.avoidT = 0; this.routeProgress = null;
     if (s !== 'retreat') this.fleeAfterGrab = false;
@@ -140,6 +141,7 @@ export class HeliumVoiceAI {
 
   onSpotted(p) {
     const sim = this.sim;
+    if(this.pebbleDecoy&&this.lastSeen.get(p.id)?.t!==sim.time)return;
     if (this.withdrawal || this.fastRetreat || this.fleeAfterGrab || this.state === 'chase' || this.state === 'reveal' || this.state === 'lie' || this.state === 'collapse') return;
     this.target = p.id;
     if (this.concealedAt(this.x, this.z)) this.setState('still', { stillFor: this.rng.range(2, 4.5) });
@@ -451,6 +453,9 @@ export class HeliumVoiceAI {
     this.stateT += dt;
     if (this.state === 'dormant') { this.stop(dt); return; }
     this.perceive(dt);
+    if(this.pebbleDecoy&&sim.time>=this.pebbleDecoy.until){
+      this.pebbleDecoy=null;this.path=null;this.huntSearchGoal=null;this.replanT=0;
+    }
     // Withdrawal survives cover, loss of the target and any incidental state
     // request. Only real physical travel can complete it.
     if(this.withdrawal && this.state!=='retreat')this.setState('retreat',{fastRetreat:true});
@@ -469,6 +474,7 @@ export class HeliumVoiceAI {
     anim.run = 0; anim.reach = 0; anim.still = 0; anim.windup = 0; anim.strike = 0;
     anim.frozen = 0; anim.low = 0; anim.collapse = 0; anim.prone = 0; anim.rise = 0; anim.back = 0; anim.grab = 0; anim.peek = 0;
     let lookP = tp && playerAlive(tp) && (this.awareness.get(tp.id) || 0) > 0.6 ? tp : null;
+    if(this.pebbleDecoy)lookP=null;
     const watched = this.observers.length > 0;
     // Puppet (docs/HV_PUPPET_REWORK.md): unwatched he is "operated" - low and faster
     this.operated = !watched && (this.state === 'roam' || this.state === 'stalk' || this.state === 'investigate');
@@ -701,9 +707,12 @@ export class HeliumVoiceAI {
         const concealed = this.dist(tp) > C.HIDE_MIN_DIST && this.hidden(tp);
         const vis = concealed ? 0 : sightOf(this.world, this, EYE, this.lookYaw, tp, C);
         if (vis > 0.02) {
+          this.pebbleDecoy=null;
           this.lastSeenChase = { x: tp.x, z: tp.z, t: sim.time };
           this.huntContactAt = sim.time; this.huntSearchGoal = null;
-        } else if (this.stimulus?.pid === tp.id && this.stimulus.t > (this.huntHeardAt ?? this.huntStartedAt)) {
+        } else if (this.stimulus?.pid === tp.id && this.stimulus.t > (this.huntHeardAt ?? this.huntStartedAt)
+            && (!this.pebbleDecoy||this.stimulus.t>=this.pebbleDecoy.t)) {
+          this.pebbleDecoy=null;
           // Hearing reveals an approximate source, never the player's current position.
           this.huntHeardAt = this.stimulus.t;
           this.lastSeenChase = { x: this.stimulus.x, z: this.stimulus.z, t: this.stimulus.t };
@@ -752,6 +761,13 @@ export class HeliumVoiceAI {
         break;
       }
       case 'search': {
+        if(this.pebbleDecoy){
+          const decoy=this.pebbleDecoy;
+          const sight=tp&&this.lastSeen.get(tp.id)?.t>=decoy.t;
+          const sound=this.stimulus&&this.stimulus.t>=decoy.t&&this.stimulus.loud>.25;
+          if(sight||sound){this.pebbleDecoy=null;this.path=null;this.huntSearchGoal=null;}
+          else{this.updateHuntSearch(dt,tp);this.lookAtPoint(decoy.x,decoy.y,decoy.z);break;}
+        }
         const c = this.searchAt;
         if (!this.searchPts.length && this.stateT < 1) {
           for (let k = 0; k < 4; k++) { const a = this.rng.range(0, 6.28), r = this.rng.range(4, 16); this.searchPts.push([c.x + Math.sin(a) * r, c.z + Math.cos(a) * r]); }
@@ -823,6 +839,31 @@ export class HeliumVoiceAI {
 
   isSearching() {
     return this.state === 'search' || (this.state === 'chase' && this.huntPhase === 'search');
+  }
+
+  canHearPebble(){
+    const sim=this.sim;
+    if(this.withdrawal||this.fleeAfterGrab||this.fastRetreat||this.grab||!['play','extract'].includes(sim.state))return false;
+    if(this.state!=='search'&&!(this.state==='chase'&&this.huntPhase==='search'
+        &&sim.time>=this.huntHideUntil&&sim.time<this.huntEndsAt))return false;
+    // A phase flag alone is insufficient: clear discovery/rush memory wins.
+    const target=sim.players.get(this.target);
+    const concealed=target&&this.dist(target)>C.HIDE_MIN_DIST&&this.hidden(target);
+    if(this.state==='chase'&&!concealed&&sim.time-(this.huntContactAt??-999)<C.HUNT_CONTACT_MEMORY)return false;
+    for(const p of sim.playerList){
+      if(!playerActive(p))continue;
+      if(this.dist(p)>C.HIDE_MIN_DIST&&this.hidden(p))continue;
+      if(sightOf(this.world,this,EYE,this.lookYaw,p,C)>.02)return false;
+    }
+    return true;
+  }
+
+  hearPebble(at){
+    if(!this.canHearPebble()||![at.x,at.y,at.z].every(Number.isFinite)
+        ||Math.hypot(at.x-this.x,at.y-this.y-EYE,at.z-this.z)>CONFIG.PEBBLE.HEAR_RANGE)return false;
+    this.pebbleDecoy={x:at.x,y:at.y,z:at.z,t:this.sim.time,until:this.sim.time+CONFIG.PEBBLE.DISTRACTION_TIME};
+    this.path=null;this.huntSearchGoal=null;this.huntSearchedAt=-Infinity;this.replanT=0;
+    return true;
   }
 
   resetSearchSound() {
@@ -993,7 +1034,7 @@ export class HeliumVoiceAI {
   updateHuntSearch(dt, tp) {
     this.anim.run = 0; this.anim.low = 0; this.huntStall = null;
     this.lbWatched = false;
-    const known = this.lastSeenChase;
+    const known = this.pebbleDecoy||this.lastSeenChase;
     if (!known) { this.stop(dt); return; }
     this.replanT -= dt;
     // First examine the last sight/sound. Then check separate points around it, stop

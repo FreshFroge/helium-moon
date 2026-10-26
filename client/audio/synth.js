@@ -212,6 +212,21 @@ export function searchJointCrack(seed) {
   return fade(normalize(out, .78), SR, .008, .04);
 }
 
+// A small stone landing in leaf litter: a dry tick, grit, then two quieter
+// settling taps. Deliberately less weight than a footstep or creature impact.
+export function pebbleImpact(seed) {
+  const r=rngFor(seed),out=new Float32Array(N(.32));
+  for(const [at,gain] of [[0,1],[.074,.32],[.139,.12]]){
+    const len=N(.055),offset=N(at),grit=filter(noise(len,r),'bp',r.range(1700,2900),1.3,SR);
+    const fundamental=r.range(850,1250);
+    for(let i=0;i<len;i++){
+      const t=i/SR;
+      out[offset+i]+=(grit[i]*.5+Math.sin(TAU*fundamental*t)*.32)*Math.exp(-t*105)*gain;
+    }
+  }
+  return fade(normalize(out,.65),SR,.0005,.035);
+}
+
 // hands and feet scuttling through leaf litter: a quick, uneven four-beat patter
 export function crawlPatter(seed) {
   const r = rngFor(seed), out = new Float32Array(N(0.42));

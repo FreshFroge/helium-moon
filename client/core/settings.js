@@ -9,6 +9,7 @@ export const DEFAULT_BINDINGS = {
   interact: 'KeyE', flashlight: 'KeyF', inventory: 'Tab', chat: 'Enter', talk: 'KeyV',
   leanLeft: 'KeyQ', leanRight: 'KeyR',
   camouflage: 'KeyX',
+  pebble: 'KeyG',
 };
 
 export const BINDING_LABELS = {
@@ -17,6 +18,7 @@ export const BINDING_LABELS = {
   flashlight: 'Lighter', inventory: 'Objectives & notes', chat: 'Text chat', talk: 'Push to talk',
   leanLeft: 'Lean left', leanRight: 'Lean right',
   camouflage: 'Use camouflage blanket',
+  pebble: 'Throw a pebble (search distraction)',
 };
 
 const DEFAULTS = {

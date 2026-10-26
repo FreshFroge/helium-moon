@@ -163,6 +163,18 @@ function debugCmd(room, member, m) {
   else if (m.cmd === 'down' && p) { for (let k = 0; k < 8 && p.state === 'alive'; k++) sim.damagePlayer(p, 'hv', p); }
   else if (m.cmd === 'mimic') sim.mimic.force(m.listener || member.id, m.owner || member.id);
   else if (m.cmd === 'tp' && p) { p.x = +m.x; p.z = +m.z; p.lastX = p.x; p.lastZ = p.z; }
+  else if(m.cmd==='pebble_phase'&&p&&['search','stalk'].includes(m.phase)){
+    // Explicit test-mode fixture: real authoritative actions/flight/cooldowns,
+    // with enemy movement frozen so two browsers can isolate distraction rules.
+    sim.time=Math.max(400,sim.time);sim.state='play';
+    const hv=sim.hv,w=sim.world,i=w.nearestNav(p.x+12,p.z+4,20);
+    if(i>=0){const [x,z]=w.cellPos(i);hv.place(x,z);}
+    hv.target=p.id;hv.setState('chase');hv.huntPhase=m.phase;
+    hv.huntHideUntil=sim.time+(m.phase==='stalk'?20:0);hv.huntEndsAt=sim.time+60;
+    hv.huntContactAt=-999;hv.lastSeenChase={x:p.x,z:p.z,t:sim.time};
+    hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z)+Math.PI;
+    hv.update=sim.sf.update=sim.mimic.update=sim.director.update=()=>{};
+  }
   log(`[debug] ${room.code} ${m.cmd}`);
 }
 

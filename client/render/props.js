@@ -57,6 +57,9 @@ export function makePropMaterials(T) {
     yellow: std({ color: 0xb08a1c, roughness: 0.55, metalness: 0.2 }, 'yellow'),
     stone: std({ map: T.concrete_c, roughness: 0.95, color: 0x8a8278 }, 'stone'),
     pole: std({ map: T.bark_oak_c, roughness: 0.95, color: 0x6b6054 }, 'pole'),
+    roof: std({ map:T.metal_c,normalMap:T.corrugated_n,roughness:.88,metalness:.18,color:0x35423c },'arrivalroof'),
+    planting:std({color:0x4e6041,roughness:1,side:THREE.DoubleSide},'arrivalplanting'),
+    bronze:std({color:0x5c5748,roughness:.72,metalness:.6},'arrivalbronze'),
   };
 }
 
@@ -123,24 +126,142 @@ export class Props {
   }
 
   _kiosk(o, B) {
-    for (const x of [-1.25, 1.25]) B.add('woodDark', boxUV(0.16, 2.9, 0.16), this.W(o, x, 1.45, 0));
-    B.add('woodDark', boxUV(3.1, 0.08, 1.2), this.W(o, 0, 2.95, 0, 0, 0.18));
+    // Open timber visitor shelter. Its columns frame the arrival space rather
+    // than occupying the player's first walking line or cutting across the view.
+    const ground=(x,z)=>{const p=new THREE.Vector3(x,0,z).applyMatrix4(M(o.x,0,o.z,o.rot));return this.world.heightAt(p.x,p.z)-o.y;};
+    for(const x of [-5.25,5.25])for(const z of [-.8,4.3]){
+      const gy=ground(x,z),h=3.18-gy;
+      B.add('stone',boxUV(.46,.16,.46),this.W(o,x,gy+.08,z));
+      B.add('woodDark',boxUV(.24,h,.24),this.W(o,x,gy+h/2,z));
+      for(const y of [gy+.22,2.91])B.add('bronze',boxUV(.28,.12,.28),this.W(o,x,y,z));
+      this._arrivalBeam(o,B,[x,2.3,z],[x-Math.sign(x)*.7,3.1,z],.11,'wood');
+      this._arrivalBeam(o,B,[x,2.4,z],[x,3.1,z+(z<0?.6:-.6)],.11,'wood');
+    }
+    for(const z of [-.8,4.3])B.add('woodDark',boxUV(10.95,.25,.24),this.W(o,0,3.18,z));
+    for(const x of [-5.25,5.25])B.add('woodDark',boxUV(.22,.24,5.55),this.W(o,x,3.18,1.75));
+    for(let z=-1.2;z<=4.8;z+=.74){
+      this._arrivalBeam(o,B,[-5.75,3.27,z],[0,4.05,z],.12,'wood');
+      this._arrivalBeam(o,B,[0,4.05,z],[5.75,3.27,z],.12,'wood');
+    }
+    for(const x of [-1,1]){
+      B.add('roof',boxUV(5.9,.065,6.4),this.W(o,x*2.875,3.69,1.75,0,0,-x*.135));
+      B.add('woodDark',boxUV(.14,.16,6.5),this.W(o,x*5.8,3.31,1.75));
+    }
+    B.add('bronze',boxUV(.22,.06,6.48),this.W(o,0,4.1,1.75));
+    // Board retains the existing maintenance memo anchor and collision plane.
+    B.add('woodDark',boxUV(2.9,1.73,.16),this.W(o,0,1.55,-.05));
     B.add('wood', boxUV(2.4, 1.3, 0.06), this.W(o, 0, 1.55, 0.03));
     for(const x of [-1.15,1.15])B.add('woodDark',boxUV(.075,1.38,.10),this.W(o,x,1.55,.09));
     for(const y of [.86,2.24])B.add('woodDark',boxUV(2.4,.075,.10),this.W(o,0,y,.09));
-    // A single sheltered, non-shadow-casting lamp makes this safe gathering point readable.
-    B.add('metal',boxUV(.42,.08,.28),this.W(o,0,2.68,.27));
-    const bulb=new THREE.Mesh(new THREE.PlaneGeometry(.32,.12),new THREE.MeshBasicMaterial({color:0xffd49b}));
-    bulb.applyMatrix4(this.W(o,0,2.63,.29,0,-Math.PI/2));this.group.add(bulb);
-    const light=new THREE.PointLight(0xffc68a,30,10,2);
-    light.name='trailhead-lantern';light.position.set(0,2.55,1.1).applyMatrix4(M(o.x,o.y,o.z,o.rot));
-    this.group.add(light);
+    B.add('wood',boxUV(2.7,.11,.28),this.W(o,0,.78,.14));
+    for(const x of [-1.28,1.28])for(const y of [.87,2.23])B.add('bronze',new THREE.SphereGeometry(.022,6,4),this.W(o,x,y,.14));
+    this._arrivalLabel(o,'STINCHCOMB  /  EAST TRAIL',6.8,.43,0,2.75,.08,'#304335','#e8dcc0');
+    this._arrivalLabel(o,'TRAIL MAP  ·  STAFF NOTICES',2.45,.19,0,2.35,.14,'#493e31','#e9dec6');
+    B.add('woodDark',boxUV(1.18,.6,.09),this.W(o,-2.65,1.55,.03));
+    for(const x of [-3.1,-2.2])B.add('bronze',boxUV(.018,1.34,.018),this.W(o,x,2.51,.025));
+    this._arrivalLabel(o,'LEAVE NO TRACE',1.05,.5,-2.65,1.55,.08,'#3c4938','#e1d8bf');
+    for(const z of [.95,3.4])this._arrivalLantern(o,B,z<2?'trailhead-lantern':'trailhead-shelter-light',0,2.95,z,z<2?44:24,9);
     const mat = patchMaterial(new THREE.MeshStandardMaterial({ map: this._mapBoardTexture(), roughness: .98, envMapIntensity: .15 }), { key: 'kioskmap' });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.15), mat);
     m.applyMatrix4(this.W(o, 0, 1.55, 0.065));
     m.receiveShadow = true;
     this.group.add(m);
   }
+
+  _arrivalBeam(o,B,from,to,width,key='woodDark'){
+    const a=new THREE.Vector3(...from),b=new THREE.Vector3(...to),d=b.clone().sub(a);
+    const matrix=new THREE.Matrix4().compose(a.add(b).multiplyScalar(.5),new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),d.clone().normalize()),new THREE.Vector3(1,1,1));
+    B.add(key,boxUV(width,d.length(),width),M(o.x,o.y,o.z,o.rot).multiply(matrix));
+  }
+
+  _arrivalLabel(o,text,width,height,x,y,z,bg,fg){
+    const tex=makeTextTexture([{text,font:'bold 64px Georgia, serif'}],{w:1536,h:192,bg,fg,pad:18,border:'#9c9274'});
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,height),patchMaterial(new THREE.MeshStandardMaterial({map:tex,roughness:.98,envMapIntensity:.1}),{key:'arrivallabel'}));
+    mesh.applyMatrix4(this.W(o,x,y,z));mesh.receiveShadow=true;this.group.add(mesh);
+  }
+
+  _arrivalLantern(o,B,name,x,y,z,intensity,range){
+    B.add('dark',boxUV(.25,.1,.25),this.W(o,x,y+.16,z));
+    B.add('bronze',boxUV(.21,.22,.21),this.W(o,x,y-.02,z));
+    const bulb=new THREE.Mesh(new THREE.CylinderGeometry(.075,.09,.12,10),new THREE.MeshBasicMaterial({color:0xc8aa80}));
+    bulb.applyMatrix4(this.W(o,x,y-.06,z));this.group.add(bulb);
+    const light=new THREE.PointLight(0xffcf96,intensity,range,2);light.name=name;
+    light.position.set(x,y-.18,z).applyMatrix4(M(o.x,o.y,o.z,o.rot));this.group.add(light);
+  }
+
+  _arrival_court(o,B){
+    const w=this.world,localToWorld=(x,z)=>new THREE.Vector3(x,0,z).applyMatrix4(M(o.x,0,o.z,o.rot));
+    // Individually grounded stone/gravel apron, with an irregular planted edge.
+    const g=new THREE.CircleGeometry(1,64);g.rotateX(-Math.PI/2);
+    const p=g.attributes.position,uv=g.attributes.uv;
+    for(let i=0;i<p.count;i++){
+      const x=p.getX(i)*6.4,z=p.getZ(i)*5.8+1.7,v=localToWorld(x,z);
+      p.setXYZ(i,v.x,w.heightAt(v.x,v.z)+.057,v.z);uv.setXY(i,x/2.5,z/2.5);
+    }
+    g.computeVertexNormals();B.add('gravel',g,new THREE.Matrix4());
+    const rng=makeRng(817231);
+    for(let i=0;i<58;i++){
+      const a=i/58*Math.PI*2,x=Math.cos(a)*6.4,z=Math.sin(a)*5.8+1.7;
+      // Leave the forest route and parking approach completely open.
+      if((z<-.2&&x>-.2&&x<4.3)||(z>5.3&&Math.abs(x)<2))continue;
+      const v=localToWorld(x,z);
+      B.add('stone',new THREE.DodecahedronGeometry(rng.range(.15,.23),1),M(v.x,w.heightAt(v.x,v.z)+.055,v.z,rng()*6.28,0,0,1,.42,.8));
+    }
+    const path=w.arrival.path;
+    for(let i=1;i<path.length;i++){
+      const [ax,az]=path[i-1],[bx,bz]=path[i],length=Math.hypot(bx-ax,bz-az),nx=(bz-az)/length,nz=-(bx-ax)/length;
+      const steps=Math.ceil(length/.9),positions=[],uvs=[],indices=[];
+      for(let j=0;j<=steps;j++)for(const side of [-1,1]){
+        const t=j/steps,wx=ax+(bx-ax)*t+nx*side*1.65,wz=az+(bz-az)*t+nz*side*1.65;
+        positions.push(wx,w.heightAt(wx,wz)+.061,wz);uvs.push(side*.55,j*.3);
+      }
+      for(let j=0;j<steps;j++){const a=j*2;indices.push(a,a+2,a+1,a+1,a+2,a+3);}
+      const ribbon=new THREE.BufferGeometry();ribbon.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));ribbon.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));ribbon.setIndex(indices);ribbon.computeVertexNormals();B.add('gravel',ribbon,new THREE.Matrix4());
+      for(let d=.4;d<length;d+=1.2)for(const side of [-1,1]){
+        const x=ax+(bx-ax)*d/length+nx*side*1.9,z=az+(bz-az)*d/length+nz*side*1.9;
+        B.add('woodDark',boxUV(.12,.08,1.08),M(x,w.heightAt(x,z)+.055,z,Math.atan2(bx-ax,bz-az)));
+      }
+    }
+  }
+
+  _arrival_entry(o,B){
+    for(const x of [-2.55,2.55]){
+      const p=new THREE.Vector3(x,0,0).applyMatrix4(M(o.x,0,o.z,o.rot)),gy=this.world.heightAt(p.x,p.z)-o.y;
+      B.add('stone',boxUV(.5,.2,.5),this.W(o,x,gy+.1,0));
+      B.add('woodDark',boxUV(.28,3.45-gy,.28),this.W(o,x,(3.45+gy)/2,0));
+      this._arrivalBeam(o,B,[x,2.45,0],[x-Math.sign(x)*.65,3.1,0],.13,'wood');
+    }
+    B.add('wood',boxUV(5.65,.68,.21),this.W(o,0,3.0,0));
+    B.add('roof',boxUV(5.9,.1,.65),this.W(o,0,3.42,0,0,.08));
+    this._arrivalLabel(o,'EAST TRAIL',4.6,.49,0,3.0,.12,'#304335','#e8dcc0');
+    this._arrivalLabel(o,'OLD RIVER ROAD  ·  FOOT ACCESS ONLY',3.5,.20,0,2.55,.12,'#493e31','#dfd4b7');
+    this._arrivalLantern(o,B,'trailhead-entry-lantern',-2.2,2.55,.27,20,8);
+  }
+
+  _arrival_rail(o,B){
+    for(const x of [-1.3,1.3]){
+      const p=new THREE.Vector3(x,0,0).applyMatrix4(M(o.x,0,o.z,o.rot)),gy=this.world.heightAt(p.x,p.z)-o.y;
+      B.add('woodDark',boxUV(.16,1.04,.16),this.W(o,x,gy+.52,0));
+    }
+    for(const y of [.4,.85])B.add('wood',boxUV(2.7,.12,.09),this.W(o,0,y,0));
+  }
+
+  _arrival_planting(o,B){
+    const rng=makeRng(Math.round(o.x*91+o.z*13));
+    for(let i=0;i<60;i++){
+      const a=rng()*Math.PI*2,r=Math.sqrt(rng())*.95,x=Math.cos(a)*r,z=Math.sin(a)*r;
+      const p=new THREE.Vector3(x,0,z).applyMatrix4(M(o.x,0,o.z,o.rot)),gy=this.world.heightAt(p.x,p.z)-o.y;
+      const h=rng.range(.28,.8),bend=rng.range(.08,.24),angle=rng()*6.28,width=rng.range(.018,.045);
+      const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute([-width,0,0,width,0,0,width*.5,h*.6,bend*.4,0,h,bend,-width*.5,h*.6,bend*.4],3));geo.setIndex([0,1,2,0,2,4,4,2,3]);geo.computeVertexNormals();
+      B.add(i%5?'planting':'wood',geo,this.W(o,x,gy+.01,z,angle));
+    }
+    for(let i=0;i<13;i++){
+      const a=i/13*Math.PI*2,x=Math.cos(a)*1.12,z=Math.sin(a)*1.12,p=new THREE.Vector3(x,0,z).applyMatrix4(M(o.x,0,o.z,o.rot));
+      B.add('stone',new THREE.DodecahedronGeometry(.18,1),M(p.x,this.world.heightAt(p.x,p.z)+.03,p.z,a,0,0,1,.4,.8));
+    }
+  }
+
+  _arrival_bench(o,B){this._bench(o,B);for(const y of [.65,.8])B.add('wood',boxUV(1.8,.12,.055),this.W(o,0,y,-.25));}
 
   _mapBoardTexture() {
     const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 540;

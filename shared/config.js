@@ -40,6 +40,11 @@ export const CONFIG = {
     // Teammates remain locatable nearby without sounding like another threat.
     REMOTE_STEP_FADE_START: 4, REMOTE_STEP_MAX_DISTANCE: 11, REMOTE_STEP_GAIN: 0.45,
   },
+  PEBBLE: {
+    COOLDOWN: 20, SPEED: 13, UP_BOOST: 3.4, GRAVITY: 12, RADIUS: .035,
+    MAX_FLIGHT: 4, MAX_RANGE: 30, MAX_ACTIVE: 12,
+    HEAR_RANGE: 32, DISTRACTION_TIME: 12,
+  },
   // The player's light is a small lighter now (owner, Oct 25 2026): omni, lights only RANGE m
   // round you, no beam. BATTERY_* is its fuel; a strike fails STRIKE_FAIL of the time (more
   // when he is coming for you). Kept under the old name so the sim's `flash` flag is unchanged.

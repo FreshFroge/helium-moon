@@ -53,9 +53,32 @@ console.log('  ok  all six spawn slots are dry, spaced, clear of obstacles, and 
 const kiosk = world.structures.find((structure) => structure.type === 'kiosk');
 const memoX = kiosk.x + Math.sin(kiosk.rot) * 0.45;
 const memoZ = kiosk.z + Math.cos(kiosk.rot) * 0.45;
-assert.ok(Math.hypot(slots[0].x - memoX, slots[0].z - memoZ) < 2.4,
-  'solo player begins within memo interaction range after turning toward it');
-console.log('  ok  the trailhead memo is beside the solo spawn, within interaction range');
+assert.ok(Math.hypot(slots[0].x - memoX, slots[0].z - memoZ) < 6,
+  'solo player begins in the arrival forecourt beside the briefing shelter');
+let memoApproach={...slots[0]};
+const memoDistance=Math.hypot(memoX-memoApproach.x,memoZ-memoApproach.z);
+const memoForward={x:(memoX-memoApproach.x)/memoDistance,z:(memoZ-memoApproach.z)/memoDistance};
+for(let i=0;i<32;i++){
+  const q=moveCharacter(world,memoApproach,memoForward.x*.1,memoForward.z*.1,clearance,{boundary:true});
+  memoApproach={...q,y:groundAt(world,q.x,q.z)};
+}
+assert.ok(Math.hypot(memoApproach.x-memoX,memoApproach.z-memoZ)<2.4,
+  'a clear 3.2-metre walk puts the maintenance memo within interaction range');
+console.log('  ok  a clear short forecourt approach reaches the maintenance memo');
+
+const arrival=world.arrival,entry=world.structures.find(s=>s.type==='arrival_entry');
+assert.ok(arrival&&entry&&arrival.path.length>=3,'the visitor court has a continuous signed forest approach');
+for(let i=1;i<arrival.path.length;i++){
+  const [ax,az]=arrival.path[i-1],[bx,bz]=arrival.path[i],distance=Math.hypot(bx-ax,bz-az),n=Math.ceil(distance/.1);
+  let pos={x:ax,z:az,y:groundAt(world,ax,az)};
+  for(let step=1;step<=n;step++){
+    const q=moveCharacter(world,pos,(bx-ax)/n,(bz-az)/n,clearance,{boundary:true});
+    assert.ok(Math.hypot(q.x-(ax+(bx-ax)*step/n),q.z-(az+(bz-az)*step/n))<1e-5,'approach path is clear of props and trunks');
+    assert.equal(waterDepthAt(world,q.x,q.z),0,'arrival path remains dry');
+    pos={...q,y:groundAt(world,q.x,q.z)};
+  }
+}
+console.log('  ok  the entire grounded arrival path is collision clear and reaches the forest portal');
 
 for (const seed of [1, 98765]) {
   const server = new GameSim(world, { seed });

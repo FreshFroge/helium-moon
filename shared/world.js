@@ -534,10 +534,25 @@ export class World {
     add('lot', pk.x, pk.z, pk.rot, { hx: pk.hx, hz: pk.hz });
     add('kiosk', P.trailhead.x - 6, P.trailhead.z - 2, faceTrail({ x: P.trailhead.x + 6, z: P.trailhead.z + 6 }) + Math.PI);
     const kiosk = s[s.length-1];
+    const localArrival=(x,z)=>({x:kiosk.x+x*Math.cos(kiosk.rot)+z*Math.sin(kiosk.rot),z:kiosk.z-x*Math.sin(kiosk.rot)+z*Math.cos(kiosk.rot)});
+    const entry=pointAtDistance(this.trail,this.trailCum,12);
+    const apron=localArrival(1.9,-1.4);
+    this.arrival={x:kiosk.x,z:kiosk.z,rot:kiosk.rot,path:[[apron.x,apron.z],[apron.x+(entry.x-apron.x)*.45,apron.z+(entry.z-apron.z)*.45],[entry.x,entry.z]]};
+    add('arrival_court',kiosk.x,kiosk.z,kiosk.rot,{spawnOnly:true});
+    add('arrival_entry',entry.x,entry.z,entry.dir+Math.PI,{spawnOnly:true});
+    for(const [x,z] of [[-5,1.5],[5.3,1.3],[-4.8,-2.5]]){
+      const p=localArrival(x,z);add('arrival_planting',p.x,p.z,kiosk.rot,{spawnOnly:true});
+    }
+    const seat=localArrival(-3.65,2.7);
+    add('arrival_bench',seat.x,seat.z,kiosk.rot+Math.PI/2,{spawnOnly:true});
+    for(const [x,z] of [[-3.4,5.4],[6.6,5.4]]){
+      const p=localArrival(x,z);add('arrival_rail',p.x,p.z,kiosk.rot,{spawnOnly:true});
+    }
     add('trailhead_bench', kiosk.x - 3.7*Math.cos(kiosk.rot), kiosk.z + 3.7*Math.sin(kiosk.rot), kiosk.rot);
     add('car', pk.x + 6, pk.z - 4, pk.rot + 1.45, { color: 0x3a4652 });
     add('car', pk.x - 4, pk.z + 6, pk.rot - 1.6, { color: 0x6b1f1f });
-    add('gate', P.trailhead.x - 1, P.trailhead.z + 1, faceTrail(P.trailhead) + Math.PI / 2);
+    const gatePosition=localArrival(8.5,6.5);
+    add('gate',gatePosition.x,gatePosition.z,kiosk.rot+Math.PI/2,{vegetationOrigin:{x:P.trailhead.x-1,z:P.trailhead.z+1}});
     add('sign', pk.x + 18, pk.z + 12, pk.rot + Math.PI);
     {
       // warning sign beside the gate, granite monument a short way up the trail (reference photos)
@@ -630,9 +645,10 @@ export class World {
       for (const o of this.structures) {
         // Clear the new service route after generation. Skipping RNG draws
         // here would regenerate distant trees and change established cover.
-        if(o.type==='riverbridge'||o.type==='riverpost')continue;
+        if(o.type==='riverbridge'||o.type==='riverpost'||o.spawnOnly)continue;
         const rr = o.type === 'lot' ? 30 : o.type === 'highwaybridge' ? 0 : o.type === 'mast' ? 7 : o.type === 'footbridge' ? 9 : o.type === 'monument' ? 3.5 : 6;
-        if (rr && Math.hypot(x - o.x, z - o.z) < rr + r) return false;
+        const origin=o.vegetationOrigin||o;
+        if (rr && Math.hypot(x - origin.x, z - origin.z) < rr + r) return false;
       }
       return true;
     };
@@ -755,6 +771,26 @@ export class World {
     clearService(bushes,t=>[t[0],t[2]],t=>1.8+1.5*t[3]);
     clearService(logs,t=>[t[0],t[2]],t=>t[3]/2+t[4]+2);
     clearService(stumps,t=>[t[0],t[2]],t=>2+t[3]);
+    // Finish the new local arrival footprint after the original RNG stream has
+    // generated the forest. Distant trees/cover must not change with new props.
+    const arrival=this.arrival,arrivalCum=cumulativeLengths(arrival.path),c=Math.cos(arrival.rot),s=Math.sin(arrival.rot);
+    const clearArrival=(list,location,pad)=>{
+      let count=0;
+      for(const item of list){
+        const [x,z]=location(item),dx=x-arrival.x,dz=z-arrival.z;
+        const lx=dx*c-dz*s,lz=dx*s+dz*c;
+        const inCourt=Math.abs(lx)<6+pad(item)&&lz>-2.9-pad(item)&&lz<6.7+pad(item);
+        const path=nearestOnPolyline(arrival.path,arrivalCum,x,z).d;
+        if(inCourt||path<2.1+pad(item))continue;
+        list[count++]=item;
+      }
+      list.length=count;
+    };
+    clearArrival(trees,t=>[t.x,t.z],t=>t.collisionR+.5);
+    clearArrival(bushes,t=>[t[0],t[2]],t=>t[3]);
+    for(const list of [grass,reeds,debris])clearArrival(list,t=>[t[0],t[2]],()=>.1);
+    clearArrival(logs,t=>[t[0],t[2]],t=>t[3]/2+t[4]);
+    clearArrival(stumps,t=>[t[0],t[2]],t=>t[3]);
     this.trees = trees; this.bushes = bushes; this.grass = grass; this.reeds = reeds;
     this.logs = logs; this.debris = debris; this.stumps = stumps;
     this.log(`vegetation: ${trees.length} trees, ${bushes.length} bushes, ${grass.length} grass, ${reeds.length} reeds, ${logs.length} logs`);
@@ -821,7 +857,11 @@ export class World {
         boxes.push([o.x + ox * c + oz * s, o.z - ox * s + oz * c, hx, hz, o.rot, o.y + top]);
       };
       switch (o.type) {
-        case 'kiosk': box(1.4, 0.35, 2.6); break;
+        case 'kiosk':
+          box(1.4,0.35,2.6);
+          box(.59,.08,1.85,-2.65,.03);
+          for(const x of [-5.25,5.25])for(const z of [-.8,4.3])box(.16,.16,3.3,x,z);
+          break;
         case 'car': box(0.95, 2.3, 1.5); break;
         case 'pumphouse': box(1.75, 1.75, 3.0); break;
         case 'blind': box(1.9, 1.4, 2.6, 0, -0.2); break;
@@ -832,6 +872,9 @@ export class World {
         case 'sign': box(1.6, 0.15, 2.2); break;
         case 'bench': box(0.9, 0.3, 0.5); break;
         case 'trailhead_bench': box(0.95,0.35,.9); break;
+        case 'arrival_bench': box(.95,.35,.9);break;
+        case 'arrival_entry':for(const x of [-2.55,2.55])box(.18,.18,3.3,x,0);break;
+        case 'arrival_rail':box(1.3,.10,.95);break;
         case 'trailpost': box(.45,.10,1.65); break;
         case 'monument': box(0.55, 0.22, 0.75); break;
         case 'warning': circles.push([o.x, o.z, 0.08]); break;

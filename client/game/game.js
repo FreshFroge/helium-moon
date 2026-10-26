@@ -18,6 +18,7 @@ import { Environment } from './environment.js';
 import { PlayerController } from './player.js';
 import { Flashlight } from './flashlight.js';
 import { BreathFX, AnomalyFX } from './effects.js';
+import { PebbleViews } from './pebbles.js';
 import { Input } from '../core/input.js';
 import { AudioEngine } from '../audio/audio.js';
 import { VoiceSystem } from '../audio/voice.js';
@@ -96,6 +97,7 @@ export class Game {
     this.propMats = makePropMaterials(bank.tex);
     this.objViews = new ObjectiveViews(this.scene, this.propMats);
     this.breath = new BreathFX(this.scene);
+    this.pebbles = new PebbleViews(this.scene,world);
     this.anomaly = new AnomalyFX(this.scene, world);
     progress(0.72, 'Recording the night');
     this.audio = new AudioEngine(set);
@@ -241,6 +243,7 @@ export class Game {
     this.flashlight.battery = 1; this.flashlight.on = true; this.flashlight.snap(this.camera);
     this.terror = 0; this.fear = 0; this.cold = 0; this.critical = 0; this.gasFx = 0; this.damage = 0; this.chasing = false;
     this.me = null; this.myState = 'alive'; this.health = CONFIG.PLAYER.MAX_HEALTH;
+    this.pebbleReadyAt=0;
     this.notesRead = []; this.reading = null; this.sessionT = 0; this.fade = 1; this.fadeTarget = 0;
     this.obj = null; this.team = { fuel: false, fuse: false }; this.extractOpen = false; this.spectate = null;
     this.anomaly.reset();
@@ -253,6 +256,7 @@ export class Game {
   }
 
   _endSessionCleanup() {
+    this.pebbles?.clear();this.pebbleReadyAt=0;
     this.ui.closeChat();
     this.voice && this.voice.endSession();
     this.audio && this.audio.stopAll();
@@ -347,6 +351,7 @@ export class Game {
     if (this.mode !== 'playing') return;
     if (this.snapT < 0) this.renderT = s.t - this.interp;
     this.snapT = s.t; this.simState = s.st; this.phase = s.ph;
+    this.pebbles.sync(s.pebbles,s.t);
     this.hvBuf.push(s.t, s.hv); this.sfBuf.push(s.t, s.sf);
     for (const row of s.pl) {
       if (row[0] === this.myId) { this.me = row; continue; }
@@ -362,6 +367,7 @@ export class Game {
     }
     this.gas = s.gas || [];
     if (this.me) {
+      this.pebbleReadyAt=this.me[12]||0;
       const st = PST[this.me[8]];
       if (st !== this.myState) this._myStateChanged(this.myState, st);
       this.myState = st; this.health = this.me[7];
@@ -389,6 +395,22 @@ export class Game {
     const A = this.audio, pos = e.x !== undefined ? { x: e.x, y: e.y ?? (this.world.heightAt(e.x, e.z) + 1), z: e.z } : null;
     switch (e.type) {
       case 'begin': this._objectivesDirty = true; this.wildlife?.end(); break;
+      case 'pebble_throw':
+        this.pebbles.spawn(e,Math.max(0,(this.snapT||e.t)-e.t));
+        if(e.pid===this.myId)this.pebbleReadyAt=e.readyAt;
+        break;
+      case 'pebble_impact':
+        this.pebbles.impact(e.id,pos,e.kind);this.audio.pebbleImpact(pos,e.seq||0);
+        break;
+      case 'pebble_status':
+        if(e.pid===this.myId){
+          if(Number.isFinite(e.readyAt))this.pebbleReadyAt=e.readyAt;
+          const text={search:'Pebbles distract him while he is searching.',cooldown:'Give it a moment before throwing another pebble.',
+            held:'You cannot throw while held.',covered:'Uncover yourself before throwing.',state:'You cannot throw right now.',
+            unavailable:'You cannot throw right now.',busy:'Wait for the other pebbles to land.',aim:'Aim at the ground nearby.',paused:'Resume to throw a pebble.'};
+          this.ui.toast(text[e.reason]||'You cannot throw a pebble right now.',2200);
+        }
+        break;
       // a real animal: deer bolting from the brush or an owl lifting off (SCARE_RESEARCH X4)
       case 'wildlife': if (this.wildlife && this._near(pos, 90)) this.wildlife.spawn(e, this.player.pos); break;
       case 'hv_vocal': if (this._near(pos, CONFIG.HV.FOOTSTEP_MAX_DISTANCE) && this._canSee(pos)) { A.hvVocal(e.k, e.s, pos); this.voice.suppress(2); } break;
@@ -644,6 +666,12 @@ export class Game {
     } else if (pl.lookLock && pl.lookLock.rate) pl.lookLock = null;
     if (!dead) pl.update(active && !typing ? dt : dt, frozen ? { consumeLook: () => inp.consumeLook(), down: () => false, hit: () => false } : inp, { frozen, noLook: !active || typing || locked });
     else this._spectate(dt);
+    if(active&&!typing&&!this.reading&&!this._grab&&this.myState==='alive'&&inp.hit('pebble')){
+      if(pl.covered)this.ui.toast('Uncover yourself before throwing.',2200);
+      else if((this.pebbleReadyAt||0)>(this.snapT||0)+.02)this.ui.toast('Give it a moment before throwing another pebble.',1600);
+      else this.net.send({t:'act',a:'pebble',yaw:pl.yaw,pitch:pl.pitch});
+    }
+    this.pebbles.update(dt);
     // ---- interpolation clock
     if (this.snapT >= 0) {
       const target = this.snapT - this.interp;
@@ -704,7 +732,7 @@ export class Game {
       this.net.send({ t: 'in', x: +pl.pos.x.toFixed(2), y: +pl.pos.y.toFixed(2), z: +pl.pos.z.toFixed(2), yaw: +pl.yaw.toFixed(3), pitch: +pl.pitch.toFixed(3),
         viewFov: this.camera.fov, viewAspect: this.camera.aspect, lean:+pl.lean.toFixed(3),
         crouch: pl.crouching, sprint: pl.sprinting, flash: fl.on && fl.light.intensity > 1, noise: +(pl.noise + (this.useId && this._stationNoisy ? 0.6 : 0)).toFixed(2),
-        voice: +this.voice.voiceLevel.toFixed(2), hidden: pl.hidden, covered: pl.covered, use: this.useId || null, revive: this.reviveId || null });
+        voice: +this.voice.voiceLevel.toFixed(2), hidden: pl.hidden, covered: pl.covered, paused:this.paused, use: this.useId || null, revive: this.reviveId || null });
     }
     // ---- HUD
     this._fade(dt);
@@ -1008,6 +1036,7 @@ export class Game {
       team: this.team, battery: this.flashlight.battery, temp: this.temp ?? T.BASE_TEMP_C,
       notes: this.notesRead.map((id) => this._sessionNote(id)).filter(Boolean),
       map:this._fieldMapData(),blanket:this.player.hasCamoBlanket,
+      pebbleRemaining:Math.max(0,(this.pebbleReadyAt||0)-(this.snapT||0)),
       supplyHints:this.notesRead.includes('memo')?this.info.layout.supplyHints:null,
       time: this.sessionT,
     };
@@ -1045,6 +1074,7 @@ export class Game {
     const pl = this.player;
     if (this._objectivesDirty) { this._objectivesDirty = false; this.ui.objectives(this._activeObjectiveLines()); }
     this.ui.meters(pl.stamina / CONFIG.PLAYER.STAMINA_MAX, this.flashlight.battery, this.flashlight.on);
+    this.ui.pebble(Math.max(0,(this.pebbleReadyAt||0)-(this.snapT||0)),this.myState==='alive'&&!pl.covered);
     this._teamT = (this._teamT || 0) - dt;
     if (this._teamT <= 0) {
       this._teamT = 0.25;

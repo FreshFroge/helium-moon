@@ -145,7 +145,9 @@ test('acquisition switches from a downed teammate to the living target',()=>{
   sim.state='play';sim.time=400;/* after intro + DIRECTOR.DREAD_TIME */ sim.sf.update=()=>{};sim.mimic.update=()=>{};
   old.state='downed';hv.target=old.id;
   const at=pointAtDistance(world.trail,world.trailCum,500),to=pointAtDistance(world.trail,world.trailCum,506);
-  Object.assign(p,{x:to.x,z:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash:false});
+  // Stage a stationary observer: leaving spawn history behind invents a first
+  // movement direction from a 400m teleport and changes the unseen stalk route.
+  Object.assign(p,{x:to.x,z:to.z,lastX:to.x,lastZ:to.z,y:world.heightAt(to.x,to.z),yaw:Math.atan2(at.x-to.x,at.z-to.z),pitch:0,flash:false});
   hv.place(at.x,at.z);hv.yaw=hv.lookYaw=Math.atan2(p.x-hv.x,p.z-hv.z);hv.setState('roam');
   for(let t=0;t<45&&p.health===MAXH;t+=.05)sim.step(.05);
   assert.ok(p.health<MAXH,'the living observer becomes the actual attack target');

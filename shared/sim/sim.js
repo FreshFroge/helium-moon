@@ -5,6 +5,8 @@
 import { CONFIG } from '../config.js';
 import { clamp, makeRng, pointAtDistance } from '../math.js';
 import { groundAt } from '../physics.js';
+import {tracePebble} from '../pebble.js';
+import {eyePosition} from './perception.js';
 import { HeliumVoiceAI } from './heliumVoice.js';
 import { SkunkAI } from './skunk.js';
 import { Director } from './director.js';
@@ -22,6 +24,7 @@ export class GameSim {
     this.players = new Map(); this.playerList = [];
     this.events = []; this.evSeq = 1;
     this.gas = [];
+    this.pebbles=[];this.pebbleSeq=1;
     this.director = new Director(this);
     this.obj = new Objectives(this); this.obj.setup();
     this.hv = new HeliumVoiceAI(this); this.hv.spawn();
@@ -41,8 +44,8 @@ export class GameSim {
       // Keep the kiosk off the walking line rather than placing it in front of W.
       const ahead = pointAtDistance(w.trail, w.trailCum, 20);
       const c = Math.cos(kiosk.rot), s = Math.sin(kiosk.rot);
-      const startX = kiosk.x + 1.5 * c + 2.2 * s;
-      const startZ = kiosk.z - 1.5 * s + 2.2 * c;
+      const startX = kiosk.x + 1.2 * c + 5.4 * s;
+      const startZ = kiosk.z - 1.2 * s + 5.4 * c;
       const distance = Math.hypot(ahead.x - startX, ahead.z - startZ);
       const fx = (ahead.x - startX) / distance, fz = (ahead.z - startZ) / distance;
       const row = Math.floor(i / 2) * 1.6, column = (i % 2) * 1.4;
@@ -63,6 +66,7 @@ export class GameSim {
       id, name: String(name || 'Visitor').slice(0, 20), ...sp, pitch: 0, crouch: false, sprint: false, flash: true,
       noise: 0, voice: 0, use: null, revive: null, hidden: false, covered: false, health: CONFIG.PLAYER.MAX_HEALTH, state: 'alive',
       bleedT: 0, reviveT: 0, hurtT: -999, quietT: 0, moveDir: null, lastX: sp.x, lastZ: sp.z, escapeT: 0, interactNoise: false,
+      pebbleReadyAt:0,paused:false,
     };
     this.players.set(id, p);
     this.playerList = [...this.players.values()];
@@ -96,6 +100,7 @@ export class GameSim {
     p.noise = Math.min(1, Math.max(0, +m.noise || 0));
     p.voice = Math.min(1, Math.max(0, +m.voice || 0));
     p.hidden = !!m.hidden; p.covered = !!m.covered && this.obj.items.some((it) => it.kind === 'blanket' && it.holder === p.id);
+    p.paused=!!m.paused;
     if(p.covered)p.lean=0;
     p.use = typeof m.use === 'string' ? m.use : null;
     p.revive = m.revive != null ? m.revive : null;
@@ -104,7 +109,8 @@ export class GameSim {
   action(id, a) {
     const p = this.players.get(id);
     if (!p) return;
-    if (a.a === 'pickup' && p.state === 'alive') this.obj.pickup(p, a.id);
+    if(a.a==='pebble')this.throwPebble(p,a);
+    else if (a.a === 'pickup' && p.state === 'alive') this.obj.pickup(p, a.id);
     else if (a.a === 'dial') this.obj.turn(p,a.id);
     else if (a.a === 'phrase') this.mimic.addPhrase(id, a.id, +a.dur);
     else if (a.a === 'phrase_drop') this.mimic.dropPhrase(id, a.id);
@@ -115,6 +121,38 @@ export class GameSim {
     let best = null, bd = 1e9;
     for (const p of this.playerList) { if (p.state !== 'alive' && p.state !== 'downed') continue; const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = p; } }
     return best ? { p: best, d: bd } : null;
+  }
+
+  throwPebble(p,aim){
+    let reason=null;
+    if(p.state!=='alive'||!['play','extract'].includes(this.state))reason='unavailable';
+    else if(p.paused||this.paused)reason='paused';
+    else if((p.heldUntil!=null&&this.time<p.heldUntil)||this.hv.grab?.pid===p.id)reason='held';
+    else if(p.covered)reason='covered';
+    else if(this.time<(p.pebbleReadyAt||0))reason='cooldown';
+    else if(!this.hv.canHearPebble())reason='search';
+    else if(!Number.isFinite(aim.yaw)||!Number.isFinite(aim.pitch))reason='aim';
+    else if(this.pebbles.length>=CONFIG.PEBBLE.MAX_ACTIVE)reason='busy';
+    if(reason){this.emit({type:'pebble_status',pid:p.id,reason,readyAt:p.pebbleReadyAt||0});return false;}
+    const arc=tracePebble(this.world,eyePosition(this.world,p),aim.yaw,aim.pitch);
+    if(!arc){this.emit({type:'pebble_status',pid:p.id,reason:'aim',readyAt:p.pebbleReadyAt||0});return false;}
+    p.pebbleReadyAt=this.time+CONFIG.PEBBLE.COOLDOWN;
+    const pebble={id:'pb'+this.pebbleSeq++,pid:p.id,startedAt:this.time,readyAt:p.pebbleReadyAt,...arc};
+    this.pebbles.push(pebble);
+    this.emit({type:'pebble_throw',id:pebble.id,pid:p.id,flight:arc.flight,duration:arc.duration,
+      startedAt:this.time,readyAt:p.pebbleReadyAt});
+    return true;
+  }
+
+  updatePebbles(){
+    const pending=[];
+    for(const pebble of this.pebbles){
+      if(this.time<pebble.startedAt+pebble.duration){pending.push(pebble);continue;}
+      if(!pebble.hit)continue;
+      const at=pebble.impact,distracted=this.hv.hearPebble(at);
+      this.emit({type:'pebble_impact',id:pebble.id,pid:pebble.pid,...at,kind:pebble.kind,distracted});
+    }
+    this.pebbles=pending;
   }
 
   // Event ordering is separate from item/station IDs consumed by the client.
@@ -162,6 +200,7 @@ export class GameSim {
     }
     this.obj.update(dt);
     this.updateRevives(dt);
+    this.updatePebbles();
     if (this.state !== 'intro') {
       this.director.update(dt);
       this.hv.update(dt);
@@ -231,9 +270,10 @@ export class GameSim {
       pl: this.playerList.map((p) => [p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +p.pitch.toFixed(3),
         (p.crouch ? 1 : 0) | (p.flash ? 2 : 0) | (p.sprint ? 4 : 0) | (p.hidden ? 8 : 0) | (p.voice > CONFIG.VOICE.NOISE_THRESHOLD ? 16 : 0),
         p.health, PSTATE.indexOf(p.state), +(p.reviveT / CONFIG.SESSION.REVIVE_TIME).toFixed(2), +Math.max(0, p.bleedT).toFixed(1),
-        +(p.state === 'alive' && !p.covered ? (p.lean || 0) : 0).toFixed(3)]),
+        +(p.state === 'alive' && !p.covered ? (p.lean || 0) : 0).toFixed(3),+(p.pebbleReadyAt||0).toFixed(2)]),
       hv: this.hv.snapshot(), sf: this.sf.snapshot(),
       gas: this.gas.map((g) => [+g.x.toFixed(1), +g.y.toFixed(1), +g.z.toFixed(1), g.r, +(1 - g.age / g.life).toFixed(2)]),
+      pebbles:this.pebbles.map(p=>({id:p.id,pid:p.pid,flight:p.flight,duration:p.duration,startedAt:p.startedAt,readyAt:p.readyAt})),
       obj: this.obj.snapshot(), ph: this.director.phase,
     };
   }
